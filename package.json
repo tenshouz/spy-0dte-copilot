@@ -1,0 +1,20 @@
+{
+  "name": "spy-0dte-copilot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SPY 0DTE AI decision-support platform (monorepo) — Milestone 1: project foundation",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:server": "npm run dev --workspace=apps/server",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:server": "npm run build --workspace=apps/server",
+    "lint": "npm run lint --workspace=apps/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,108 @@
+// PRD Section 15 — database schema of record.
+// Milestone 1: schema only, no migrations run against a real database yet.
+// Milestone 2+ will run `prisma migrate dev` once Postgres is provisioned.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  schwabTokens SchwabToken?
+  settings     Settings?
+  createdAt    DateTime     @default(now())
+}
+
+model SchwabToken {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  accessToken  String // encrypted at rest
+  refreshToken String // encrypted at rest
+  expiresAt    DateTime
+  updatedAt    DateTime @updatedAt
+}
+
+model Settings {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id])
+  discordWebhookUrl   String?
+  alertPreferences    Json // per-message-type toggles
+  scoringRulesVersion String   @default("v1")
+  updatedAt           DateTime @updatedAt
+}
+
+model MarketSnapshot {
+  id                String    @id @default(cuid())
+  timestamp         DateTime  @default(now())
+  spotPrice         Float
+  vwap              Float
+  openingRangeHigh  Float?
+  openingRangeLow   Float?
+  premarketHigh     Float?
+  premarketLow      Float?
+  overnightHigh     Float?
+  overnightLow      Float?
+  trend5m           String
+  trend1m           String
+  volume            Float
+  relativeVolume    Float
+  emaTrend          String
+  netGex            Float
+  netDex            Float
+  gammaFlip         Float?
+  callWall          Float?
+  putWall           Float?
+  dealerPositioning String
+  expectedMove      Float
+  ivRank            Float?
+  expirationUsed    DateTime
+  reports           Report[]
+}
+
+model Report {
+  id              String         @id @default(cuid())
+  type            String // "premarket" | "0935" | "0945" | "1000" | "continuous" | "manual"
+  snapshotId      String
+  snapshot        MarketSnapshot @relation(fields: [snapshotId], references: [id])
+  bias            String // "CALLS" | "PUTS" | "WAIT"
+  confidence      Int
+  bullishScenario String
+  bearishScenario String
+  tradePlan       Json // { entryCondition, targets[], invalidation, riskNote }
+  warnings        Json // string[]
+  reasoning       String
+  factorScores    Json // [{ factor, points, detail }]
+  screenshotUrl   String?
+  createdAt       DateTime       @default(now())
+  journalEntry    JournalEntry?
+}
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  reportId    String   @unique
+  report      Report   @relation(fields: [reportId], references: [id])
+  traded      Boolean  @default(false)
+  direction   String? // "CALLS" | "PUTS"
+  entryPrice  Float?
+  exitPrice   Float?
+  pnl         Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DiscordLog {
+  id          String   @id @default(cuid())
+  messageType String
+  payload     Json
+  status      String // "sent" | "failed" | "retrying"
+  createdAt   DateTime @default(now())
+}

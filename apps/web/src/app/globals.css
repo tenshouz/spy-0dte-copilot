@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  THEME: "Terminal" — Bloomberg/TradingView-inspired dark theme.
+  Palette chosen specifically for dense financial data density, not a generic
+  dark-mode default:
+    --background:  #0A0D12  near-black slate, slightly blue rather than neutral
+    --panel:       #10141B  one step up, gives panels visible separation
+    --panel-border:#1E242E  hairline, not a heavy card shadow
+    --bull:        #22C55E  green, reserved ONLY for bullish/positive signal
+    --bear:        #EF4444  red, reserved ONLY for bearish/negative signal
+    --wait:        #F5A524  amber, reserved ONLY for WAIT / caution states
+  Numbers are always rendered in the mono face with tabular-nums so columns
+  of prices/greeks align — this is the single most "terminal" detail.
+*/
+
+@layer base {
+  :root {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+    --background: 220 26% 6%;
+    --foreground: 210 20% 92%;
+
+    --panel: 220 22% 9%;
+    --panel-border: 218 18% 16%;
+    --panel-hover: 220 20% 12%;
+
+    --card: 220 22% 9%;
+    --card-foreground: 210 20% 92%;
+
+    --muted: 218 16% 14%;
+    --muted-foreground: 216 12% 60%;
+
+    --accent: 205 90% 58%;
+    --accent-foreground: 220 26% 6%;
+
+    --primary: 205 90% 58%;
+    --primary-foreground: 220 26% 6%;
+
+    --border: 218 18% 16%;
+    --input: 218 18% 16%;
+    --ring: 205 90% 58%;
+
+    --bull: 142 69% 45%;
+    --bull-muted: 142 40% 16%;
+    --bear: 0 79% 63%;
+    --bear-muted: 0 45% 18%;
+    --wait: 38 92% 55%;
+    --wait-muted: 38 50% 18%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "tnum" on, "lnum" on;
+  }
+  ::selection {
+    @apply bg-accent/30 text-foreground;
+  }
+  /* Visible keyboard focus everywhere — no outline: none without a replacement */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--panel-border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--panel-border));
+    border-radius: 999px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
