@@ -22,7 +22,42 @@ spy-0dte-copilot/
 
 - Node.js 20+
 - npm 10+
-- (Later milestones only) PostgreSQL 15+ and a Schwab developer account
+- Docker Desktop (for the local Postgres database — see Windows quick start below)
+- (Later milestones only) a Schwab developer account, once you're ready to connect real credentials
+
+## Windows Quick Start — local database for Schwab OAuth
+
+You only need this if you want the Settings page's Schwab connection card to work end-to-end
+(it will show "Database not configured" without it, which is expected and harmless otherwise).
+
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) and start it.
+2. From the repo root, in a terminal (PowerShell, VS Code terminal, etc.), start the database:
+   ```bash
+   npm run db:up
+   ```
+3. Copy the server env file:
+   ```bash
+   copy apps\server\.env.example apps\server\.env
+   ```
+   (On macOS/Linux use `cp apps/server/.env.example apps/server/.env` instead.)
+4. Generate a token-encryption key and paste it into `apps/server/.env` as `SCHWAB_TOKEN_ENCRYPTION_KEY`:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+5. Create the database tables:
+   ```bash
+   npm install
+   npm run db:migrate
+   ```
+6. Start the server:
+   ```bash
+   npm run dev:server
+   ```
+
+At this point Settings → Connections will show **"Schwab credentials not configured"** until you
+also fill in real `SCHWAB_CLIENT_ID` / `SCHWAB_CLIENT_SECRET` / `SCHWAB_REDIRECT_URI` from a Schwab
+developer app — that's expected; the database step above is independent of having real Schwab
+credentials. To stop the database later: `npm run db:down` (data persists in a Docker volume).
 
 ## Install & run
 
@@ -32,10 +67,10 @@ npm run dev:web             # http://localhost:3000
 npm run dev:server          # http://localhost:4000 (mock API, optional for M1)
 ```
 
-The web app is fully usable with `npm run dev:web` alone — it reads from local mock data via
-TanStack Query hooks, not from the Express server, so the server is not required to explore the
-UI in this milestone. The server exists so the *shape* of the future real API is already in place
-and the frontend's data-fetching layer won't need to change when Schwab is wired in.
+The web app now fetches its dashboard data from the Express server (see `apps/web/src/lib/api-client.ts`),
+so run both `dev:web` and `dev:server` for the full experience. Only the Schwab OAuth routes need
+the database from the Windows Quick Start above — the rest of the API (`/api/snapshot`, `/api/reports`,
+`/api/journal`, `/api/alerts`) is mock data and needs no database.
 
 ## What's real vs. mock in Milestone 1
 
@@ -45,10 +80,10 @@ and the frontend's data-fetching layer won't need to change when Schwab is wired
 | Component library (cards, tables, panels, alerts) | Real, production code |
 | Chart container (TradingView Lightweight Charts) | Real integration, fed mock candles |
 | Market data, GEX/DEX, AI trade plan, alerts, journal | Typed **mock data**, shaped exactly like the PRD's final schemas |
-| Schwab API | Not connected (Milestone 2) |
+| Schwab OAuth (login/callback/status, encrypted token storage) | Real, requires local Postgres + real Schwab credentials |
+| Schwab market data retrieval | Not implemented — auth only so far |
 | GEX/DEX/Gamma Flip/Wall math | Not implemented (Milestone 2) |
 | AI scoring + LLM narrative | Not implemented (Milestone 3) |
-| Prisma migrations / real DB reads | Schema only, no live queries (Milestone 1 scaffolding → wired in Milestone 2+) |
 
 ## A note on this sandbox
 

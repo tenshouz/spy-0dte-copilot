@@ -4,12 +4,14 @@ import {
   JournalEntrySchema,
   MarketSnapshotSchema,
   ReportSchema,
+  SchwabConnectionStatusSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
   type JournalEntry,
   type MarketSnapshot,
   type Report,
+  type SchwabConnectionStatus,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -43,4 +45,8 @@ export const apiClient = {
   getReportHistory: (): Promise<Report[]> => getJson("/api/reports", z.array(ReportSchema)),
   getJournalEntries: (): Promise<JournalEntry[]> => getJson("/api/journal", z.array(JournalEntrySchema)),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
+  getSchwabStatus: (): Promise<SchwabConnectionStatus> =>
+    getJson("/api/auth/schwab/status", SchwabConnectionStatusSchema),
 };
+
+export const schwabLoginUrl = `${API_BASE_URL}/api/auth/schwab/login`;

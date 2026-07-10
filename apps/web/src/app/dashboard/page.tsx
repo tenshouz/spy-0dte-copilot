@@ -1,8 +1,11 @@
 "use client";
 
 import { BiasCard } from "@/components/dashboard/bias-card";
+import { ConfidenceCard } from "@/components/dashboard/confidence-card";
 import { LiveChart } from "@/components/dashboard/live-chart";
+import { MarketRegimeCard } from "@/components/dashboard/market-regime-card";
 import { SessionTimeline } from "@/components/dashboard/session-timeline";
+import { TodaysLevelsCard } from "@/components/dashboard/todays-levels-card";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { PageHeader } from "@/components/layout/page-header";
@@ -21,8 +24,10 @@ export default function DashboardPage() {
         description="If I had no position right now, should I buy Calls, buy Puts, or stay out?"
       />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-4">
         <BiasCard />
+        <ConfidenceCard />
+        <MarketRegimeCard />
 
         <Panel
           title="Support / Resistance"
@@ -38,6 +43,8 @@ export default function DashboardPage() {
             </div>
           )}
         </Panel>
+
+        <TodaysLevelsCard />
 
         <Panel
           title="Expected Move"
@@ -84,12 +91,12 @@ export default function DashboardPage() {
               <MetricCard
                 label="Targets"
                 value={`$${formatPrice(report.tradePlan.targets[0])} / $${formatPrice(report.tradePlan.targets[1])}`}
-                tone="bull"
+                tone={report.bias === "PUTS" ? "bear" : "bull"}
               />
               <MetricCard
                 label="Invalidation"
                 value={`$${formatPrice(report.tradePlan.invalidation)}`}
-                tone="bear"
+                tone={report.bias === "PUTS" ? "bull" : "bear"}
               />
               <MetricCard label="Risk Note" value={report.tradePlan.riskNote} className="col-span-2" />
             </div>

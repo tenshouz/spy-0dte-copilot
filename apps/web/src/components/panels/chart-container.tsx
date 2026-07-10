@@ -18,6 +18,10 @@ interface ChartContainerProps {
   vwap?: number;
   openingRangeHigh?: number | null;
   openingRangeLow?: number | null;
+  /** Mock reference levels — real values land once Schwab is connected. */
+  previousClose?: number;
+  previousHigh?: number;
+  previousLow?: number;
   height?: number;
 }
 
@@ -31,6 +35,9 @@ export function ChartContainer({
   vwap,
   openingRangeHigh,
   openingRangeLow,
+  previousClose,
+  previousHigh,
+  previousLow,
   height = 360,
 }: ChartContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -103,6 +110,53 @@ export function ChartContainer({
       });
     }
 
+    if (candles.length > 0) {
+      const sessionHigh = Math.max(...candles.map((c) => c.high));
+      const sessionLow = Math.min(...candles.map((c) => c.low));
+      candleSeries.createPriceLine({
+        price: sessionHigh,
+        color: "#8b95a5",
+        lineWidth: 1,
+        lineStyle: 3,
+        title: "Session High",
+      });
+      candleSeries.createPriceLine({
+        price: sessionLow,
+        color: "#8b95a5",
+        lineWidth: 1,
+        lineStyle: 3,
+        title: "Session Low",
+      });
+    }
+
+    if (previousClose) {
+      candleSeries.createPriceLine({
+        price: previousClose,
+        color: "#c9cdd6",
+        lineWidth: 1,
+        lineStyle: 2,
+        title: "Prev Close",
+      });
+    }
+    if (previousHigh) {
+      candleSeries.createPriceLine({
+        price: previousHigh,
+        color: "#c9cdd6",
+        lineWidth: 1,
+        lineStyle: 1,
+        title: "Prev High",
+      });
+    }
+    if (previousLow) {
+      candleSeries.createPriceLine({
+        price: previousLow,
+        color: "#c9cdd6",
+        lineWidth: 1,
+        lineStyle: 1,
+        title: "Prev Low",
+      });
+    }
+
     chart.timeScale().fitContent();
 
     const handleResize = () => {
@@ -119,7 +173,13 @@ export function ChartContainer({
       chartRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, vwap, openingRangeHigh, openingRangeLow, height]);
+  }, [candles, vwap, openingRangeHigh, openingRangeLow, previousClose, previousHigh, previousLow, height]);
 
-  return <div ref={containerRef} className="w-full" />;
+  return (
+    <div className="relative w-full">
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[7%] bg-wait/[0.06]" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-[7%] bg-accent/[0.06]" />
+      <div ref={containerRef} className="w-full" />
+    </div>
+  );
 }

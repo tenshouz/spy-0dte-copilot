@@ -1,18 +1,25 @@
 "use client";
 
+import type { SchwabConnectionState } from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Panel } from "@/components/panels/panel";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSchwabStatus } from "@/hooks/use-schwab-status";
+import { schwabLoginUrl } from "@/lib/api-client";
 
 export default function SettingsPage() {
+  const { data: schwabStatus, isLoading: schwabLoading, isError: schwabError } = useSchwabStatus();
+  const blockedState =
+    schwabStatus?.state === "database_not_configured" || schwabStatus?.state === "credentials_not_configured";
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Settings"
-        description="Placeholder in Milestone 1 — no keys are stored or sent anywhere yet."
+        description="Schwab connection is live (OAuth only — no market data yet). Everything else is still a placeholder."
       />
 
       <Tabs defaultValue="connections">
@@ -23,14 +30,26 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="connections">
-          <Panel title="Schwab API">
+          <Panel title="Schwab API" isLoading={schwabLoading} isError={schwabError}>
             <div className="space-y-3">
-              <Badge variant="wait">Not connected — Milestone 2</Badge>
-              <Field label="Client ID" placeholder="Coming in Milestone 2" />
-              <Field label="Client Secret" placeholder="Coming in Milestone 2" type="password" />
-              <Button disabled className="mt-1">
-                Connect Schwab account
-              </Button>
+              <SchwabStatusBadge state={schwabStatus?.state} expiresAt={schwabStatus?.expiresAt ?? null} />
+              <p className="text-xs text-muted-foreground">
+                Authenticates with Schwab via OAuth and stores an encrypted token. Market data calls
+                are not made yet (PRD Section 5).
+              </p>
+              {blockedState ? (
+                <Button disabled className="mt-1">
+                  Connect Schwab account
+                </Button>
+              ) : (
+                <Button asChild className="mt-1">
+                  <a href={schwabLoginUrl}>
+                    {schwabStatus?.state === "connected" || schwabStatus?.state === "token_expired"
+                      ? "Reconnect Schwab account"
+                      : "Connect Schwab account"}
+                  </a>
+                </Button>
+              )}
             </div>
           </Panel>
 
@@ -81,6 +100,36 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+const SCHWAB_STATE_CONFIG: Record<
+  SchwabConnectionState,
+  { label: string; variant: BadgeProps["variant"] }
+> = {
+  database_not_configured: { label: "Database not configured", variant: "wait" },
+  credentials_not_configured: { label: "Schwab credentials not configured", variant: "wait" },
+  not_connected: { label: "Not connected", variant: "default" },
+  connected: { label: "Connected", variant: "bull" },
+  token_expired: { label: "Token expired", variant: "bear" },
+};
+
+function SchwabStatusBadge({
+  state,
+  expiresAt,
+}: {
+  state?: SchwabConnectionState;
+  expiresAt: string | null;
+}) {
+  if (!state) return null;
+  const config = SCHWAB_STATE_CONFIG[state];
+  const showExpiry = state === "connected" && expiresAt;
+
+  return (
+    <Badge variant={config.variant}>
+      {config.label}
+      {showExpiry ? ` — expires ${new Date(expiresAt).toLocaleTimeString()}` : ""}
+    </Badge>
   );
 }
 

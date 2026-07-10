@@ -2,12 +2,12 @@
 
 import type { StrikeExposure } from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
+import { GammaDexChart } from "@/components/dashboard/gamma-dex-chart";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { useMarketSnapshot, useStrikeExposures } from "@/hooks/use-market-snapshot";
 import { formatCompactCurrency } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 export default function GammaPage() {
   const { data: strikes, isLoading, isError } = useStrikeExposures();
@@ -30,8 +30,6 @@ export default function GammaPage() {
     { key: "gex", header: "GEX", align: "right", render: (r) => formatCompactCurrency(r.gex) },
     { key: "dex", header: "DEX", align: "right", render: (r) => formatCompactCurrency(r.dex) },
   ];
-
-  const maxAbsGex = Math.max(1, ...(strikes ?? []).map((s) => Math.abs(s.gex)));
 
   return (
     <div className="mx-auto max-w-[1600px]">
@@ -57,29 +55,12 @@ export default function GammaPage() {
         </Panel>
 
         <Panel
-          title="Gamma Heatmap (by strike)"
+          title="Exposure by Strike"
           isLoading={isLoading}
           isError={isError}
           className="lg:col-span-4"
         >
-          {strikes && (
-            <div className="flex items-end gap-1 overflow-x-auto pb-2 scrollbar-thin">
-              {strikes.map((s) => {
-                const heightPct = (Math.abs(s.gex) / maxAbsGex) * 100;
-                return (
-                  <div key={s.strike} className="flex min-w-[44px] flex-1 flex-col items-center gap-1">
-                    <div className="flex h-28 w-full items-end">
-                      <div
-                        className={cn("w-full rounded-t-sm", s.gex >= 0 ? "bg-bull" : "bg-bear")}
-                        style={{ height: `${Math.max(4, heightPct)}%` }}
-                      />
-                    </div>
-                    <span className="font-mono text-[10px] tabular text-muted-foreground">{s.strike}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {strikes && <GammaDexChart strikes={strikes} spotPrice={snapshot?.spotPrice} />}
         </Panel>
 
         <Panel title="Per-Strike Exposure" isLoading={isLoading} isError={isError} className="lg:col-span-4" noPadding>

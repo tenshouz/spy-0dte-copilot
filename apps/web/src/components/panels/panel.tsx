@@ -11,6 +11,8 @@ interface PanelProps {
   /** Pass through query state so every panel shows loading/error consistently. */
   isLoading?: boolean;
   isError?: boolean;
+  isEmpty?: boolean;
+  emptyMessage?: string;
   noPadding?: boolean;
 }
 
@@ -22,6 +24,8 @@ export function Panel({
   children,
   isLoading,
   isError,
+  isEmpty,
+  emptyMessage = "No data yet.",
   noPadding,
 }: PanelProps) {
   return (
@@ -35,8 +39,10 @@ export function Panel({
           <PanelMessage tone="error">Couldn't load this data. Retrying shortly.</PanelMessage>
         ) : isLoading ? (
           <PanelSkeleton />
+        ) : isEmpty ? (
+          <PanelMessage tone="empty">{emptyMessage}</PanelMessage>
         ) : (
-          children
+          <div className="animate-fade-in">{children}</div>
         )}
       </CardContent>
     </Card>
@@ -60,10 +66,10 @@ function PanelMessage({ tone, children }: { tone: "error" | "empty"; children: R
 
 function PanelSkeleton() {
   return (
-    <div className="space-y-2">
-      <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
+    <div className="space-y-2.5">
+      <div className="h-3 w-3/4 animate-pulse rounded-md bg-muted" />
+      <div className="h-3 w-1/2 animate-pulse rounded-md bg-muted" style={{ animationDelay: "75ms" }} />
+      <div className="h-3 w-2/3 animate-pulse rounded-md bg-muted" style={{ animationDelay: "150ms" }} />
     </div>
   );
 }

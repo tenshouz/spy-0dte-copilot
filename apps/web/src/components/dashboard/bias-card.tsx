@@ -18,23 +18,20 @@ export function BiasCard() {
   return (
     <Panel title="Current Bias" isLoading={isLoading} isError={isError} className="lg:col-span-1">
       {report && (
-        <div className="flex flex-col gap-3">
+        <div className="flex h-full flex-col justify-between gap-3">
           <div
             className={cn(
-              "flex items-center justify-between rounded-md border px-4 py-3",
+              "flex items-center gap-2 rounded-md border px-4 py-3",
               biasConfig[report.bias].className,
             )}
           >
-            <div className="flex items-center gap-2">
-              {(() => {
-                const Icon = biasConfig[report.bias].icon;
-                return <Icon className="h-5 w-5" />;
-              })()}
-              <span className="font-mono text-2xl font-bold tracking-tight">
-                {biasConfig[report.bias].label}
-              </span>
-            </div>
-            <ConfidenceMeter confidence={report.confidence} />
+            {(() => {
+              const Icon = biasConfig[report.bias].icon;
+              return <Icon className="h-5 w-5" />;
+            })()}
+            <span className="font-mono text-2xl font-bold tracking-tight">
+              {biasConfig[report.bias].label}
+            </span>
           </div>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -46,24 +43,5 @@ export function BiasCard() {
         </div>
       )}
     </Panel>
-  );
-}
-
-function ConfidenceMeter({ confidence }: { confidence: number }) {
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <span className="font-mono text-sm font-semibold tabular">{confidence}/10</span>
-      <div className="flex gap-0.5">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1.5 w-2 rounded-sm",
-              i < confidence ? "bg-current" : "bg-current/20",
-            )}
-          />
-        ))}
-      </div>
-    </div>
   );
 }

@@ -22,6 +22,9 @@ export function LiveChart() {
           vwap={snapshot?.vwap}
           openingRangeHigh={snapshot?.openingRangeHigh}
           openingRangeLow={snapshot?.openingRangeLow}
+          previousClose={snapshot ? snapshot.spotPrice - 2.1 : undefined}
+          previousHigh={snapshot ? snapshot.spotPrice + 1.4 : undefined}
+          previousLow={snapshot ? snapshot.spotPrice - 4.8 : undefined}
         />
       )}
     </Panel>

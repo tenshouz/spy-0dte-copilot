@@ -138,6 +138,22 @@ export const JournalEntrySchema = z.object({
 });
 export type JournalEntry = z.infer<typeof JournalEntrySchema>;
 
+/** Schwab OAuth connection status (auth only — no market data yet, PRD Section 5.1/13.3). */
+export const SchwabConnectionStateSchema = z.enum([
+  "database_not_configured",
+  "credentials_not_configured",
+  "not_connected",
+  "connected",
+  "token_expired",
+]);
+export type SchwabConnectionState = z.infer<typeof SchwabConnectionStateSchema>;
+
+export const SchwabConnectionStatusSchema = z.object({
+  state: SchwabConnectionStateSchema,
+  expiresAt: z.string().datetime().nullable(),
+});
+export type SchwabConnectionStatus = z.infer<typeof SchwabConnectionStatusSchema>;
+
 /** Section 12: Discord alert log */
 export const AlertSeveritySchema = z.enum(["info", "bias_change", "invalidation", "warning"]);
 export type AlertSeverity = z.infer<typeof AlertSeveritySchema>;

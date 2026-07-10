@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: spy-copilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: spy
+      POSTGRES_PASSWORD: spy_password
+      POSTGRES_DB: spy_copilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - spy_copilot_pgdata:/var/lib/postgresql/data
+
+volumes:
+  spy_copilot_pgdata:

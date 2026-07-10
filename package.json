@@ -12,7 +12,10 @@
     "dev:server": "npm run dev --workspace=apps/server",
     "build:web": "npm run build --workspace=apps/web",
     "build:server": "npm run build --workspace=apps/server",
-    "lint": "npm run lint --workspace=apps/web"
+    "lint": "npm run lint --workspace=apps/web",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run prisma:migrate --workspace=apps/server -- --name init"
   },
   "engines": {
     "node": ">=20"
