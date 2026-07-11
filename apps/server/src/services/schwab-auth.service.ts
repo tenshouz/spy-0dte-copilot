@@ -19,6 +19,29 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/**
+ * Schwab requires an HTTPS callback URL — http://localhost is rejected by
+ * Schwab's OAuth server. Use an HTTPS tunnel (ngrok, Cloudflare Tunnel, etc.)
+ * forwarding to http://localhost:4000/api/auth/schwab/callback and set that
+ * tunnel's HTTPS URL as SCHWAB_REDIRECT_URI. The backend route path itself
+ * (/api/auth/schwab/callback) never changes.
+ */
+function requireHttpsRedirectUri(): string {
+  const value = process.env.SCHWAB_REDIRECT_URI;
+  if (!value) {
+    throw new Error(
+      "SCHWAB_REDIRECT_URI is not set. Set it to an HTTPS URL (e.g. from ngrok or a Cloudflare " +
+        "Tunnel) that forwards to http://localhost:4000/api/auth/schwab/callback.",
+    );
+  }
+  if (!value.startsWith("https://")) {
+    throw new Error(
+      `SCHWAB_REDIRECT_URI must be an HTTPS URL — Schwab rejects http:// callback URLs. Got: ${value}`,
+    );
+  }
+  return value;
+}
+
 async function getOrCreateDefaultUser() {
   return prisma.user.upsert({
     where: { email: DEFAULT_USER_EMAIL },
@@ -29,7 +52,7 @@ async function getOrCreateDefaultUser() {
 
 export function buildAuthorizeUrl(state: string): string {
   const clientId = requireEnv("SCHWAB_CLIENT_ID");
-  const redirectUri = requireEnv("SCHWAB_REDIRECT_URI");
+  const redirectUri = requireHttpsRedirectUri();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -68,7 +91,7 @@ async function requestToken(body: URLSearchParams): Promise<SchwabTokenResponse>
 }
 
 export async function exchangeCodeForTokens(code: string) {
-  const redirectUri = requireEnv("SCHWAB_REDIRECT_URI");
+  const redirectUri = requireHttpsRedirectUri();
   const tokens = await requestToken(
     new URLSearchParams({
       grant_type: "authorization_code",

@@ -10,7 +10,11 @@ import { z } from "zod";
 
 const EnvShapeSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
-  SCHWAB_REDIRECT_URI: z.string().url().optional(),
+  SCHWAB_REDIRECT_URI: z
+    .string()
+    .url()
+    .refine((v) => v.startsWith("https://"), { message: "must be an HTTPS URL — Schwab requires it" })
+    .optional(),
   FRONTEND_URL: z.string().url().optional(),
   SCHWAB_CLIENT_ID: z.string().min(1).optional(),
   SCHWAB_CLIENT_SECRET: z.string().min(1).optional(),
