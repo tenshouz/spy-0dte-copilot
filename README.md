@@ -59,6 +59,33 @@ also fill in real `SCHWAB_CLIENT_ID` / `SCHWAB_CLIENT_SECRET` / `SCHWAB_REDIRECT
 developer app — that's expected; the database step above is independent of having real Schwab
 credentials. To stop the database later: `npm run db:down` (data persists in a Docker volume).
 
+## HTTPS tunnel for Schwab OAuth (local development only)
+
+Schwab requires an HTTPS callback URL and rejects `http://localhost`. For local development, run an
+HTTPS tunnel that forwards to the backend:
+
+```bash
+ngrok http 4000
+# or
+cloudflared tunnel --url http://localhost:4000
+```
+
+Then set in `apps/server/.env` (and register the **exact** same URL in your Schwab developer app):
+
+```
+SCHWAB_REDIRECT_URI="https://<your-tunnel-host>/api/auth/schwab/callback"
+```
+
+Important notes:
+- The tunnel must stay running for the entire OAuth flow (Schwab redirects the browser back through it).
+- Free/temporary tunnel hostnames change between runs — when the hostname changes, update both
+  `SCHWAB_REDIRECT_URI` and the callback registered with Schwab, then restart the server.
+- The URL registered with Schwab must match `SCHWAB_REDIRECT_URI` exactly: same host, the path
+  `/api/auth/schwab/callback`, no query string, no fragment.
+- The tunnel approach is for local development only. Production requires a stable HTTPS domain
+  pointing at the backend.
+- ngrok/cloudflared are external tools, not application dependencies.
+
 ## Install & run
 
 ```bash

@@ -142,6 +142,7 @@ export type JournalEntry = z.infer<typeof JournalEntrySchema>;
 export const SchwabConnectionStateSchema = z.enum([
   "database_not_configured",
   "credentials_not_configured",
+  "config_invalid",
   "not_connected",
   "connected",
   "token_expired",
@@ -151,6 +152,8 @@ export type SchwabConnectionState = z.infer<typeof SchwabConnectionStateSchema>;
 export const SchwabConnectionStatusSchema = z.object({
   state: SchwabConnectionStateSchema,
   expiresAt: z.string().datetime().nullable(),
+  /** Safe, human-readable elaboration (e.g. which vars are missing or why the redirect URI is invalid). Never contains secrets. */
+  detail: z.string().nullable(),
 });
 export type SchwabConnectionStatus = z.infer<typeof SchwabConnectionStatusSchema>;
 

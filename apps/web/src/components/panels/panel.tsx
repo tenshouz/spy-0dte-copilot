@@ -36,7 +36,7 @@ export function Panel({
       </CardHeader>
       <CardContent className={cn("flex-1", noPadding && "p-0", contentClassName)}>
         {isError ? (
-          <PanelMessage tone="error">Couldn't load this data. Retrying shortly.</PanelMessage>
+          <PanelMessage tone="error">Couldn&apos;t load this data. Retrying shortly.</PanelMessage>
         ) : isLoading ? (
           <PanelSkeleton />
         ) : isEmpty ? (

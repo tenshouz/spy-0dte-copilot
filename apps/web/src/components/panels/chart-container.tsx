@@ -172,7 +172,6 @@ export function ChartContainer({
       chart.remove();
       chartRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, vwap, openingRangeHigh, openingRangeLow, previousClose, previousHigh, previousLow, height]);
 
   return (

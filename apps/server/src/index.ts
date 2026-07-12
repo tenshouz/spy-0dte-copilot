@@ -1,7 +1,7 @@
 import "./bootstrap-env";
 import cors from "cors";
 import express from "express";
-import { hasDatabaseUrl, hasSchwabCredentials } from "./config/env";
+import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
 import { journalRouter } from "./routes/journal.routes";
@@ -33,9 +33,12 @@ app.listen(PORT, () => {
       `[server] DATABASE_URL is not set — Schwab connection status will show "Database not configured". See README for local Postgres setup.`,
     );
   }
-  if (!hasSchwabCredentials) {
+  const schwabConfig = getSchwabConfig();
+  if (schwabConfig.status === "missing") {
     console.log(
-      `[server] Schwab OAuth env vars are incomplete — Schwab connection status will show "Schwab credentials not configured".`,
+      `[server] Schwab OAuth env vars are incomplete (${schwabConfig.missingVars.join(", ")}) — Settings will show "Schwab credentials not configured".`,
     );
+  } else if (schwabConfig.status === "invalid") {
+    console.log(`[server] Schwab configuration is invalid: ${schwabConfig.reason}`);
   }
 });
