@@ -170,3 +170,56 @@ export const AlertSchema = z.object({
   delivered: z.boolean(),
 });
 export type Alert = z.infer<typeof AlertSchema>;
+
+/**
+ * Normalized SPY quote — the backend-to-frontend contract for the live quote
+ * milestone. The backend is authoritative for sourceState:
+ *  LIVE  — validated real Schwab quote, fetchedAt within the freshness threshold
+ *  STALE — validated real quote exists but the last successful fetch is older
+ *          than the threshold (connection still established)
+ *  MOCK  — no usable real quote (disconnected / auth failure / no cache)
+ * Freshness is judged from fetchedAt (server retrieval time), NOT from
+ * quoteTimestamp, which is legitimately old while markets are closed.
+ */
+export const QuoteSourceStateSchema = z.enum(["LIVE", "STALE", "MOCK"]);
+export type QuoteSourceState = z.infer<typeof QuoteSourceStateSchema>;
+
+/** Mapped from Schwab's documented quote.securityStatus; UNKNOWN when absent or unrecognized. */
+export const MarketStatusSchema = z.enum(["NORMAL", "HALTED", "CLOSED", "UNKNOWN"]);
+export type MarketStatus = z.infer<typeof MarketStatusSchema>;
+
+export const QuoteWarningCodeSchema = z.enum([
+  "NOT_CONNECTED",
+  "AUTH_EXPIRED",
+  "RECONNECT_REQUIRED",
+  "FORBIDDEN",
+  "RATE_LIMITED",
+  "UPSTREAM_ERROR",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "VALIDATION_FAILED",
+  "DATABASE_ERROR",
+]);
+export type QuoteWarningCode = z.infer<typeof QuoteWarningCodeSchema>;
+
+/**
+ * LIVE→STALE boundary, measured from fetchedAt (server retrieval time).
+ * Shared so the backend's authoritative decision and the frontend's
+ * transport-failure safety downgrade use the identical threshold.
+ */
+export const QUOTE_FRESHNESS_THRESHOLD_MS = 45_000;
+
+export const SpyQuoteSchema = z.object({
+  symbol: z.literal("SPY"),
+  lastPrice: z.number().finite().positive(),
+  bidPrice: z.number().finite().nonnegative().nullable(),
+  askPrice: z.number().finite().nonnegative().nullable(),
+  volume: z.number().int().nonnegative().nullable(),
+  quoteTimestamp: z.string().datetime(),
+  fetchedAt: z.string().datetime(),
+  marketStatus: MarketStatusSchema,
+  sourceState: QuoteSourceStateSchema,
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: QuoteWarningCodeSchema.nullable(),
+});
+export type SpyQuote = z.infer<typeof SpyQuoteSchema>;

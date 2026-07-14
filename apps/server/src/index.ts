@@ -5,6 +5,7 @@ import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
 import { journalRouter } from "./routes/journal.routes";
+import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter } from "./routes/report.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 
@@ -15,19 +16,26 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok", milestone: 1, dataSource: "mock" });
+  // Mixed data: the SPY quote endpoint serves real Schwab data when an
+  // authenticated connection is available; remaining analytics are mock.
+  // Every quote payload identifies its own source via sourceState.
+  res.json({ status: "ok", dataSources: "mixed", quoteSourceField: "sourceState" });
 });
 
 app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
+app.use("/api/quote", quoteRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`[server] Milestone 1 mock API listening on http://localhost:${PORT}`);
-  console.log(`[server] NOTE: all data below is mocked. Schwab is not connected (see PRD Sec. 5).`);
+  console.log(`[server] Dashboard API listening on http://localhost:${PORT}`);
+  console.log(
+    `[server] SPY quote endpoint (/api/quote/spy) uses Schwab when an authenticated connection is available; every quote is labeled LIVE, STALE, or MOCK.`,
+  );
+  console.log(`[server] Remaining dashboard analytics are still mock data.`);
   if (!hasDatabaseUrl) {
     console.log(
       `[server] DATABASE_URL is not set — Schwab connection status will show "Database not configured". See README for local Postgres setup.`,

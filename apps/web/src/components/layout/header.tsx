@@ -1,15 +1,28 @@
 "use client";
 
+import type { QuoteSourceState } from "@spy-copilot/shared";
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
+import { useDisplaySpyQuote } from "@/hooks/use-spy-quote";
 import { formatPrice } from "@/lib/format";
 import { useUiStore } from "@/stores/ui-store";
 
+/** Quote-scoped labels only — never a bare LIVE that could describe the whole dashboard. */
+const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
+  LIVE: { variant: "bull", label: "SPY LIVE" },
+  STALE: { variant: "wait", label: "SPY STALE" },
+  MOCK: { variant: "bear", label: "SPY MOCK" },
+};
+
 export function Header() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  // Same shared display logic as the Current Price card — one query key,
+  // identical price and identical effective source state in both places.
+  const { display } = useDisplaySpyQuote();
+  const quote = display?.quote;
   const { data: snapshot } = useMarketSnapshot();
   const [now, setNow] = useState<Date | null>(null);
 
@@ -18,8 +31,6 @@ export function Header() {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-
-  const isAboveVwap = snapshot ? snapshot.spotPrice >= snapshot.vwap : undefined;
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-panel-border bg-panel px-4">
@@ -31,26 +42,31 @@ export function Header() {
           SPY 0DTE COPILOT
         </span>
 
-        {snapshot && (
+        {quote && (
           <div className="hidden items-center gap-2 sm:flex">
             <span className="font-mono text-sm font-semibold tabular">SPY</span>
-            <span
-              className={`font-mono text-sm font-semibold tabular ${
-                isAboveVwap ? "text-bull" : "text-bear"
-              }`}
-            >
-              ${formatPrice(snapshot.spotPrice)}
+            {/* Neutral color — no bull/bear coloring derived from mock VWAP or any
+                other mock analytic. Live price + mock values must not be combined
+                into any signal for this milestone. */}
+            <span className="font-mono text-sm font-semibold tabular text-foreground">
+              ${formatPrice(quote.lastPrice)}
             </span>
-            <span className="hidden text-xs text-muted-foreground lg:inline">
-              VWAP ${formatPrice(snapshot.vwap)}
-            </span>
+            <Badge variant={SOURCE_BADGE[quote.sourceState].variant}>
+              {SOURCE_BADGE[quote.sourceState].label}
+            </Badge>
+            {snapshot && (
+              <span className="hidden text-xs text-muted-foreground lg:inline">
+                Mock VWAP ${formatPrice(snapshot.vwap)}
+              </span>
+            )}
           </div>
         )}
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Everything except the SPY quote is still mock — keep that unmistakable. */}
         <Badge variant="wait" className="hidden sm:inline-flex">
-          Mock data — Milestone 1
+          Analytics: Mock
         </Badge>
         <span className="font-mono text-xs tabular text-muted-foreground" suppressHydrationWarning>
           {now

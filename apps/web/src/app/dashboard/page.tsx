@@ -2,6 +2,7 @@
 
 import { BiasCard } from "@/components/dashboard/bias-card";
 import { ConfidenceCard } from "@/components/dashboard/confidence-card";
+import { CurrentPriceCard } from "@/components/dashboard/current-price-card";
 import { LiveChart } from "@/components/dashboard/live-chart";
 import { MarketRegimeCard } from "@/components/dashboard/market-regime-card";
 import { SessionTimeline } from "@/components/dashboard/session-timeline";
@@ -25,6 +26,7 @@ export default function DashboardPage() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-4">
+        <CurrentPriceCard />
         <BiasCard />
         <ConfidenceCard />
         <MarketRegimeCard />
