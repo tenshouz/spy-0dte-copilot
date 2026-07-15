@@ -3,6 +3,7 @@
 import type {
   QuoteSourceState,
   SessionLevelValue,
+  SpyOpeningRangeResponse,
   SpyRthGapResponse,
   VwapMetricState,
 } from "@spy-copilot/shared";
@@ -13,6 +14,10 @@ import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import {
+  OPENING_RANGE_TRANSPORT_WARNING,
+  useDisplaySpyOpeningRange,
+} from "@/hooks/use-spy-opening-range";
 import {
   RTH_GAP_TRANSPORT_WARNING,
   useDisplaySpyRthGap,
@@ -61,6 +66,14 @@ function formatGapValue(gap: SpyRthGapResponse): string {
   return `${formatSigned(gap.gapPoints)} pts / ${formatSigned(gap.gapPercent)}% · ${gap.direction}`;
 }
 
+function formatOpeningRangeValue(
+  value: number | null,
+  range: SpyOpeningRangeResponse,
+): string {
+  if (value === null) return "Unavailable";
+  return `$${formatPrice(value)} · ${range.phase}`;
+}
+
 function formatGapFill(gap: SpyRthGapResponse): string {
   if (gap.firstObservedFillCandleAt) {
     return `${gap.fillState} · ${formatEasternTime(gap.firstObservedFillCandleAt)}`;
@@ -77,6 +90,11 @@ export default function MarketDataPage() {
     isLoading: gapLoading,
     isError: gapError,
   } = useDisplaySpyRthGap();
+  const {
+    display: openingRangeDisplay,
+    isLoading: openingRangeLoading,
+    isError: openingRangeError,
+  } = useDisplaySpyOpeningRange();
   const {
     display: levelsDisplay,
     isLoading: levelsLoading,
@@ -100,6 +118,15 @@ export default function MarketDataPage() {
     levelsDisplay!.response.candleSourceState !== "MOCK" &&
     levelsDisplay!.response.currentMarketDateHasDefinedSessionData;
   const levels = canRenderRealLevels ? levelsDisplay!.response : null;
+
+  const openingRange =
+    display &&
+    openingRangeDisplay &&
+    !isMockCandles &&
+    (openingRangeDisplay.response.metricState === "LIVE" ||
+      openingRangeDisplay.response.metricState === "STALE")
+      ? openingRangeDisplay.response
+      : null;
 
   const columns: DataTableColumn<StructureRow>[] = [
     { key: "label", header: "Level", render: (r) => r.label },
@@ -143,12 +170,23 @@ export default function MarketDataPage() {
       { label: `Gap Fill · ${gap.metricState}`, value: formatGapFill(gap) },
     );
   }
+  if (openingRangeDisplay) {
+    const range = openingRangeDisplay.response;
+    rows.push(
+      {
+        label: `Opening Range High · ${range.metricState}`,
+        value: formatOpeningRangeValue(range.openingRangeHigh, range),
+      },
+      {
+        label: `Opening Range Low · ${range.metricState}`,
+        value: formatOpeningRangeValue(range.openingRangeLow, range),
+      },
+    );
+  }
   if (snapshot) {
     rows.push(
       { label: "Overnight High · MOCK", value: `$${formatPrice(snapshot.overnightHigh ?? 0)}` },
       { label: "Overnight Low · MOCK", value: `$${formatPrice(snapshot.overnightLow ?? 0)}` },
-      { label: "Opening Range High · MOCK", value: `$${formatPrice(snapshot.openingRangeHigh ?? 0)}` },
-      { label: "Opening Range Low · MOCK", value: `$${formatPrice(snapshot.openingRangeLow ?? 0)}` },
     );
   }
   if (vwapDisplay) {
@@ -163,7 +201,7 @@ export default function MarketDataPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="Market Data"
-        description="SPY candles, RTH VWAP, core session levels, and RTH gap metrics are live from Schwab when available; remaining advanced analytics are still mock."
+        description="SPY candles, RTH VWAP, core session levels, RTH gap metrics, and the 15-minute Opening Range are live from Schwab when available; remaining advanced analytics are still mock."
       />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
@@ -193,8 +231,14 @@ export default function MarketDataPage() {
               <ChartContainer
                 candles={display.chartCandles}
                 vwapSeries={vwapSeries}
-                openingRangeHigh={isMockCandles ? snapshot?.openingRangeHigh : undefined}
-                openingRangeLow={isMockCandles ? snapshot?.openingRangeLow : undefined}
+                openingRangeHigh={
+                  openingRange?.openingRangeHigh ??
+                  (isMockCandles ? snapshot?.openingRangeHigh : undefined)
+                }
+                openingRangeLow={
+                  openingRange?.openingRangeLow ??
+                  (isMockCandles ? snapshot?.openingRangeLow : undefined)
+                }
                 premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
                 premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
                 previousClose={
@@ -230,14 +274,17 @@ export default function MarketDataPage() {
               {levelsDisplay?.transportFailed && (
                 <p className="px-4 pb-3 text-xs text-wait">{SESSION_LEVELS_TRANSPORT_WARNING}</p>
               )}
+              {openingRangeDisplay?.transportFailed && (
+                <p className="px-4 pb-3 text-xs text-wait">{OPENING_RANGE_TRANSPORT_WARNING}</p>
+              )}
             </div>
           )}
         </Panel>
 
         <Panel
           title="Structure Levels"
-          isLoading={isLoading && levelsLoading && gapLoading}
-          isError={isError && levelsError && gapError}
+          isLoading={isLoading && levelsLoading && gapLoading && openingRangeLoading}
+          isError={isError && levelsError && gapError && openingRangeError}
         >
           <div className="space-y-2">
             {levelsDisplay && (
@@ -249,6 +296,9 @@ export default function MarketDataPage() {
             <DataTable columns={columns} rows={rows} rowKey={(r) => r.label} />
             {gapDisplay?.transportFailed && (
               <p className="text-xs text-wait">{RTH_GAP_TRANSPORT_WARNING}</p>
+            )}
+            {openingRangeDisplay?.transportFailed && (
+              <p className="text-xs text-wait">{OPENING_RANGE_TRANSPORT_WARNING}</p>
             )}
           </div>
         </Panel>

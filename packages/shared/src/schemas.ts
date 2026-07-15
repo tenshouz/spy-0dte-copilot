@@ -547,3 +547,112 @@ export const SpyRthGapResponseSchema = z
   });
 export type SpyRthGapResponse = z.infer<typeof SpyRthGapResponseSchema>;
 
+/** Package-level availability/provenance for the fixed 15-minute RTH Opening Range. */
+export const OpeningRangeMetricStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type OpeningRangeMetricState = z.infer<typeof OpeningRangeMetricStateSchema>;
+
+/** Lifecycle is deliberately separate from source freshness and coverage eligibility. */
+export const OpeningRangePhaseSchema = z.enum([
+  "PRE_OPEN",
+  "FORMING",
+  "COMPLETE",
+  "UNAVAILABLE",
+]);
+export type OpeningRangePhase = z.infer<typeof OpeningRangePhaseSchema>;
+
+export const OpeningRangeWarningCodeSchema = z.union([
+  CandleWarningCodeSchema,
+  z.enum([
+    "OPENING_RANGE_OPENING_CANDLE_MISSING",
+    "OPENING_RANGE_INCOMPLETE",
+  ]),
+]);
+export type OpeningRangeWarningCode = z.infer<typeof OpeningRangeWarningCodeSchema>;
+
+/**
+ * Current New York date's fixed 15-minute RTH Opening Range. The intended
+ * interval is [09:30, 09:45); first/latest candle fields are actual selected
+ * provider-candle timestamps, while start/end identify the established range
+ * boundaries when the canonical 09:30 opening candle is available.
+ */
+export const SpyOpeningRangeResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("OPENING_RANGE_15M"),
+    currentMarketDate: MarketDateSchema,
+    metricState: OpeningRangeMetricStateSchema,
+    candleSourceState: QuoteSourceStateSchema,
+    phase: OpeningRangePhaseSchema,
+    openingRangeHigh: z.number().finite().positive().nullable(),
+    openingRangeLow: z.number().finite().positive().nullable(),
+    openingRangeStartAt: z.string().datetime().nullable(),
+    openingRangeEndAt: z.string().datetime().nullable(),
+    openingRangeCandleCount: z.number().int().min(0).max(3),
+    coverageState: CoverageStateSchema,
+    firstOpeningRangeCandleAt: z.string().datetime().nullable(),
+    latestOpeningRangeCandleAt: z.string().datetime().nullable(),
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    warningCode: OpeningRangeWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const available = value.metricState !== "UNAVAILABLE";
+    if (!available) {
+      if (value.openingRangeHigh !== null || value.openingRangeLow !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "UNAVAILABLE Opening Range must expose null High and Low",
+        });
+      }
+    } else if (
+      value.openingRangeHigh === null ||
+      value.openingRangeLow === null ||
+      value.openingRangeStartAt === null ||
+      value.openingRangeEndAt === null ||
+      value.openingRangeCandleCount === 0 ||
+      value.coverageState !== "COMPLETE" ||
+      value.phase === "PRE_OPEN" ||
+      value.phase === "UNAVAILABLE"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available Opening Range requires eligible candles, boundaries, and COMPLETE coverage",
+      });
+    }
+
+    const hasObservedCandles = value.openingRangeCandleCount > 0;
+    if (
+      hasObservedCandles !==
+      (value.firstOpeningRangeCandleAt !== null && value.latestOpeningRangeCandleAt !== null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Opening Range candle count and observed timestamp fields must agree",
+      });
+    }
+
+    if (
+      (value.openingRangeStartAt === null) !== (value.openingRangeEndAt === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Opening Range start and end boundaries must be present together",
+      });
+    }
+
+    if (value.phase === "PRE_OPEN" && value.openingRangeCandleCount !== 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PRE_OPEN Opening Range cannot expose selected candles",
+      });
+    }
+
+    if (value.phase === "COMPLETE" && available && value.openingRangeCandleCount !== 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Completed available Opening Range requires all three candles",
+      });
+    }
+  });
+export type SpyOpeningRangeResponse = z.infer<typeof SpyOpeningRangeResponseSchema>;
+

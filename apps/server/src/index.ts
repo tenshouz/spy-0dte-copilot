@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
 import { gapRouter } from "./routes/gap.routes";
 import { journalRouter } from "./routes/journal.routes";
+import { openingRangeRouter } from "./routes/opening-range.routes";
 import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter } from "./routes/report.routes";
 import { sessionDataRouter } from "./routes/session-data.routes";
@@ -30,6 +31,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
+app.use("/api/opening-range", openingRangeRouter);
 app.use("/api/quote", quoteRouter);
 app.use("/api/candles", candlesRouter);
 app.use("/api/gap", gapRouter);
@@ -46,7 +48,7 @@ app.listen(PORT, () => {
     `[server] SPY quote endpoint (/api/quote/spy) uses Schwab when an authenticated connection is available; every quote is labeled LIVE, STALE, or MOCK.`,
   );
   console.log(
-    `[server] RTH VWAP, core session levels, and RTH gap metrics are derived deterministically from the normalized SPY candle pipeline; remaining advanced analytics are still mock data.`,
+    `[server] RTH VWAP, core session levels, RTH gap metrics, and the 15-minute Opening Range are derived deterministically from the normalized SPY candle pipeline; remaining advanced analytics are still mock data.`,
   );
   if (!hasDatabaseUrl) {
     console.log(

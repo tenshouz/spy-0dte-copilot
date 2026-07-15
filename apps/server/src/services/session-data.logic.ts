@@ -71,6 +71,11 @@ export function getObservedMarketDate(timestampMs: number): string {
   return getNewYorkParts(timestampMs).marketDate;
 }
 
+/** America/New_York minute-of-day (0-1439) from a UTC epoch timestamp. */
+export function getObservedMarketMinute(timestampMs: number): number {
+  return minuteOfDay(getNewYorkParts(timestampMs));
+}
+
 export function classifyMarketSession(timestampMs: number): MarketSessionName | null {
   const minute = minuteOfDay(getNewYorkParts(timestampMs));
   const window = SESSION_WINDOWS.find((candidate) => minute >= candidate.startMinute && minute < candidate.endMinute);

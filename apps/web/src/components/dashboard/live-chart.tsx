@@ -10,6 +10,10 @@ import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
 import {
+  OPENING_RANGE_TRANSPORT_WARNING,
+  useDisplaySpyOpeningRange,
+} from "@/hooks/use-spy-opening-range";
+import {
   SESSION_LEVELS_TRANSPORT_WARNING,
   useDisplaySpySessionLevels,
 } from "@/hooks/use-spy-session-levels";
@@ -43,6 +47,7 @@ export function LiveChart() {
   const { display, isLoading, isError } = useDisplaySpyCandles();
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
   const { display: levelsDisplay } = useDisplaySpySessionLevels();
+  const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
   const { data: snapshot } = useMarketSnapshot();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
@@ -69,6 +74,15 @@ export function LiveChart() {
     levelsDisplay!.response.candleSourceState !== "MOCK" &&
     levelsDisplay!.response.currentMarketDateHasDefinedSessionData;
   const levels = canRenderRealLevels ? levelsDisplay!.response : null;
+
+  const openingRange =
+    display &&
+    openingRangeDisplay &&
+    !isMockCandles &&
+    (openingRangeDisplay.response.metricState === "LIVE" ||
+      openingRangeDisplay.response.metricState === "STALE")
+      ? openingRangeDisplay.response
+      : null;
 
   return (
     <Panel
@@ -97,8 +111,14 @@ export function LiveChart() {
           <ChartContainer
             candles={display.chartCandles}
             vwapSeries={vwapSeries}
-            openingRangeHigh={isMockCandles ? snapshot?.openingRangeHigh : undefined}
-            openingRangeLow={isMockCandles ? snapshot?.openingRangeLow : undefined}
+            openingRangeHigh={
+              openingRange?.openingRangeHigh ??
+              (isMockCandles ? snapshot?.openingRangeHigh : undefined)
+            }
+            openingRangeLow={
+              openingRange?.openingRangeLow ??
+              (isMockCandles ? snapshot?.openingRangeLow : undefined)
+            }
             premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
             premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
             previousClose={
@@ -132,6 +152,9 @@ export function LiveChart() {
           )}
           {levelsDisplay?.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">{SESSION_LEVELS_TRANSPORT_WARNING}</p>
+          )}
+          {openingRangeDisplay?.transportFailed && (
+            <p className="px-4 pb-3 text-xs text-wait">{OPENING_RANGE_TRANSPORT_WARNING}</p>
           )}
         </div>
       )}
