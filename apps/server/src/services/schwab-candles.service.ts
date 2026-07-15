@@ -14,6 +14,10 @@ import {
 import { parseRetryAfterMs } from "./schwab-market-data.logic";
 import { fetchSpyPriceHistory } from "./schwab-price-history.client";
 import {
+  buildSessionDataRequestWindow,
+  selectLatestDefinedSessionDataset,
+} from "./session-data.logic";
+import {
   SchwabAuthError,
   deleteStoredTokens,
   getValidAccessToken,
@@ -27,17 +31,13 @@ import {
  * separate from quote state. Reuses the existing typed auth errors, token
  * flow, invalidation, and Retry-After parser — no second auth system.
  *
- * Implemented candidate endpoint (pending real local contract verification):
- *   GET https://api.schwabapi.com/marketdata/v1/pricehistory
- *     ?symbol=SPY&periodType=day&period=1
- *     &frequencyType=minute&frequency=5&needExtendedHoursData=true
- *   (needPreviousClose deliberately omitted — not needed by this milestone.)
- *
- * CONTRACT CAVEAT: this endpoint/parameter/response contract was not verified
- * against current official Schwab documentation in the implementation sandbox.
- * Real local route verification is therefore required before the milestone is
- * accepted. Raw Zod validation fails closed: any mismatch produces a labeled
- * degraded state with a sanitized log — never mislabeled LIVE data.
+ * Chart retrieval uses the same explicit bounded Schwab Price History request
+ * shape that was proven by the Session Data Foundation milestone. The returned
+ * multi-day dataset is normalized once, then narrowed to the latest observed
+ * America/New_York date that contains a defined Premarket, RTH, or After-Hours
+ * candle. This avoids Schwab's period=1 behavior returning only the prior
+ * completed trading day during a new live session, while preserving the existing
+ * one-session chart response contract and weekend/holiday fallback behavior.
  */
 
 // ---------------------------------------------------------------------------
@@ -130,6 +130,15 @@ async function handleAuthError(err: SchwabAuthError): Promise<SpyCandleResponse>
   }
 }
 
+function buildChartRequest(nowMs: number) {
+  const window = buildSessionDataRequestWindow(nowMs);
+  return {
+    kind: "chart" as const,
+    startDateMs: window.startDateMs,
+    endDateMs: window.endDateMs,
+  };
+}
+
 async function runCandleFlow(): Promise<SpyCandleResponse> {
   // STEP 1 — Authenticate FIRST (identical ordering guarantee to the quote
   // service). Unclassified errors here cannot prove authentication succeeded
@@ -154,10 +163,12 @@ async function runCandleFlow(): Promise<SpyCandleResponse> {
     return toSpyCandleResponse(cachedDataset, Date.now(), null);
   }
 
-  // STEP 4 — Request Schwab.
+  // STEP 4 — Request a bounded recent window, then keep only the latest
+  // observed defined market-session date for the existing chart contract.
+  const request = buildChartRequest(Date.now());
   let res: Response;
   try {
-    res = await fetchSpyPriceHistory(accessToken, { kind: "chart" });
+    res = await fetchSpyPriceHistory(accessToken, request);
   } catch (err) {
     const isTimeout = (err as Error).name === "AbortError";
     logCandleIssue(isTimeout ? "candle request timeout" : "candle network error");
@@ -183,7 +194,7 @@ async function runCandleFlow(): Promise<SpyCandleResponse> {
     }
 
     try {
-      res = await fetchSpyPriceHistory(retryToken, { kind: "chart" });
+      res = await fetchSpyPriceHistory(retryToken, request);
     } catch (err) {
       // Transport failure DURING the retry is temporary, not definitive.
       const isTimeout = (err as Error).name === "AbortError";
@@ -229,9 +240,16 @@ async function runCandleFlow(): Promise<SpyCandleResponse> {
       logCandleIssue("validated but empty price-history response");
       return getSafeCandleFallback("EMPTY_RESPONSE");
     }
-    // Replace the retained dataset only after the ENTIRE new dataset validated.
-    cachedDataset = normalized;
-    return toSpyCandleResponse(normalized, Date.now(), null);
+    const selected = selectLatestDefinedSessionDataset(normalized);
+    if (selected === null) {
+      logCandleIssue("validated price-history response contained no defined-session candles");
+      return getSafeCandleFallback("EMPTY_RESPONSE");
+    }
+
+    // Replace the retained dataset only after the ENTIRE upstream dataset
+    // validated and a latest defined-session date was selected successfully.
+    cachedDataset = selected;
+    return toSpyCandleResponse(selected, Date.now(), null);
   } catch (err) {
     if (err instanceof z.ZodError) {
       logCandleIssue("candle validation failed");

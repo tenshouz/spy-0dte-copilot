@@ -12,7 +12,7 @@ const SCHWAB_PRICE_HISTORY_URL = "https://api.schwabapi.com/marketdata/v1/priceh
 export const PRICE_HISTORY_REQUEST_TIMEOUT_MS = 10_000;
 
 export type SpyPriceHistoryRequest =
-  | { kind: "chart" }
+  | { kind: "chart"; startDateMs: number; endDateMs: number }
   | { kind: "bounded"; startDateMs: number; endDateMs: number };
 
 export function buildSpyPriceHistoryUrl(request: SpyPriceHistoryRequest): string {
@@ -23,19 +23,15 @@ export function buildSpyPriceHistoryUrl(request: SpyPriceHistoryRequest): string
     needExtendedHoursData: "true",
   });
 
-  if (request.kind === "chart") {
-    params.set("periodType", "day");
-    params.set("period", "1");
-  } else {
-    if (!Number.isSafeInteger(request.startDateMs) || request.startDateMs <= 0) {
-      throw new Error("Invalid bounded price-history startDateMs.");
-    }
-    if (!Number.isSafeInteger(request.endDateMs) || request.endDateMs <= request.startDateMs) {
-      throw new Error("Invalid bounded price-history endDateMs.");
-    }
-    params.set("startDate", String(request.startDateMs));
-    params.set("endDate", String(request.endDateMs));
+  if (!Number.isSafeInteger(request.startDateMs) || request.startDateMs <= 0) {
+    throw new Error(`Invalid ${request.kind} price-history startDateMs.`);
   }
+  if (!Number.isSafeInteger(request.endDateMs) || request.endDateMs <= request.startDateMs) {
+    throw new Error(`Invalid ${request.kind} price-history endDateMs.`);
+  }
+
+  params.set("startDate", String(request.startDateMs));
+  params.set("endDate", String(request.endDateMs));
 
   return `${SCHWAB_PRICE_HISTORY_URL}?${params.toString()}`;
 }

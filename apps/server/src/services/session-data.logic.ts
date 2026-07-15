@@ -237,6 +237,25 @@ export function buildSessionDataRequestWindow(nowMs: number): { startDateMs: num
   return { startDateMs: nowMs - SESSION_DATA_LOOKBACK_MS, endDateMs: nowMs };
 }
 
+export function selectLatestDefinedSessionDataset(
+  dataset: CachedCandleDataset,
+): CachedCandleDataset | null {
+  const eligible = dataset.candles.filter((candle) => classifyMarketSession(candle.timestamp) !== null);
+  if (eligible.length === 0) return null;
+
+  const latestMarketDate = getObservedMarketDate(eligible.at(-1)!.timestamp);
+  const candles = eligible.filter(
+    (candle) => getObservedMarketDate(candle.timestamp) === latestMarketDate,
+  );
+  const newest = candles.at(-1) ?? null;
+
+  return {
+    candles,
+    latestCandleAt: newest ? new Date(newest.timestamp).toISOString() : null,
+    fetchedAtMs: dataset.fetchedAtMs,
+  };
+}
+
 export function toSpySessionDataFoundationResponse(
   dataset: CachedCandleDataset,
   requestedStartAtMs: number,

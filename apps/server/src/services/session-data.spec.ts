@@ -16,6 +16,7 @@ import {
   classifyMarketSession,
   detectTimestampGaps,
   getObservedMarketDate,
+  selectLatestDefinedSessionDataset,
   toSpySessionDataFoundationResponse,
 } from "./session-data.logic";
 
@@ -72,16 +73,19 @@ test("bounded request uses fixed SPY 5-minute extended-hours parameters", () => 
   assert.equal(url.searchParams.has("period"), false);
 });
 
-test("chart request preserves the existing one-day request shape", () => {
-  const url = new URL(buildSpyPriceHistoryUrl({ kind: "chart" }));
-  assert.equal(url.searchParams.get("periodType"), "day");
-  assert.equal(url.searchParams.get("period"), "1");
-  assert.equal(url.searchParams.has("startDate"), false);
-  assert.equal(url.searchParams.has("endDate"), false);
+test("chart request uses an explicit bounded window instead of period=1", () => {
+  const startDateMs = Date.parse("2026-07-08T19:00:00.000Z");
+  const endDateMs = Date.parse("2026-07-15T19:00:00.000Z");
+  const url = new URL(buildSpyPriceHistoryUrl({ kind: "chart", startDateMs, endDateMs }));
+  assert.equal(url.searchParams.get("startDate"), String(startDateMs));
+  assert.equal(url.searchParams.get("endDate"), String(endDateMs));
+  assert.equal(url.searchParams.has("periodType"), false);
+  assert.equal(url.searchParams.has("period"), false);
 });
 
 test("bounded request rejects invalid date ranges", () => {
   assert.throws(() => buildSpyPriceHistoryUrl({ kind: "bounded", startDateMs: 1000, endDateMs: 1000 }));
+  assert.throws(() => buildSpyPriceHistoryUrl({ kind: "chart", startDateMs: 1000, endDateMs: 1000 }));
 });
 
 test("foundation request window is exactly seven calendar days", () => {
@@ -89,6 +93,53 @@ test("foundation request window is exactly seven calendar days", () => {
   const window = buildSessionDataRequestWindow(nowMs);
   assert.equal(window.endDateMs, nowMs);
   assert.equal(window.endDateMs - window.startDateMs, SESSION_DATA_LOOKBACK_MS);
+});
+
+test("chart selection keeps only the latest observed date with defined-session candles", () => {
+  const friday = range(
+    Date.parse("2026-07-10T11:00:00.000Z"),
+    Date.parse("2026-07-10T23:55:00.000Z"),
+  );
+  const sundayOvernightOnly = range(
+    Date.parse("2026-07-13T00:00:00.000Z"),
+    Date.parse("2026-07-13T03:55:00.000Z"),
+  );
+  const monday = range(
+    Date.parse("2026-07-13T11:00:00.000Z"),
+    Date.parse("2026-07-13T19:05:00.000Z"),
+  );
+  const dataset = {
+    candles: [...friday, ...sundayOvernightOnly, ...monday],
+    latestCandleAt: new Date(monday.at(-1)!.timestamp).toISOString(),
+    fetchedAtMs: Date.parse("2026-07-13T19:06:00.000Z"),
+  };
+
+  const selected = selectLatestDefinedSessionDataset(dataset);
+  assert.ok(selected);
+  assert.equal(getObservedMarketDate(selected.candles[0]!.timestamp), "2026-07-13");
+  assert.equal(getObservedMarketDate(selected.candles.at(-1)!.timestamp), "2026-07-13");
+  assert.equal(selected.candles.some((item) => classifyMarketSession(item.timestamp) === null), false);
+});
+
+test("chart selection ignores overnight-only dates and falls back to the latest defined session date", () => {
+  const friday = range(
+    Date.parse("2026-07-10T11:00:00.000Z"),
+    Date.parse("2026-07-10T23:55:00.000Z"),
+  );
+  const sundayOvernightOnly = range(
+    Date.parse("2026-07-13T00:00:00.000Z"),
+    Date.parse("2026-07-13T03:55:00.000Z"),
+  );
+  const dataset = {
+    candles: [...friday, ...sundayOvernightOnly],
+    latestCandleAt: new Date(sundayOvernightOnly.at(-1)!.timestamp).toISOString(),
+    fetchedAtMs: Date.parse("2026-07-13T06:00:00.000Z"),
+  };
+
+  const selected = selectLatestDefinedSessionDataset(dataset);
+  assert.ok(selected);
+  assert.equal(getObservedMarketDate(selected.candles[0]!.timestamp), "2026-07-10");
+  assert.equal(getObservedMarketDate(selected.candles.at(-1)!.timestamp), "2026-07-10");
 });
 
 // --- TIMEZONE + SESSION BOUNDARIES ------------------------------------------
