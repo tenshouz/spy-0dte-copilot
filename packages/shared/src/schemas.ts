@@ -223,3 +223,61 @@ export const SpyQuoteSchema = z.object({
   warningCode: QuoteWarningCodeSchema.nullable(),
 });
 export type SpyQuote = z.infer<typeof SpyQuoteSchema>;
+
+/**
+ * Normalized SPY 5-minute candle — the backend-to-frontend candle contract.
+ * timestamp is UTC Unix epoch MILLISECONDS (the chart boundary converts to
+ * lightweight-charts seconds; the shared contract stays provider-neutral).
+ * OHLC relationship rules are enforced at the schema level so no malformed
+ * candle can cross the boundary in either direction.
+ */
+export const SpyCandleSchema = z
+  .object({
+    timestamp: z.number().int().positive().max(8_640_000_000_000_000),
+    open: z.number().finite().positive(),
+    high: z.number().finite().positive(),
+    low: z.number().finite().positive(),
+    close: z.number().finite().positive(),
+    volume: z.number().int().nonnegative(),
+  })
+  .superRefine((c, ctx) => {
+    if (c.high < c.low) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "high < low" });
+    if (c.high < c.open) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "high < open" });
+    if (c.high < c.close) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "high < close" });
+    if (c.low > c.open) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "low > open" });
+    if (c.low > c.close) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "low > close" });
+  });
+export type SpyCandle = z.infer<typeof SpyCandleSchema>;
+
+/** LIVE→STALE boundary for the candle dataset, measured from fetchedAt (not latestCandleAt). */
+export const CANDLE_FRESHNESS_THRESHOLD_MS = 90_000;
+
+/** Candle-specific warning codes — same vocabulary as quotes plus EMPTY_RESPONSE (kept as a separate enum so the quote UI's exhaustive maps are unaffected). */
+export const CandleWarningCodeSchema = z.enum([
+  "NOT_CONNECTED",
+  "AUTH_EXPIRED",
+  "RECONNECT_REQUIRED",
+  "FORBIDDEN",
+  "RATE_LIMITED",
+  "UPSTREAM_ERROR",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "VALIDATION_FAILED",
+  "DATABASE_ERROR",
+  "EMPTY_RESPONSE",
+]);
+export type CandleWarningCode = z.infer<typeof CandleWarningCodeSchema>;
+
+export const SpyCandleResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  timeframe: z.literal("5m"),
+  sourceState: QuoteSourceStateSchema, // same LIVE/STALE/MOCK vocabulary
+  candles: z.array(SpyCandleSchema),
+  fetchedAt: z.string().datetime(),
+  /** Timestamp of the newest candle in the dataset — legitimately old on weekends; never used for freshness. */
+  latestCandleAt: z.string().datetime().nullable(),
+  dataAgeMs: z.number().nonnegative(),
+  isExtendedHoursIncluded: z.boolean(),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type SpyCandleResponse = z.infer<typeof SpyCandleResponseSchema>;

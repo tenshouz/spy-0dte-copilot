@@ -13,6 +13,16 @@ import { useEffect, useRef } from "react";
 /** lightweight-charts brands its time values; our Candle.time is a plain unix-seconds number. */
 const asTime = (t: number) => t as unknown as Time;
 
+/** Market-time label (America/New_York) from unix seconds — built-in Intl only. */
+function formatEasternTime(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 interface ChartContainerProps {
   candles: Candle[];
   vwap?: number;
@@ -22,6 +32,8 @@ interface ChartContainerProps {
   previousClose?: number;
   previousHigh?: number;
   previousLow?: number;
+  /** Legacy mock-only derived extrema. Disable for LIVE/STALE provider candles. */
+  showDerivedSessionExtremes?: boolean;
   height?: number;
 }
 
@@ -38,6 +50,7 @@ export function ChartContainer({
   previousClose,
   previousHigh,
   previousLow,
+  showDerivedSessionExtremes = true,
   height = 360,
 }: ChartContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,7 +72,16 @@ export function ChartContainer({
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "rgba(255,255,255,0.08)" },
-      timeScale: { borderColor: "rgba(255,255,255,0.08)", timeVisible: true, secondsVisible: false },
+      timeScale: {
+        borderColor: "rgba(255,255,255,0.08)",
+        timeVisible: true,
+        secondsVisible: false,
+        // Market time, explicitly America/New_York — never the OS timezone.
+        tickMarkFormatter: (time: number) => formatEasternTime(time),
+      },
+      localization: {
+        timeFormatter: (time: number) => formatEasternTime(time),
+      },
     });
     chartRef.current = chart;
 
@@ -110,7 +132,7 @@ export function ChartContainer({
       });
     }
 
-    if (candles.length > 0) {
+    if (showDerivedSessionExtremes && candles.length > 0) {
       const sessionHigh = Math.max(...candles.map((c) => c.high));
       const sessionLow = Math.min(...candles.map((c) => c.low));
       candleSeries.createPriceLine({
@@ -172,7 +194,17 @@ export function ChartContainer({
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, vwap, openingRangeHigh, openingRangeLow, previousClose, previousHigh, previousLow, height]);
+  }, [
+    candles,
+    vwap,
+    openingRangeHigh,
+    openingRangeLow,
+    previousClose,
+    previousHigh,
+    previousLow,
+    showDerivedSessionExtremes,
+    height,
+  ]);
 
   return (
     <div className="relative w-full">

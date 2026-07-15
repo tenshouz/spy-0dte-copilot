@@ -4,6 +4,7 @@ import express from "express";
 import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
+import { candlesRouter } from "./routes/candles.routes";
 import { journalRouter } from "./routes/journal.routes";
 import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter } from "./routes/report.routes";
@@ -26,6 +27,7 @@ app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
 app.use("/api/quote", quoteRouter);
+app.use("/api/candles", candlesRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
 

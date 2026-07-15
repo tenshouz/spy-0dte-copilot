@@ -1,12 +1,21 @@
 "use client";
 
+import type { QuoteSourceState } from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
-import { useCandles, useMarketSnapshot } from "@/hooks/use-market-snapshot";
+import { Badge } from "@/components/ui/badge";
+import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
+import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
 import { formatPrice, formatVolume } from "@/lib/format";
+
+const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
+  LIVE: { variant: "bull", label: "SPY LIVE" },
+  STALE: { variant: "wait", label: "SPY STALE" },
+  MOCK: { variant: "bear", label: "SPY MOCK" },
+};
 
 interface StructureRow {
   label: string;
@@ -15,7 +24,8 @@ interface StructureRow {
 
 export default function MarketDataPage() {
   const { data: snapshot, isLoading, isError } = useMarketSnapshot();
-  const { data: candles, isLoading: candlesLoading, isError: candlesError } = useCandles();
+  const { display, isLoading: candlesLoading, isError: candlesError } = useDisplaySpyCandles();
+  const isMockCandles = display?.response.sourceState === "MOCK";
 
   const columns: DataTableColumn<StructureRow>[] = [
     { key: "label", header: "Level", render: (r) => r.label },
@@ -38,22 +48,41 @@ export default function MarketDataPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="Market Data"
-        description="Live price structure — Schwab connection lands in Milestone 2 (mock data shown)."
+        description="Candles are live from Schwab when connected (labeled on the chart); structure levels and analytics remain mock."
       />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-        <Panel title="Price Chart · 5m" isLoading={candlesLoading} isError={candlesError} noPadding className="lg:col-span-3">
-          {candles && (
-            <ChartContainer
-              candles={candles}
-              vwap={snapshot?.vwap}
-              openingRangeHigh={snapshot?.openingRangeHigh}
-              openingRangeLow={snapshot?.openingRangeLow}
-              previousClose={snapshot ? snapshot.spotPrice - 2.1 : undefined}
-              previousHigh={snapshot ? snapshot.spotPrice + 1.4 : undefined}
-              previousLow={snapshot ? snapshot.spotPrice - 4.8 : undefined}
-              height={420}
-            />
+        <Panel
+          title="Price Chart · 5m"
+          isLoading={candlesLoading}
+          isError={candlesError}
+          noPadding
+          className="lg:col-span-3"
+          action={
+            display && (
+              <Badge variant={SOURCE_BADGE[display.response.sourceState].variant}>
+                {SOURCE_BADGE[display.response.sourceState].label}
+              </Badge>
+            )
+          }
+        >
+          {display && (
+            <div>
+              <ChartContainer
+                candles={display.chartCandles}
+                vwap={isMockCandles ? snapshot?.vwap : undefined}
+                openingRangeHigh={isMockCandles ? snapshot?.openingRangeHigh : undefined}
+                openingRangeLow={isMockCandles ? snapshot?.openingRangeLow : undefined}
+                previousClose={isMockCandles && snapshot ? snapshot.spotPrice - 2.1 : undefined}
+                previousHigh={isMockCandles && snapshot ? snapshot.spotPrice + 1.4 : undefined}
+                previousLow={isMockCandles && snapshot ? snapshot.spotPrice - 4.8 : undefined}
+                showDerivedSessionExtremes={isMockCandles}
+                height={420}
+              />
+              {display.transportFailed && (
+                <p className="px-4 pb-3 text-xs text-wait">{CANDLE_TRANSPORT_WARNING}</p>
+              )}
+            </div>
           )}
         </Panel>
 
