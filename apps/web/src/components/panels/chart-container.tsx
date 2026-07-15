@@ -23,9 +23,17 @@ function formatEasternTime(unixSeconds: number): string {
   });
 }
 
+interface ChartVwapPoint {
+  time: number;
+  value: number;
+}
+
 interface ChartContainerProps {
   candles: Candle[];
+  /** Legacy scalar overlay retained only for explicitly mocked fallback data. */
   vwap?: number;
+  /** Cumulative per-candle RTH VWAP series; timestamps are unix seconds at this chart boundary. */
+  vwapSeries?: ChartVwapPoint[];
   openingRangeHigh?: number | null;
   openingRangeLow?: number | null;
   /** Mock reference levels — real values land once Schwab is connected. */
@@ -45,6 +53,7 @@ interface ChartContainerProps {
 export function ChartContainer({
   candles,
   vwap,
+  vwapSeries,
   openingRangeHigh,
   openingRangeLow,
   previousClose,
@@ -108,9 +117,12 @@ export function ChartContainer({
       })),
     );
 
-    if (vwap) {
-      const vwapSeries = chart.addLineSeries({ color: "#3B9EFF", lineWidth: 2 });
-      vwapSeries.setData(candles.map((c) => ({ time: asTime(c.time), value: vwap })));
+    if (vwapSeries && vwapSeries.length > 0) {
+      const line = chart.addLineSeries({ color: "#3B9EFF", lineWidth: 2 });
+      line.setData(vwapSeries.map((point) => ({ time: asTime(point.time), value: point.value })));
+    } else if (vwap !== undefined) {
+      const line = chart.addLineSeries({ color: "#3B9EFF", lineWidth: 2 });
+      line.setData(candles.map((c) => ({ time: asTime(c.time), value: vwap })));
     }
 
     if (openingRangeHigh) {
@@ -197,6 +209,7 @@ export function ChartContainer({
   }, [
     candles,
     vwap,
+    vwapSeries,
     openingRangeHigh,
     openingRangeLow,
     previousClose,

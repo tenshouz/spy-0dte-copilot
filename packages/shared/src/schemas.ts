@@ -345,3 +345,39 @@ export const SpySessionDataFoundationResponseSchema = z.object({
   warningCode: CandleWarningCodeSchema.nullable(),
 });
 export type SpySessionDataFoundationResponse = z.infer<typeof SpySessionDataFoundationResponseSchema>;
+
+/** Metric-level state for the first deterministic live session analytic. */
+export const VwapMetricStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type VwapMetricState = z.infer<typeof VwapMetricStateSchema>;
+
+export const VwapPointSchema = z.object({
+  /** UTC Unix epoch MILLISECONDS; convert to chart seconds only at the chart boundary. */
+  timestamp: z.number().int().positive().max(8_640_000_000_000_000),
+  value: z.number().finite().positive(),
+});
+export type VwapPoint = z.infer<typeof VwapPointSchema>;
+
+/**
+ * Narrow backend-to-frontend contract for the first deterministic session
+ * analytic: cumulative RTH VWAP using HLC3 and normalized SPY 5-minute volume.
+ * metricState is deliberately separate from candleSourceState so a healthy
+ * live candle feed can truthfully produce UNAVAILABLE before RTH begins.
+ */
+export const SpyRthVwapResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  metric: z.literal("RTH_VWAP"),
+  priceSource: z.literal("HLC3"),
+  marketDate: MarketDateSchema.nullable(),
+  metricState: VwapMetricStateSchema,
+  candleSourceState: QuoteSourceStateSchema,
+  latestVwap: z.number().finite().positive().nullable(),
+  series: z.array(VwapPointSchema),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  /** Newest RTH candle actually included in the calculation, never an after-hours timestamp. */
+  latestRthCandleAt: z.string().datetime().nullable(),
+  rthCandleCount: z.number().int().nonnegative(),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type SpyRthVwapResponse = z.infer<typeof SpyRthVwapResponseSchema>;
+

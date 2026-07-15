@@ -237,15 +237,38 @@ export function buildSessionDataRequestWindow(nowMs: number): { startDateMs: num
   return { startDateMs: nowMs - SESSION_DATA_LOOKBACK_MS, endDateMs: nowMs };
 }
 
+export function selectLatestDefinedMarketDate(
+  candles: readonly SpyCandle[],
+): string | null {
+  const eligible = candles.filter((candle) => classifyMarketSession(candle.timestamp) !== null);
+  if (eligible.length === 0) return null;
+  return getObservedMarketDate(eligible.at(-1)!.timestamp);
+}
+
+export function selectMarketSessionCandles(
+  candles: readonly SpyCandle[],
+  marketDate: string,
+  session: MarketSessionName,
+): SpyCandle[] {
+  return candles.filter(
+    (candle) =>
+      getObservedMarketDate(candle.timestamp) === marketDate &&
+      classifyMarketSession(candle.timestamp) === session,
+  );
+}
+
 export function selectLatestDefinedSessionDataset(
   dataset: CachedCandleDataset,
 ): CachedCandleDataset | null {
-  const eligible = dataset.candles.filter((candle) => classifyMarketSession(candle.timestamp) !== null);
-  if (eligible.length === 0) return null;
+  const latestMarketDate = selectLatestDefinedMarketDate(dataset.candles);
+  if (latestMarketDate === null) return null;
 
-  const latestMarketDate = getObservedMarketDate(eligible.at(-1)!.timestamp);
-  const candles = eligible.filter(
-    (candle) => getObservedMarketDate(candle.timestamp) === latestMarketDate,
+  // Keep every defined session for the selected date so the existing chart
+  // can display Premarket + RTH + After-Hours while excluding overnight data.
+  const candles = dataset.candles.filter(
+    (candle) =>
+      getObservedMarketDate(candle.timestamp) === latestMarketDate &&
+      classifyMarketSession(candle.timestamp) !== null,
   );
   const newest = candles.at(-1) ?? null;
 

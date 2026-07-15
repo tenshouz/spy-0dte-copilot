@@ -2,11 +2,13 @@
 
 import { Panel } from "@/components/panels/panel";
 import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
+import { useDisplaySpyRthVwap } from "@/hooks/use-spy-rth-vwap";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function MarketRegimeCard() {
   const { data: snapshot, isLoading, isError } = useMarketSnapshot();
+  const { display: vwapDisplay } = useDisplaySpyRthVwap();
 
   const regime =
     snapshot &&
@@ -16,7 +18,11 @@ export function MarketRegimeCard() {
         ? "Trending Down"
         : "Range-Bound");
 
-  const aboveVwap = snapshot ? snapshot.spotPrice >= snapshot.vwap : undefined;
+  const vwapText = !vwapDisplay
+    ? "Loading"
+    : vwapDisplay.response.latestVwap === null
+      ? "Unavailable"
+      : `$${formatPrice(vwapDisplay.response.latestVwap)} · ${vwapDisplay.response.metricState}`;
 
   return (
     <Panel title="Market Regime" isLoading={isLoading} isError={isError} className="lg:col-span-1">
@@ -33,10 +39,8 @@ export function MarketRegimeCard() {
             {regime}
           </span>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-            <span className="text-muted-foreground">vs VWAP</span>
-            <span className={cn("text-right font-mono", aboveVwap ? "text-bull" : "text-bear")}>
-              {aboveVwap ? "Above" : "Below"} ${formatPrice(snapshot.vwap)}
-            </span>
+            <span className="text-muted-foreground">RTH VWAP</span>
+            <span className="text-right font-mono">{vwapText}</span>
             <span className="text-muted-foreground">5m Trend</span>
             <span className="text-right font-mono">{snapshot.trend5m}</span>
             <span className="text-muted-foreground">EMA Trend</span>

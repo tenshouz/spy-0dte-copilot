@@ -1,12 +1,12 @@
 "use client";
 
-import type { QuoteSourceState } from "@spy-copilot/shared";
+import type { QuoteSourceState, VwapMetricState } from "@spy-copilot/shared";
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
 import { useDisplaySpyQuote } from "@/hooks/use-spy-quote";
+import { useDisplaySpyRthVwap } from "@/hooks/use-spy-rth-vwap";
 import { formatPrice } from "@/lib/format";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -17,13 +17,18 @@ const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"
   MOCK: { variant: "bear", label: "SPY MOCK" },
 };
 
+const VWAP_LABEL: Record<VwapMetricState, string> = {
+  LIVE: "VWAP LIVE",
+  STALE: "VWAP STALE",
+  MOCK: "VWAP MOCK",
+  UNAVAILABLE: "VWAP UNAVAILABLE",
+};
+
 export function Header() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  // Same shared display logic as the Current Price card — one query key,
-  // identical price and identical effective source state in both places.
   const { display } = useDisplaySpyQuote();
+  const { display: vwapDisplay } = useDisplaySpyRthVwap();
   const quote = display?.quote;
-  const { data: snapshot } = useMarketSnapshot();
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -45,18 +50,19 @@ export function Header() {
         {quote && (
           <div className="hidden items-center gap-2 sm:flex">
             <span className="font-mono text-sm font-semibold tabular">SPY</span>
-            {/* Neutral color — no bull/bear coloring derived from mock VWAP or any
-                other mock analytic. Live price + mock values must not be combined
-                into any signal for this milestone. */}
             <span className="font-mono text-sm font-semibold tabular text-foreground">
               ${formatPrice(quote.lastPrice)}
             </span>
             <Badge variant={SOURCE_BADGE[quote.sourceState].variant}>
               {SOURCE_BADGE[quote.sourceState].label}
             </Badge>
-            {snapshot && (
+            {vwapDisplay && (
               <span className="hidden text-xs text-muted-foreground lg:inline">
-                Mock VWAP ${formatPrice(snapshot.vwap)}
+                {VWAP_LABEL[vwapDisplay.response.metricState]}
+                {vwapDisplay.response.latestVwap !== null
+                  ? ` $${formatPrice(vwapDisplay.response.latestVwap)}`
+                  : ""}
+                {vwapDisplay.response.marketDate ? ` · ${vwapDisplay.response.marketDate}` : ""}
               </span>
             )}
           </div>
@@ -64,9 +70,8 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Everything except the SPY quote is still mock — keep that unmistakable. */}
         <Badge variant="wait" className="hidden sm:inline-flex">
-          Analytics: Mock
+          Other Analytics: Mock
         </Badge>
         <span className="font-mono text-xs tabular text-muted-foreground" suppressHydrationWarning>
           {now
