@@ -25,8 +25,21 @@ interface CachedFoundationDataset {
   requestedEndAtMs: number;
 }
 
+/**
+ * Shared internal result for consumers that need the actual bounded normalized
+ * SPY candle dataset. Session Data Foundation and Session Levels both use this
+ * accessor, so one cache and one in-flight request own the identical upstream
+ * Schwab request.
+ */
+export interface SpyBoundedCandleAccessResult {
+  dataset: CachedCandleDataset | null;
+  requestedStartAtMs: number;
+  requestedEndAtMs: number;
+  warningCode: CandleWarningCode | null;
+}
+
 let cachedFoundation: CachedFoundationDataset | null = null;
-let inFlight: Promise<SpySessionDataFoundationResponse> | null = null;
+let boundedInFlight: Promise<SpyBoundedCandleAccessResult> | null = null;
 let backoffUntilMs = 0;
 
 function clearFoundationCache(): void {
@@ -38,99 +51,99 @@ function logSessionDataIssue(category: string): void {
   console.warn(`[session-data] ${category}`);
 }
 
-function buildUnavailableResponse(warningCode: CandleWarningCode): SpySessionDataFoundationResponse {
+function buildUnavailableAccess(warningCode: CandleWarningCode): SpyBoundedCandleAccessResult {
   const nowMs = Date.now();
   const window = buildSessionDataRequestWindow(nowMs);
-  return toUnavailableSessionDataFoundationResponse(
-    window.startDateMs,
-    window.endDateMs,
-    nowMs,
+  return {
+    dataset: null,
+    requestedStartAtMs: window.startDateMs,
+    requestedEndAtMs: window.endDateMs,
     warningCode,
-  );
+  };
 }
 
-function getSafeFoundationFallback(warningCode: CandleWarningCode): SpySessionDataFoundationResponse {
+function getSafeFoundationAccessFallback(
+  warningCode: CandleWarningCode,
+): SpyBoundedCandleAccessResult {
   if (cachedFoundation) {
-    return toSpySessionDataFoundationResponse(
-      cachedFoundation.dataset,
-      cachedFoundation.requestedStartAtMs,
-      cachedFoundation.requestedEndAtMs,
-      Date.now(),
+    return {
+      dataset: cachedFoundation.dataset,
+      requestedStartAtMs: cachedFoundation.requestedStartAtMs,
+      requestedEndAtMs: cachedFoundation.requestedEndAtMs,
       warningCode,
-    );
+    };
   }
-  return buildUnavailableResponse(warningCode);
+  return buildUnavailableAccess(warningCode);
 }
 
-async function invalidateAndUnavailable(
+async function invalidateAndUnavailableAccess(
   successCode: CandleWarningCode,
-): Promise<SpySessionDataFoundationResponse> {
+): Promise<SpyBoundedCandleAccessResult> {
   clearFoundationCache();
   const invalidated = await deleteStoredTokens();
-  if (invalidated) return buildUnavailableResponse(successCode);
+  if (invalidated) return buildUnavailableAccess(successCode);
   logSessionDataIssue("token invalidation failed — stored record may remain");
-  return buildUnavailableResponse("DATABASE_ERROR");
+  return buildUnavailableAccess("DATABASE_ERROR");
 }
 
-async function handleAuthError(err: SchwabAuthError): Promise<SpySessionDataFoundationResponse> {
+async function handleAuthError(err: SchwabAuthError): Promise<SpyBoundedCandleAccessResult> {
   switch (err.category) {
     case "NOT_CONNECTED":
       clearFoundationCache();
       logSessionDataIssue("auth: not connected");
-      return buildUnavailableResponse("NOT_CONNECTED");
+      return buildUnavailableAccess("NOT_CONNECTED");
     case "CONFIG_MISSING_OR_INVALID":
       logSessionDataIssue("auth: configuration missing or invalid");
-      return buildUnavailableResponse("NOT_CONNECTED");
+      return buildUnavailableAccess("NOT_CONNECTED");
     case "DATABASE_ERROR":
       logSessionDataIssue("auth: database error");
-      return buildUnavailableResponse("DATABASE_ERROR");
+      return buildUnavailableAccess("DATABASE_ERROR");
     case "DECRYPTION_ERROR":
       logSessionDataIssue("auth: token decryption failed — invalidating stored tokens");
-      return invalidateAndUnavailable("RECONNECT_REQUIRED");
+      return invalidateAndUnavailableAccess("RECONNECT_REQUIRED");
     case "REFRESH_REJECTED":
       logSessionDataIssue("auth: refresh definitively rejected — invalidating stored tokens");
-      return invalidateAndUnavailable("RECONNECT_REQUIRED");
+      return invalidateAndUnavailableAccess("RECONNECT_REQUIRED");
     case "REFRESH_TIMEOUT":
       logSessionDataIssue("auth: refresh timeout (temporary)");
-      return getSafeFoundationFallback("TIMEOUT");
+      return getSafeFoundationAccessFallback("TIMEOUT");
     case "REFRESH_NETWORK_ERROR":
       logSessionDataIssue("auth: refresh network error (temporary)");
-      return getSafeFoundationFallback("NETWORK_ERROR");
+      return getSafeFoundationAccessFallback("NETWORK_ERROR");
     case "REFRESH_UPSTREAM_ERROR":
       logSessionDataIssue("auth: token endpoint upstream error (temporary)");
-      return getSafeFoundationFallback("UPSTREAM_ERROR");
+      return getSafeFoundationAccessFallback("UPSTREAM_ERROR");
     case "AUTH_UNEXPECTED":
     default:
       logSessionDataIssue("auth: unexpected sanitized failure — returning unavailable (auth unproven)");
-      return buildUnavailableResponse("UPSTREAM_ERROR");
+      return buildUnavailableAccess("UPSTREAM_ERROR");
   }
 }
 
-async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
+async function runBoundedCandleFlow(): Promise<SpyBoundedCandleAccessResult> {
   let accessToken: string;
   try {
     accessToken = await getValidAccessToken();
   } catch (err) {
     if (err instanceof SchwabAuthError) return handleAuthError(err);
     logSessionDataIssue("auth: unclassified failure — returning unavailable (auth unproven)");
-    return buildUnavailableResponse("UPSTREAM_ERROR");
+    return buildUnavailableAccess("UPSTREAM_ERROR");
   }
 
   if (Date.now() < backoffUntilMs) {
-    return getSafeFoundationFallback("RATE_LIMITED");
+    return getSafeFoundationAccessFallback("RATE_LIMITED");
   }
 
   if (
     cachedFoundation &&
     Date.now() - cachedFoundation.dataset.fetchedAtMs <= SESSION_DATA_SHORT_CACHE_MS
   ) {
-    return toSpySessionDataFoundationResponse(
-      cachedFoundation.dataset,
-      cachedFoundation.requestedStartAtMs,
-      cachedFoundation.requestedEndAtMs,
-      Date.now(),
-      null,
-    );
+    return {
+      dataset: cachedFoundation.dataset,
+      requestedStartAtMs: cachedFoundation.requestedStartAtMs,
+      requestedEndAtMs: cachedFoundation.requestedEndAtMs,
+      warningCode: null,
+    };
   }
 
   const requestedAtMs = Date.now();
@@ -147,7 +160,7 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
   } catch (err) {
     const isTimeout = (err as Error).name === "AbortError";
     logSessionDataIssue(isTimeout ? "bounded request timeout" : "bounded request network error");
-    return getSafeFoundationFallback(isTimeout ? "TIMEOUT" : "NETWORK_ERROR");
+    return getSafeFoundationAccessFallback(isTimeout ? "TIMEOUT" : "NETWORK_ERROR");
   }
 
   if (res.status === 401) {
@@ -156,7 +169,7 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
     } catch (err) {
       if (err instanceof SchwabAuthError) return handleAuthError(err);
       logSessionDataIssue("auth: unclassified refresh failure (temporary)");
-      return getSafeFoundationFallback("UPSTREAM_ERROR");
+      return getSafeFoundationAccessFallback("UPSTREAM_ERROR");
     }
 
     let retryToken: string;
@@ -164,7 +177,7 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
       retryToken = await getValidAccessToken();
     } catch (err) {
       if (err instanceof SchwabAuthError) return handleAuthError(err);
-      return getSafeFoundationFallback("UPSTREAM_ERROR");
+      return getSafeFoundationAccessFallback("UPSTREAM_ERROR");
     }
 
     try {
@@ -172,30 +185,30 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
     } catch (err) {
       const isTimeout = (err as Error).name === "AbortError";
       logSessionDataIssue(isTimeout ? "retry request timeout (temporary)" : "retry network error (temporary)");
-      return getSafeFoundationFallback(isTimeout ? "TIMEOUT" : "NETWORK_ERROR");
+      return getSafeFoundationAccessFallback(isTimeout ? "TIMEOUT" : "NETWORK_ERROR");
     }
 
     if (res.status === 401) {
       logSessionDataIssue("still 401 after refresh — invalidating stored tokens");
-      return invalidateAndUnavailable("AUTH_EXPIRED");
+      return invalidateAndUnavailableAccess("AUTH_EXPIRED");
     }
   }
 
   if (res.status === 403) {
     logSessionDataIssue("403 forbidden from bounded price-history endpoint");
-    return getSafeFoundationFallback("FORBIDDEN");
+    return getSafeFoundationAccessFallback("FORBIDDEN");
   }
 
   if (res.status === 429) {
     const nowMs = Date.now();
     backoffUntilMs = nowMs + parseRetryAfterMs(res.headers.get("retry-after"), nowMs);
     logSessionDataIssue("429 rate limited — backing off");
-    return getSafeFoundationFallback("RATE_LIMITED");
+    return getSafeFoundationAccessFallback("RATE_LIMITED");
   }
 
   if (!res.ok) {
     logSessionDataIssue(`upstream error HTTP ${res.status}`);
-    return getSafeFoundationFallback("UPSTREAM_ERROR");
+    return getSafeFoundationAccessFallback("UPSTREAM_ERROR");
   }
 
   let json: unknown;
@@ -203,14 +216,14 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
     json = await res.json();
   } catch {
     logSessionDataIssue("non-JSON bounded price-history response");
-    return getSafeFoundationFallback("VALIDATION_FAILED");
+    return getSafeFoundationAccessFallback("VALIDATION_FAILED");
   }
 
   try {
     const normalized = normalizeRawSpyCandles(json, Date.now());
     if (normalized === null) {
       logSessionDataIssue("validated but empty bounded price-history response");
-      return getSafeFoundationFallback("EMPTY_RESPONSE");
+      return getSafeFoundationAccessFallback("EMPTY_RESPONSE");
     }
 
     cachedFoundation = {
@@ -219,33 +232,63 @@ async function runSessionDataFlow(): Promise<SpySessionDataFoundationResponse> {
       requestedEndAtMs: requestWindow.endDateMs,
     };
 
-    return toSpySessionDataFoundationResponse(
-      normalized,
-      requestWindow.startDateMs,
-      requestWindow.endDateMs,
-      Date.now(),
-      null,
-    );
+    return {
+      dataset: normalized,
+      requestedStartAtMs: requestWindow.startDateMs,
+      requestedEndAtMs: requestWindow.endDateMs,
+      warningCode: null,
+    };
   } catch (err) {
     if (err instanceof z.ZodError) logSessionDataIssue("bounded candle validation failed");
     else logSessionDataIssue("bounded candle normalization failed");
-    return getSafeFoundationFallback("VALIDATION_FAILED");
+    return getSafeFoundationAccessFallback("VALIDATION_FAILED");
   }
 }
 
+/**
+ * Shared bounded normalized SPY candle accessor. This is intentionally backend-
+ * internal domain data, not an HTTP response contract.
+ */
+export async function getSpyBoundedCandleAccess(): Promise<SpyBoundedCandleAccessResult> {
+  if (boundedInFlight) return boundedInFlight;
+  boundedInFlight = runBoundedCandleFlow()
+    .catch(() => {
+      logSessionDataIssue("unexpected service failure — returning unavailable (auth unproven)");
+      return buildUnavailableAccess("UPSTREAM_ERROR");
+    })
+    .finally(() => {
+      boundedInFlight = null;
+    });
+  return boundedInFlight;
+}
+
 export function getLastResortSessionDataFoundation(): SpySessionDataFoundationResponse {
-  return buildUnavailableResponse("UPSTREAM_ERROR");
+  const nowMs = Date.now();
+  const window = buildSessionDataRequestWindow(nowMs);
+  return toUnavailableSessionDataFoundationResponse(
+    window.startDateMs,
+    window.endDateMs,
+    nowMs,
+    "UPSTREAM_ERROR",
+  );
 }
 
 export async function getSpySessionDataFoundation(): Promise<SpySessionDataFoundationResponse> {
-  if (inFlight) return inFlight;
-  inFlight = runSessionDataFlow()
-    .catch(() => {
-      logSessionDataIssue("unexpected service failure — returning unavailable (auth unproven)");
-      return buildUnavailableResponse("UPSTREAM_ERROR");
-    })
-    .finally(() => {
-      inFlight = null;
-    });
-  return inFlight;
+  const access = await getSpyBoundedCandleAccess();
+  const nowMs = Date.now();
+  if (access.dataset) {
+    return toSpySessionDataFoundationResponse(
+      access.dataset,
+      access.requestedStartAtMs,
+      access.requestedEndAtMs,
+      nowMs,
+      access.warningCode,
+    );
+  }
+  return toUnavailableSessionDataFoundationResponse(
+    access.requestedStartAtMs,
+    access.requestedEndAtMs,
+    nowMs,
+    access.warningCode ?? "UPSTREAM_ERROR",
+  );
 }

@@ -1,18 +1,26 @@
 "use client";
 
-import type { QuoteSourceState, VwapMetricState } from "@spy-copilot/shared";
+import type {
+  QuoteSourceState,
+  SessionLevelValue,
+  VwapMetricState,
+} from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
-import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import {
+  SESSION_LEVELS_TRANSPORT_WARNING,
+  useDisplaySpySessionLevels,
+} from "@/hooks/use-spy-session-levels";
 import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
 import { formatPrice, formatVolume } from "@/lib/format";
 
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
@@ -33,10 +41,25 @@ interface StructureRow {
   value: string;
 }
 
+function formatSessionLevel(level: SessionLevelValue): string {
+  return level.value === null ? "Unavailable" : `$${formatPrice(level.value)}`;
+}
+
+function renderableLevel(level: SessionLevelValue): number | undefined {
+  return (level.state === "LIVE" || level.state === "STALE") && level.value !== null
+    ? level.value
+    : undefined;
+}
+
 export default function MarketDataPage() {
   const { data: snapshot, isLoading, isError } = useMarketSnapshot();
   const { display, isLoading: candlesLoading, isError: candlesError } = useDisplaySpyCandles();
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
+  const {
+    display: levelsDisplay,
+    isLoading: levelsLoading,
+    isError: levelsError,
+  } = useDisplaySpySessionLevels();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
   const vwapSeries =
@@ -49,18 +72,48 @@ export default function MarketDataPage() {
       ? vwapDisplay.chartSeries
       : undefined;
 
+  const canRenderRealLevels =
+    Boolean(display && levelsDisplay) &&
+    !isMockCandles &&
+    levelsDisplay!.response.candleSourceState !== "MOCK" &&
+    levelsDisplay!.response.currentMarketDateHasDefinedSessionData;
+  const levels = canRenderRealLevels ? levelsDisplay!.response : null;
+
   const columns: DataTableColumn<StructureRow>[] = [
     { key: "label", header: "Level", render: (r) => r.label },
     { key: "value", header: "Price", align: "right", render: (r) => r.value },
   ];
 
   const rows: StructureRow[] = [];
+  if (levelsDisplay) {
+    const response = levelsDisplay.response;
+    rows.push(
+      {
+        label: `Premarket High · ${response.premarketHigh.state}`,
+        value: formatSessionLevel(response.premarketHigh),
+      },
+      {
+        label: `Premarket Low · ${response.premarketLow.state}`,
+        value: formatSessionLevel(response.premarketLow),
+      },
+      {
+        label: `Previous-Day High · ${response.previousDayHigh.state}`,
+        value: formatSessionLevel(response.previousDayHigh),
+      },
+      {
+        label: `Previous-Day Low · ${response.previousDayLow.state}`,
+        value: formatSessionLevel(response.previousDayLow),
+      },
+      {
+        label: `Previous-Day Close · ${response.previousDayClose.state}`,
+        value: formatSessionLevel(response.previousDayClose),
+      },
+    );
+  }
   if (snapshot) {
     rows.push(
       { label: "Overnight High · MOCK", value: `$${formatPrice(snapshot.overnightHigh ?? 0)}` },
       { label: "Overnight Low · MOCK", value: `$${formatPrice(snapshot.overnightLow ?? 0)}` },
-      { label: "Premarket High · MOCK", value: `$${formatPrice(snapshot.premarketHigh ?? 0)}` },
-      { label: "Premarket Low · MOCK", value: `$${formatPrice(snapshot.premarketLow ?? 0)}` },
       { label: "Opening Range High · MOCK", value: `$${formatPrice(snapshot.openingRangeHigh ?? 0)}` },
       { label: "Opening Range Low · MOCK", value: `$${formatPrice(snapshot.openingRangeLow ?? 0)}` },
     );
@@ -77,7 +130,7 @@ export default function MarketDataPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="Market Data"
-        description="SPY candles and RTH VWAP are live from Schwab when available; remaining structure levels and advanced analytics are still mock."
+        description="SPY candles, RTH VWAP, and core session levels are live from Schwab when available; remaining advanced analytics are still mock."
       />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
@@ -109,9 +162,29 @@ export default function MarketDataPage() {
                 vwapSeries={vwapSeries}
                 openingRangeHigh={isMockCandles ? snapshot?.openingRangeHigh : undefined}
                 openingRangeLow={isMockCandles ? snapshot?.openingRangeLow : undefined}
-                previousClose={isMockCandles && snapshot ? snapshot.spotPrice - 2.1 : undefined}
-                previousHigh={isMockCandles && snapshot ? snapshot.spotPrice + 1.4 : undefined}
-                previousLow={isMockCandles && snapshot ? snapshot.spotPrice - 4.8 : undefined}
+                premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
+                premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
+                previousClose={
+                  levels
+                    ? renderableLevel(levels.previousDayClose)
+                    : isMockCandles && snapshot
+                      ? snapshot.spotPrice - 2.1
+                      : undefined
+                }
+                previousHigh={
+                  levels
+                    ? renderableLevel(levels.previousDayHigh)
+                    : isMockCandles && snapshot
+                      ? snapshot.spotPrice + 1.4
+                      : undefined
+                }
+                previousLow={
+                  levels
+                    ? renderableLevel(levels.previousDayLow)
+                    : isMockCandles && snapshot
+                      ? snapshot.spotPrice - 4.8
+                      : undefined
+                }
                 showDerivedSessionExtremes={isMockCandles}
                 height={420}
               />
@@ -121,12 +194,27 @@ export default function MarketDataPage() {
               {vwapDisplay?.transportFailed && (
                 <p className="px-4 pb-3 text-xs text-wait">{RTH_VWAP_TRANSPORT_WARNING}</p>
               )}
+              {levelsDisplay?.transportFailed && (
+                <p className="px-4 pb-3 text-xs text-wait">{SESSION_LEVELS_TRANSPORT_WARNING}</p>
+              )}
             </div>
           )}
         </Panel>
 
-        <Panel title="Structure Levels" isLoading={isLoading} isError={isError}>
-          <DataTable columns={columns} rows={rows} rowKey={(r) => r.label} />
+        <Panel
+          title="Structure Levels"
+          isLoading={isLoading && levelsLoading}
+          isError={isError && levelsError}
+        >
+          <div className="space-y-2">
+            {levelsDisplay && (
+              <p className="text-xs text-muted-foreground">
+                Current date: {levelsDisplay.response.currentMarketDate} · Previous RTH:{" "}
+                {levelsDisplay.response.previousRthMarketDate ?? "Unavailable"}
+              </p>
+            )}
+            <DataTable columns={columns} rows={rows} rowKey={(r) => r.label} />
+          </div>
         </Panel>
 
         <Panel title="Trend & Volume" isLoading={isLoading} isError={isError} className="lg:col-span-2">

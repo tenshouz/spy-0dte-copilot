@@ -9,6 +9,7 @@ import { journalRouter } from "./routes/journal.routes";
 import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter } from "./routes/report.routes";
 import { sessionDataRouter } from "./routes/session-data.routes";
+import { sessionLevelsRouter } from "./routes/session-levels.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 import { vwapRouter } from "./routes/vwap.routes";
 
@@ -31,6 +32,7 @@ app.use("/api/journal", journalRouter);
 app.use("/api/quote", quoteRouter);
 app.use("/api/candles", candlesRouter);
 app.use("/api/session-data", sessionDataRouter);
+app.use("/api/session-levels", sessionLevelsRouter);
 app.use("/api/vwap", vwapRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
@@ -41,7 +43,9 @@ app.listen(PORT, () => {
   console.log(
     `[server] SPY quote endpoint (/api/quote/spy) uses Schwab when an authenticated connection is available; every quote is labeled LIVE, STALE, or MOCK.`,
   );
-  console.log(`[server] RTH VWAP is derived deterministically from the normalized SPY candle pipeline; remaining advanced analytics are still mock data.`);
+  console.log(
+    `[server] RTH VWAP and core session levels are derived deterministically from the normalized SPY candle pipeline; remaining advanced analytics are still mock data.`,
+  );
   if (!hasDatabaseUrl) {
     console.log(
       `[server] DATABASE_URL is not set — Schwab connection status will show "Database not configured". See README for local Postgres setup.`,

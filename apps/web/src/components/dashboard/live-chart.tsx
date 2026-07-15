@@ -1,10 +1,18 @@
 "use client";
 
-import type { QuoteSourceState, VwapMetricState } from "@spy-copilot/shared";
+import type {
+  QuoteSourceState,
+  SessionLevelValue,
+  VwapMetricState,
+} from "@spy-copilot/shared";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import {
+  SESSION_LEVELS_TRANSPORT_WARNING,
+  useDisplaySpySessionLevels,
+} from "@/hooks/use-spy-session-levels";
 import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
@@ -25,9 +33,16 @@ const VWAP_BADGE: Record<VwapMetricState, { variant: "bull" | "wait" | "bear"; l
   UNAVAILABLE: { variant: "wait", label: "VWAP UNAVAILABLE" },
 };
 
+function renderableLevel(level: SessionLevelValue): number | undefined {
+  return (level.state === "LIVE" || level.state === "STALE") && level.value !== null
+    ? level.value
+    : undefined;
+}
+
 export function LiveChart() {
   const { display, isLoading, isError } = useDisplaySpyCandles();
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
+  const { display: levelsDisplay } = useDisplaySpySessionLevels();
   const { data: snapshot } = useMarketSnapshot();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
@@ -43,6 +58,17 @@ export function LiveChart() {
           vwapDisplay.response.metricState === "STALE")))
       ? vwapDisplay.chartSeries
       : undefined;
+
+  // Core session levels target the current New York market date. Before that
+  // date has any defined-session candles, the chart may still be showing the
+  // prior completed day; do not draw today's previous-session references over
+  // the wrong chart date.
+  const canRenderRealLevels =
+    Boolean(display && levelsDisplay) &&
+    !isMockCandles &&
+    levelsDisplay!.response.candleSourceState !== "MOCK" &&
+    levelsDisplay!.response.currentMarketDateHasDefinedSessionData;
+  const levels = canRenderRealLevels ? levelsDisplay!.response : null;
 
   return (
     <Panel
@@ -73,9 +99,29 @@ export function LiveChart() {
             vwapSeries={vwapSeries}
             openingRangeHigh={isMockCandles ? snapshot?.openingRangeHigh : undefined}
             openingRangeLow={isMockCandles ? snapshot?.openingRangeLow : undefined}
-            previousClose={isMockCandles && snapshot ? snapshot.spotPrice - 2.1 : undefined}
-            previousHigh={isMockCandles && snapshot ? snapshot.spotPrice + 1.4 : undefined}
-            previousLow={isMockCandles && snapshot ? snapshot.spotPrice - 4.8 : undefined}
+            premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
+            premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
+            previousClose={
+              levels
+                ? renderableLevel(levels.previousDayClose)
+                : isMockCandles && snapshot
+                  ? snapshot.spotPrice - 2.1
+                  : undefined
+            }
+            previousHigh={
+              levels
+                ? renderableLevel(levels.previousDayHigh)
+                : isMockCandles && snapshot
+                  ? snapshot.spotPrice + 1.4
+                  : undefined
+            }
+            previousLow={
+              levels
+                ? renderableLevel(levels.previousDayLow)
+                : isMockCandles && snapshot
+                  ? snapshot.spotPrice - 4.8
+                  : undefined
+            }
             showDerivedSessionExtremes={isMockCandles}
           />
           {display.transportFailed && (
@@ -83,6 +129,9 @@ export function LiveChart() {
           )}
           {vwapDisplay?.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">{RTH_VWAP_TRANSPORT_WARNING}</p>
+          )}
+          {levelsDisplay?.transportFailed && (
+            <p className="px-4 pb-3 text-xs text-wait">{SESSION_LEVELS_TRANSPORT_WARNING}</p>
           )}
         </div>
       )}

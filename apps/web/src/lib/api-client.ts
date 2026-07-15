@@ -8,6 +8,7 @@ import {
   SpyCandleResponseSchema,
   SpyQuoteSchema,
   SpyRthVwapResponseSchema,
+  SpySessionLevelsResponseSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
@@ -18,6 +19,7 @@ import {
   type SpyCandleResponse,
   type SpyQuote,
   type SpyRthVwapResponse,
+  type SpySessionLevelsResponse,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -57,6 +59,8 @@ export const apiClient = {
   getSpyCandles: (): Promise<SpyCandleResponse> => getJson("/api/candles/spy", SpyCandleResponseSchema),
   getSpyRthVwap: (): Promise<SpyRthVwapResponse> =>
     getJson("/api/vwap/spy", SpyRthVwapResponseSchema),
+  getSpySessionLevels: (): Promise<SpySessionLevelsResponse> =>
+    getJson("/api/session-levels/spy", SpySessionLevelsResponseSchema),
 };
 
 export const schwabLoginUrl = `${API_BASE_URL}/api/auth/schwab/login`;

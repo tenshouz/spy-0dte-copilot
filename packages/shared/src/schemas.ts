@@ -381,3 +381,54 @@ export const SpyRthVwapResponseSchema = z.object({
 });
 export type SpyRthVwapResponse = z.infer<typeof SpyRthVwapResponseSchema>;
 
+/** Per-level availability/provenance for deterministic core session levels. */
+export const SessionLevelStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type SessionLevelState = z.infer<typeof SessionLevelStateSchema>;
+
+export const SessionLevelValueSchema = z
+  .object({
+    value: z.number().finite().positive().nullable(),
+    state: SessionLevelStateSchema,
+  })
+  .superRefine((level, ctx) => {
+    if (level.state === "UNAVAILABLE" && level.value !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "UNAVAILABLE session level must have a null value",
+      });
+    }
+    if (level.state !== "UNAVAILABLE" && level.value === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available session level must have a numeric value",
+      });
+    }
+  });
+export type SessionLevelValue = z.infer<typeof SessionLevelValueSchema>;
+
+/**
+ * Narrow backend-to-frontend contract for the five deterministic core session
+ * levels. currentMarketDate is the current America/New_York calendar date at
+ * evaluation time; previousRthMarketDate is the immediately preceding date
+ * with RTH evidence, before coverage eligibility is applied.
+ */
+export const SpySessionLevelsResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  currentMarketDate: MarketDateSchema,
+  /** True only when the current target date itself has at least one defined-session candle. */
+  currentMarketDateHasDefinedSessionData: z.boolean(),
+  previousRthMarketDate: MarketDateSchema.nullable(),
+  candleSourceState: QuoteSourceStateSchema,
+  premarketCoverageState: CoverageStateSchema,
+  previousRthCoverageState: CoverageStateSchema,
+  premarketHigh: SessionLevelValueSchema,
+  premarketLow: SessionLevelValueSchema,
+  previousDayHigh: SessionLevelValueSchema,
+  previousDayLow: SessionLevelValueSchema,
+  previousDayClose: SessionLevelValueSchema,
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  latestCandleAt: z.string().datetime().nullable(),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type SpySessionLevelsResponse = z.infer<typeof SpySessionLevelsResponseSchema>;

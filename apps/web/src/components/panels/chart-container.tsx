@@ -36,7 +36,9 @@ interface ChartContainerProps {
   vwapSeries?: ChartVwapPoint[];
   openingRangeHigh?: number | null;
   openingRangeLow?: number | null;
-  /** Mock reference levels — real values land once Schwab is connected. */
+  premarketHigh?: number;
+  premarketLow?: number;
+  /** Previous-session reference levels. */
   previousClose?: number;
   previousHigh?: number;
   previousLow?: number;
@@ -56,6 +58,8 @@ export function ChartContainer({
   vwapSeries,
   openingRangeHigh,
   openingRangeLow,
+  premarketHigh,
+  premarketLow,
   previousClose,
   previousHigh,
   previousLow,
@@ -144,6 +148,25 @@ export function ChartContainer({
       });
     }
 
+    if (premarketHigh !== undefined) {
+      candleSeries.createPriceLine({
+        price: premarketHigh,
+        color: "#A78BFA",
+        lineWidth: 1,
+        lineStyle: 2,
+        title: "PM High",
+      });
+    }
+    if (premarketLow !== undefined) {
+      candleSeries.createPriceLine({
+        price: premarketLow,
+        color: "#A78BFA",
+        lineWidth: 1,
+        lineStyle: 2,
+        title: "PM Low",
+      });
+    }
+
     if (showDerivedSessionExtremes && candles.length > 0) {
       const sessionHigh = Math.max(...candles.map((c) => c.high));
       const sessionLow = Math.min(...candles.map((c) => c.low));
@@ -212,6 +235,8 @@ export function ChartContainer({
     vwapSeries,
     openingRangeHigh,
     openingRangeLow,
+    premarketHigh,
+    premarketLow,
     previousClose,
     previousHigh,
     previousLow,

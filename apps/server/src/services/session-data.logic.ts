@@ -257,6 +257,29 @@ export function selectMarketSessionCandles(
   );
 }
 
+export function analyzeMarketSessionCoverage(
+  candles: readonly SpyCandle[],
+  marketDate: string,
+  session: MarketSessionName,
+  nowMs: number,
+): SessionWindowCoverage {
+  const window = SESSION_WINDOWS.find((candidate) => candidate.name === session);
+  if (!window) throw new Error(`Unknown market session: ${session}`);
+  return analyzeSessionWindow(marketDate, candles, window, nowMs);
+}
+
+export function selectPreviousRthMarketDate(
+  candles: readonly SpyCandle[],
+  beforeMarketDate: string,
+): string | null {
+  const priorRthCandles = candles.filter((candle) => {
+    const marketDate = getObservedMarketDate(candle.timestamp);
+    return marketDate < beforeMarketDate && classifyMarketSession(candle.timestamp) === "RTH";
+  });
+  if (priorRthCandles.length === 0) return null;
+  return getObservedMarketDate(priorRthCandles.at(-1)!.timestamp);
+}
+
 export function selectLatestDefinedSessionDataset(
   dataset: CachedCandleDataset,
 ): CachedCandleDataset | null {
