@@ -12,6 +12,7 @@ import {
   type CachedCandleDataset,
 } from "./schwab-candles.logic";
 import { parseRetryAfterMs } from "./schwab-market-data.logic";
+import { fetchSpyPriceHistory } from "./schwab-price-history.client";
 import {
   SchwabAuthError,
   deleteStoredTokens,
@@ -38,9 +39,6 @@ import {
  * accepted. Raw Zod validation fails closed: any mismatch produces a labeled
  * degraded state with a sanitized log — never mislabeled LIVE data.
  */
-
-const SCHWAB_PRICE_HISTORY_URL = "https://api.schwabapi.com/marketdata/v1/pricehistory";
-const CANDLE_REQUEST_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
 // Candle-specific service state — deliberately separate from quote state.
@@ -132,27 +130,6 @@ async function handleAuthError(err: SchwabAuthError): Promise<SpyCandleResponse>
   }
 }
 
-async function fetchFromSchwab(accessToken: string): Promise<Response> {
-  const params = new URLSearchParams({
-    symbol: "SPY",
-    periodType: "day",
-    period: "1",
-    frequencyType: "minute",
-    frequency: "5",
-    needExtendedHoursData: "true",
-  });
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CANDLE_REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(`${SCHWAB_PRICE_HISTORY_URL}?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function runCandleFlow(): Promise<SpyCandleResponse> {
   // STEP 1 — Authenticate FIRST (identical ordering guarantee to the quote
   // service). Unclassified errors here cannot prove authentication succeeded
@@ -180,7 +157,7 @@ async function runCandleFlow(): Promise<SpyCandleResponse> {
   // STEP 4 — Request Schwab.
   let res: Response;
   try {
-    res = await fetchFromSchwab(accessToken);
+    res = await fetchSpyPriceHistory(accessToken, { kind: "chart" });
   } catch (err) {
     const isTimeout = (err as Error).name === "AbortError";
     logCandleIssue(isTimeout ? "candle request timeout" : "candle network error");
@@ -206,7 +183,7 @@ async function runCandleFlow(): Promise<SpyCandleResponse> {
     }
 
     try {
-      res = await fetchFromSchwab(retryToken);
+      res = await fetchSpyPriceHistory(retryToken, { kind: "chart" });
     } catch (err) {
       // Transport failure DURING the retry is temporary, not definitive.
       const isTimeout = (err as Error).name === "AbortError";

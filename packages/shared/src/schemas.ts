@@ -281,3 +281,67 @@ export const SpyCandleResponseSchema = z.object({
   warningCode: CandleWarningCodeSchema.nullable(),
 });
 export type SpyCandleResponse = z.infer<typeof SpyCandleResponseSchema>;
+
+
+/** Session Data Foundation coverage is intentionally separate from source freshness. */
+export const CoverageStateSchema = z.enum(["COMPLETE", "PARTIAL", "UNAVAILABLE", "UNKNOWN"]);
+export type CoverageState = z.infer<typeof CoverageStateSchema>;
+
+export const GapDiagnosticSchema = z.object({
+  fromAt: z.string().datetime(),
+  toAt: z.string().datetime(),
+  gapMs: z.number().int().positive(),
+});
+export type GapDiagnostic = z.infer<typeof GapDiagnosticSchema>;
+
+export const SessionWindowCoverageSchema = z.object({
+  state: CoverageStateSchema,
+  firstCandleAt: z.string().datetime().nullable(),
+  lastCandleAt: z.string().datetime().nullable(),
+  candleCount: z.number().int().nonnegative(),
+  gapCount: z.number().int().nonnegative(),
+  largestGapMs: z.number().int().nonnegative(),
+  gaps: z.array(GapDiagnosticSchema).max(20),
+});
+export type SessionWindowCoverage = z.infer<typeof SessionWindowCoverageSchema>;
+
+const MarketDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const ObservedMarketDateCoverageSchema = z.object({
+  marketDate: MarketDateSchema,
+  firstCandleAt: z.string().datetime(),
+  lastCandleAt: z.string().datetime(),
+  candleCount: z.number().int().positive(),
+  gapCount: z.number().int().nonnegative(),
+  largestGapMs: z.number().int().nonnegative(),
+  premarket: SessionWindowCoverageSchema,
+  rth: SessionWindowCoverageSchema,
+  afterHours: SessionWindowCoverageSchema,
+});
+export type ObservedMarketDateCoverage = z.infer<typeof ObservedMarketDateCoverageSchema>;
+
+/**
+ * Diagnostic contract for the SPY Session Data Foundation milestone.
+ * It reports what was requested and what was observed; it deliberately exposes
+ * no VWAP, highs/lows, previous-day levels, gaps-as-prices, or trading signals.
+ */
+export const SpySessionDataFoundationResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  timeframe: z.literal("5m"),
+  sourceState: QuoteSourceStateSchema,
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  requestStrategy: z.literal("EXPLICIT_BOUNDED_WINDOW"),
+  requestedStartAt: z.string().datetime(),
+  requestedEndAt: z.string().datetime(),
+  firstCandleAt: z.string().datetime().nullable(),
+  lastCandleAt: z.string().datetime().nullable(),
+  candleCount: z.number().int().nonnegative(),
+  extendedHoursRequested: z.literal(true),
+  timestampSemantics: z.literal("PROVIDER_TIMESTAMP_UNVERIFIED"),
+  currentObservedMarketDate: MarketDateSchema.nullable(),
+  previousObservedMarketDate: MarketDateSchema.nullable(),
+  observedDates: z.array(ObservedMarketDateCoverageSchema),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type SpySessionDataFoundationResponse = z.infer<typeof SpySessionDataFoundationResponseSchema>;

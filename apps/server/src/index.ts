@@ -8,6 +8,7 @@ import { candlesRouter } from "./routes/candles.routes";
 import { journalRouter } from "./routes/journal.routes";
 import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter } from "./routes/report.routes";
+import { sessionDataRouter } from "./routes/session-data.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 
 const app = express();
@@ -28,6 +29,7 @@ app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
 app.use("/api/quote", quoteRouter);
 app.use("/api/candles", candlesRouter);
+app.use("/api/session-data", sessionDataRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
 
