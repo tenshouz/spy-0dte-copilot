@@ -32,3 +32,14 @@ export function formatTime(iso: string): string {
     hour12: false,
   });
 }
+
+/** Render backend UTC timestamps explicitly in America/New_York for market UI. */
+export function formatEasternTime(iso: string): string {
+  const time = new Date(iso).toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${time} ET`;
+}

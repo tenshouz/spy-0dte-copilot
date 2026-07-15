@@ -3,6 +3,7 @@
 import type {
   QuoteSourceState,
   SessionLevelValue,
+  SpyRthGapResponse,
   VwapMetricState,
 } from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
@@ -13,6 +14,10 @@ import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
 import {
+  RTH_GAP_TRANSPORT_WARNING,
+  useDisplaySpyRthGap,
+} from "@/hooks/use-spy-rth-gap";
+import {
   SESSION_LEVELS_TRANSPORT_WARNING,
   useDisplaySpySessionLevels,
 } from "@/hooks/use-spy-session-levels";
@@ -21,7 +26,7 @@ import {
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
 import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
-import { formatPrice, formatVolume } from "@/lib/format";
+import { formatEasternTime, formatPrice, formatSigned, formatVolume } from "@/lib/format";
 
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
   LIVE: { variant: "bull", label: "SPY LIVE" },
@@ -51,10 +56,27 @@ function renderableLevel(level: SessionLevelValue): number | undefined {
     : undefined;
 }
 
+function formatGapValue(gap: SpyRthGapResponse): string {
+  if (gap.gapPoints === null || gap.gapPercent === null) return "Unavailable";
+  return `${formatSigned(gap.gapPoints)} pts / ${formatSigned(gap.gapPercent)}% · ${gap.direction}`;
+}
+
+function formatGapFill(gap: SpyRthGapResponse): string {
+  if (gap.firstObservedFillCandleAt) {
+    return `${gap.fillState} · ${formatEasternTime(gap.firstObservedFillCandleAt)}`;
+  }
+  return gap.fillState.replace(/_/g, " ");
+}
+
 export default function MarketDataPage() {
   const { data: snapshot, isLoading, isError } = useMarketSnapshot();
   const { display, isLoading: candlesLoading, isError: candlesError } = useDisplaySpyCandles();
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
+  const {
+    display: gapDisplay,
+    isLoading: gapLoading,
+    isError: gapError,
+  } = useDisplaySpyRthGap();
   const {
     display: levelsDisplay,
     isLoading: levelsLoading,
@@ -81,7 +103,7 @@ export default function MarketDataPage() {
 
   const columns: DataTableColumn<StructureRow>[] = [
     { key: "label", header: "Level", render: (r) => r.label },
-    { key: "value", header: "Price", align: "right", render: (r) => r.value },
+    { key: "value", header: "Value", align: "right", render: (r) => r.value },
   ];
 
   const rows: StructureRow[] = [];
@@ -110,6 +132,17 @@ export default function MarketDataPage() {
       },
     );
   }
+  if (gapDisplay) {
+    const gap = gapDisplay.response;
+    rows.push(
+      {
+        label: `RTH Open · ${gap.metricState}`,
+        value: gap.currentRthOpen === null ? "Unavailable" : `$${formatPrice(gap.currentRthOpen)}`,
+      },
+      { label: `RTH Gap · ${gap.metricState}`, value: formatGapValue(gap) },
+      { label: `Gap Fill · ${gap.metricState}`, value: formatGapFill(gap) },
+    );
+  }
   if (snapshot) {
     rows.push(
       { label: "Overnight High · MOCK", value: `$${formatPrice(snapshot.overnightHigh ?? 0)}` },
@@ -130,7 +163,7 @@ export default function MarketDataPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="Market Data"
-        description="SPY candles, RTH VWAP, and core session levels are live from Schwab when available; remaining advanced analytics are still mock."
+        description="SPY candles, RTH VWAP, core session levels, and RTH gap metrics are live from Schwab when available; remaining advanced analytics are still mock."
       />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
@@ -203,8 +236,8 @@ export default function MarketDataPage() {
 
         <Panel
           title="Structure Levels"
-          isLoading={isLoading && levelsLoading}
-          isError={isError && levelsError}
+          isLoading={isLoading && levelsLoading && gapLoading}
+          isError={isError && levelsError && gapError}
         >
           <div className="space-y-2">
             {levelsDisplay && (
@@ -214,6 +247,9 @@ export default function MarketDataPage() {
               </p>
             )}
             <DataTable columns={columns} rows={rows} rowKey={(r) => r.label} />
+            {gapDisplay?.transportFailed && (
+              <p className="text-xs text-wait">{RTH_GAP_TRANSPORT_WARNING}</p>
+            )}
           </div>
         </Panel>
 

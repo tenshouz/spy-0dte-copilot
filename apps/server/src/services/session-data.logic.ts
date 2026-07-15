@@ -257,6 +257,32 @@ export function selectMarketSessionCandles(
   );
 }
 
+/**
+ * Select the canonical opening-boundary candle for an already-defined market
+ * session. A later candle is never substituted when the boundary candle is
+ * absent. This reuses the project's operational session timestamp model
+ * without making a broader provider start/end-timestamp claim.
+ */
+export function selectMarketSessionOpeningCandle(
+  candles: readonly SpyCandle[],
+  marketDate: string,
+  session: MarketSessionName,
+): SpyCandle | null {
+  const window = SESSION_WINDOWS.find((candidate) => candidate.name === session);
+  if (!window) throw new Error(`Unknown market session: ${session}`);
+
+  const selected = selectMarketSessionCandles(candles, marketDate, session)
+    .slice()
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const first = selected[0] ?? null;
+  if (!first) return null;
+
+  const parts = getNewYorkParts(first.timestamp);
+  return minuteOfDay(parts) === window.startMinute && parts.second === 0
+    ? first
+    : null;
+}
+
 export function analyzeMarketSessionCoverage(
   candles: readonly SpyCandle[],
   marketDate: string,

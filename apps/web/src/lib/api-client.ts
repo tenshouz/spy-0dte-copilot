@@ -7,6 +7,7 @@ import {
   SchwabConnectionStatusSchema,
   SpyCandleResponseSchema,
   SpyQuoteSchema,
+  SpyRthGapResponseSchema,
   SpyRthVwapResponseSchema,
   SpySessionLevelsResponseSchema,
   StrikeExposureSchema,
@@ -18,6 +19,7 @@ import {
   type SchwabConnectionStatus,
   type SpyCandleResponse,
   type SpyQuote,
+  type SpyRthGapResponse,
   type SpyRthVwapResponse,
   type SpySessionLevelsResponse,
   type StrikeExposure,
@@ -57,6 +59,8 @@ export const apiClient = {
     getJson("/api/auth/schwab/status", SchwabConnectionStatusSchema),
   getSpyQuote: (): Promise<SpyQuote> => getJson("/api/quote/spy", SpyQuoteSchema),
   getSpyCandles: (): Promise<SpyCandleResponse> => getJson("/api/candles/spy", SpyCandleResponseSchema),
+  getSpyRthGap: (): Promise<SpyRthGapResponse> =>
+    getJson("/api/gap/spy", SpyRthGapResponseSchema),
   getSpyRthVwap: (): Promise<SpyRthVwapResponse> =>
     getJson("/api/vwap/spy", SpyRthVwapResponseSchema),
   getSpySessionLevels: (): Promise<SpySessionLevelsResponse> =>

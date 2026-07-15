@@ -432,3 +432,118 @@ export const SpySessionLevelsResponseSchema = z.object({
   warningCode: CandleWarningCodeSchema.nullable(),
 });
 export type SpySessionLevelsResponse = z.infer<typeof SpySessionLevelsResponseSchema>;
+
+/** Package-level availability/provenance for deterministic RTH gap metrics. */
+export const GapMetricStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type GapMetricState = z.infer<typeof GapMetricStateSchema>;
+
+export const GapDirectionSchema = z.enum(["UP", "DOWN", "FLAT", "UNAVAILABLE"]);
+export type GapDirection = z.infer<typeof GapDirectionSchema>;
+
+export const GapFillStateSchema = z.enum([
+  "FILLED",
+  "UNFILLED",
+  "UNKNOWN",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type GapFillState = z.infer<typeof GapFillStateSchema>;
+
+/** Gap-specific warning vocabulary while preserving upstream candle warnings. */
+export const GapWarningCodeSchema = z.union([
+  CandleWarningCodeSchema,
+  z.enum([
+    "CURRENT_RTH_OPENING_CANDLE_MISSING",
+    "PREVIOUS_DAY_CLOSE_UNAVAILABLE",
+    "INVALID_GAP_INPUT",
+  ]),
+]);
+export type GapWarningCode = z.infer<typeof GapWarningCodeSchema>;
+
+/**
+ * Narrow backend-to-frontend contract for the current New York date's RTH
+ * opening gap. Gap validity is separate from fill certainty: a valid LIVE gap
+ * may still have fillState UNKNOWN when an intraday interval is missing.
+ */
+export const SpyRthGapResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("RTH_GAP"),
+    currentMarketDate: MarketDateSchema,
+    previousRthMarketDate: MarketDateSchema.nullable(),
+    metricState: GapMetricStateSchema,
+    candleSourceState: QuoteSourceStateSchema,
+    currentRthOpen: z.number().finite().positive().nullable(),
+    currentRthOpenAt: z.string().datetime().nullable(),
+    previousDayClose: z.number().finite().positive().nullable(),
+    gapPoints: z.number().finite().nullable(),
+    gapPercent: z.number().finite().nullable(),
+    direction: GapDirectionSchema,
+    fillState: GapFillStateSchema,
+    /** Earliest returned RTH candle whose range proves the fill; not a tick-level touch time. */
+    firstObservedFillCandleAt: z.string().datetime().nullable(),
+    currentRthCoverageState: CoverageStateSchema,
+    previousRthCoverageState: CoverageStateSchema,
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    latestRthCandleAt: z.string().datetime().nullable(),
+    currentRthCandleCount: z.number().int().nonnegative(),
+    warningCode: GapWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const coreAvailable = value.metricState !== "UNAVAILABLE";
+    const coreFields = [
+      value.currentRthOpen,
+      value.currentRthOpenAt,
+      value.previousDayClose,
+      value.gapPoints,
+      value.gapPercent,
+    ];
+
+    if (!coreAvailable) {
+      if (
+        value.currentRthOpen !== null ||
+        value.currentRthOpenAt !== null ||
+        value.gapPoints !== null ||
+        value.gapPercent !== null ||
+        value.direction !== "UNAVAILABLE" ||
+        value.fillState !== "UNAVAILABLE" ||
+        value.firstObservedFillCandleAt !== null
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "UNAVAILABLE gap must not expose calculated gap fields",
+        });
+      }
+    } else if (
+      coreFields.some((field) => field === null) ||
+      value.direction === "UNAVAILABLE" ||
+      value.fillState === "UNAVAILABLE"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available gap must expose all core calculation fields",
+      });
+    }
+
+    if (value.fillState === "FILLED" && value.firstObservedFillCandleAt === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "FILLED gap requires firstObservedFillCandleAt",
+      });
+    }
+    if (value.fillState !== "FILLED" && value.firstObservedFillCandleAt !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Only FILLED gap may expose firstObservedFillCandleAt",
+      });
+    }
+    if (value.direction === "FLAT" && value.fillState !== "NOT_APPLICABLE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "FLAT gap requires NOT_APPLICABLE fill state",
+      });
+    }
+  });
+export type SpyRthGapResponse = z.infer<typeof SpyRthGapResponseSchema>;
+
