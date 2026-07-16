@@ -20,6 +20,7 @@ import {
   useDisplaySpyZeroDteOptionsChain,
 } from "@/hooks/use-spy-options-chain";
 import { formatEasternTime, formatPrice, formatVolume } from "@/lib/format";
+import { selectAtmCenteredStrikeWindow } from "@/lib/options-chain-window";
 
 interface ChainRow {
   key: string;
@@ -54,13 +55,13 @@ function groupByStrike(contracts: readonly NormalizedOptionContract[]) {
 function buildRows(
   calls: readonly NormalizedOptionContract[],
   puts: readonly NormalizedOptionContract[],
+  visibleStrikes: readonly number[],
 ): ChainRow[] {
   const callsByStrike = groupByStrike(calls);
   const putsByStrike = groupByStrike(puts);
-  const strikes = [...new Set([...callsByStrike.keys(), ...putsByStrike.keys()])].sort((a, b) => a - b);
   const rows: ChainRow[] = [];
 
-  for (const strike of strikes) {
+  for (const strike of visibleStrikes) {
     const strikeCalls = callsByStrike.get(strike) ?? [];
     const strikePuts = putsByStrike.get(strike) ?? [];
     const rowCount = Math.max(strikeCalls.length, strikePuts.length, 1);
@@ -127,7 +128,13 @@ function warningMessage(code: string | null): string | null {
 export default function OptionsPage() {
   const { display, isLoading, isError } = useDisplaySpyZeroDteOptionsChain();
   const chain = display?.response ?? null;
-  const rows = chain ? buildRows(chain.calls, chain.puts) : [];
+  const strikeWindow = chain
+    ? selectAtmCenteredStrikeWindow(
+        [...chain.calls, ...chain.puts].map((contract) => contract.strikePrice),
+        chain.underlyingPrice,
+      )
+    : { atmStrike: null, visibleStrikes: [] };
+  const rows = chain ? buildRows(chain.calls, chain.puts, strikeWindow.visibleStrikes) : [];
   const badge = chain ? STATE_BADGE[chain.metricState] : STATE_BADGE.UNAVAILABLE;
   const warning = chain ? warningMessage(chain.warningCode) : null;
 
@@ -191,27 +198,47 @@ export default function OptionsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.key}>
-                <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.bid)} />
-                <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.ask)} />
-                <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.mark)} />
-                <OptionCell contract={row.call} value={formatOptionalInteger(row.call?.volume)} />
-                <OptionCell contract={row.call} value={formatOptionalInteger(row.call?.openInterest)} />
-                <OptionCell contract={row.call} value={formatOptionalIv(row.call?.impliedVolatilityPercent)} />
-                <OptionCell contract={row.call} value={formatOptionalGreek(row.call?.delta)} />
-                <TableCell className="sticky left-0 z-10 bg-panel text-center font-mono font-semibold tabular">
-                  ${row.strike.toFixed(2)}
-                </TableCell>
-                <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.bid)} />
-                <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.ask)} />
-                <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.mark)} />
-                <OptionCell contract={row.put} value={formatOptionalInteger(row.put?.volume)} />
-                <OptionCell contract={row.put} value={formatOptionalInteger(row.put?.openInterest)} />
-                <OptionCell contract={row.put} value={formatOptionalIv(row.put?.impliedVolatilityPercent)} />
-                <OptionCell contract={row.put} value={formatOptionalGreek(row.put?.delta)} />
-              </TableRow>
-            ))}
+            {rows.map((row) => {
+              const isAtm = row.strike === strikeWindow.atmStrike;
+              return (
+                <TableRow
+                  key={row.key}
+                  className={isAtm ? "bg-accent/5 hover:bg-accent/10" : undefined}
+                  data-atm={isAtm ? "true" : undefined}
+                >
+                  <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.bid)} />
+                  <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.ask)} />
+                  <OptionCell contract={row.call} value={formatOptionalPrice(row.call?.mark)} />
+                  <OptionCell contract={row.call} value={formatOptionalInteger(row.call?.volume)} />
+                  <OptionCell contract={row.call} value={formatOptionalInteger(row.call?.openInterest)} />
+                  <OptionCell contract={row.call} value={formatOptionalIv(row.call?.impliedVolatilityPercent)} />
+                  <OptionCell contract={row.call} value={formatOptionalGreek(row.call?.delta)} />
+                  <TableCell
+                    className={
+                      isAtm
+                        ? "sticky left-0 z-10 bg-panel-hover text-center font-mono font-semibold tabular"
+                        : "sticky left-0 z-10 bg-panel text-center font-mono font-semibold tabular"
+                    }
+                  >
+                    <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                      <span>${row.strike.toFixed(2)}</span>
+                      {isAtm && (
+                        <Badge variant="default" className="px-1.5 py-0 text-[9px] tracking-normal">
+                          ATM
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
+                  <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.bid)} />
+                  <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.ask)} />
+                  <OptionCell contract={row.put} value={formatOptionalPrice(row.put?.mark)} />
+                  <OptionCell contract={row.put} value={formatOptionalInteger(row.put?.volume)} />
+                  <OptionCell contract={row.put} value={formatOptionalInteger(row.put?.openInterest)} />
+                  <OptionCell contract={row.put} value={formatOptionalIv(row.put?.impliedVolatilityPercent)} />
+                  <OptionCell contract={row.put} value={formatOptionalGreek(row.put?.delta)} />
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Panel>
