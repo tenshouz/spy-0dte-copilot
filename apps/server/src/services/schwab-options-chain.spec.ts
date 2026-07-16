@@ -101,12 +101,13 @@ function test(name: string, fn: () => void) {
   }
 }
 
-test("request URL is fixed to SPY, ALL, SINGLE, strikeCount 10, and one expiration", () => {
+test("request URL is fixed to SPY, ALL, SINGLE, strikeCount 40, and one expiration", () => {
   const url = new URL(buildSpyZeroDteOptionsChainUrl({ expirationDate: MARKET_DATE }));
   assert.equal(url.pathname, "/marketdata/v1/chains");
   assert.equal(url.searchParams.get("symbol"), "SPY");
   assert.equal(url.searchParams.get("contractType"), "ALL");
   assert.equal(url.searchParams.get("strategy"), "SINGLE");
+  assert.equal(OPTIONS_CHAIN_REQUESTED_STRIKE_COUNT, 40);
   assert.equal(url.searchParams.get("strikeCount"), String(OPTIONS_CHAIN_REQUESTED_STRIKE_COUNT));
   assert.equal(url.searchParams.get("includeUnderlyingQuote"), "true");
   assert.equal(url.searchParams.get("fromDate"), MARKET_DATE);
@@ -298,6 +299,29 @@ test("strike and contract metadata are accurate", () => {
   assert.equal(cache.minimumReturnedStrike, 754);
   assert.equal(cache.maximumReturnedStrike, 755);
   assert.equal(cache.providerContractCount, 4);
+});
+
+test("expanded 40-strike response preserves every balanced current-date Call and Put", () => {
+  const raw = fixture();
+  const callMap = raw.callExpDateMap as unknown as Record<string, Record<string, unknown[]>>;
+  const putMap = raw.putExpDateMap as unknown as Record<string, Record<string, unknown[]>>;
+  raw.numberOfContracts = 80;
+  callMap["2026-07-15:0"] = {};
+  putMap["2026-07-15:0"] = {};
+
+  for (let strike = 735; strike <= 774; strike += 1) {
+    callMap["2026-07-15:0"]![`${strike}.0`] = [contract("CALL", strike)];
+    putMap["2026-07-15:0"]![`${strike}.0`] = [contract("PUT", strike)];
+  }
+
+  const cache = normalized(raw);
+  assert.equal(cache.requestedStrikeCount, 40);
+  assert.equal(cache.calls.length, 40);
+  assert.equal(cache.puts.length, 40);
+  assert.equal(cache.returnedUniqueStrikeCount, 40);
+  assert.equal(cache.minimumReturnedStrike, 735);
+  assert.equal(cache.maximumReturnedStrike, 774);
+  assert.equal(cache.rejectedContractCount, 0);
 });
 
 test("provider millisecond timestamps normalize to ISO and latest values", () => {

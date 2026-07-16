@@ -21,7 +21,7 @@ import { z } from "zod";
 
 export const OPTIONS_CHAIN_SHORT_CACHE_MS = 15_000;
 export const OPTIONS_CHAIN_STALE_RETENTION_MS = 5 * 60_000;
-export const OPTIONS_CHAIN_REQUESTED_STRIKE_COUNT = 10;
+export const OPTIONS_CHAIN_REQUESTED_STRIKE_COUNT = 40;
 
 const MAX_EPOCH_MS = 8_640_000_000_000_000;
 const EXPIRATION_KEY_RE = /^(\d{4}-\d{2}-\d{2}):(\d+)$/;

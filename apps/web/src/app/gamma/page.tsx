@@ -17,6 +17,7 @@ import {
 } from "@/hooks/use-spy-gex-proxy";
 import { useMarketSnapshot, useStrikeExposures } from "@/hooks/use-market-snapshot";
 import { formatCompactCurrency, formatEasternTime, formatPrice } from "@/lib/format";
+import { selectGexChartStrikeWindow } from "@/lib/gex-chart-window";
 
 const STATE_BADGE: Record<
   GexMetricState,
@@ -59,6 +60,15 @@ export default function GammaPage() {
   const gex = display?.response ?? null;
   const badge = gex ? STATE_BADGE[gex.metricState] : STATE_BADGE.UNAVAILABLE;
   const warning = gex ? gexWarningMessage(gex.warningCode) : null;
+  const chartWindow = gex
+    ? selectGexChartStrikeWindow(gex.strikes, gex.underlyingPrice)
+    : {
+        atmStrike: null,
+        rows: [],
+        calculationStrikeCount: 0,
+        displayedStrikeCount: 0,
+        isSubset: false,
+      };
 
   const gexColumns: DataTableColumn<GexStrikeRow>[] = [
     { key: "strike", header: "Strike", render: (row) => `$${formatPrice(row.strikePrice)}` },
@@ -125,9 +135,22 @@ export default function GammaPage() {
         </Panel>
 
         <Panel title="Methodology & Coverage" className="lg:col-span-4">
-          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-9">
             <Summary label="Method" value="OI-Weighted Gamma / 1%" />
-            <Summary label="Scope" value="Returned Chain Window" />
+            <Summary
+              label="Calculation Scope"
+              value={gex ? `Returned Chain Window · ${gex.returnedUniqueStrikeCount} strikes` : "—"}
+            />
+            <Summary
+              label="Chart Display"
+              value={
+                gex
+                  ? chartWindow.isSubset
+                    ? `Nearest ${chartWindow.displayedStrikeCount} strikes`
+                    : `All ${chartWindow.displayedStrikeCount} strikes`
+                  : "—"
+              }
+            />
             <Summary label="Coverage" value={gex?.coverageState ?? "UNAVAILABLE"} />
             <Summary label="Expiration" value={gex?.expirationDate ?? "—"} />
             <Summary label="Underlying" value={gex?.underlyingPrice == null ? "—" : `$${formatPrice(gex.underlyingPrice)}`} />
@@ -151,20 +174,27 @@ export default function GammaPage() {
             <Summary label="Missing OI" value={gex ? String(gex.contractsMissingOpenInterest) : "—"} />
           </div>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Calculated from current provider Gamma and Open Interest across the returned ATM-centered strike window. Values are local exposure estimates using a Call-positive / Put-negative analytical convention, not observed dealer inventory. Open Interest may not update intraday.
+            Calculated from current provider Gamma and Open Interest across the expanded returned chain window. The chart may show only the nearest eligible strikes for readability, while totals and the table use every eligible GEX strike row from that window. Values are local exposure estimates using a Call-positive / Put-negative analytical convention, not observed dealer inventory. Open Interest may not update intraday.
           </p>
         </Panel>
 
         <Panel
-          title="0DTE GEX Proxy by Returned Strike"
+          title="0DTE GEX Proxy Chart"
           isLoading={isLoading}
           isError={isError}
           isEmpty={!isLoading && !isError && (gex?.strikes.length ?? 0) === 0}
           emptyMessage={warning ?? "No eligible returned-window GEX strike data is available."}
           className="lg:col-span-4"
         >
-          {gex && gex.strikes.length > 0 && (
-            <GexProxyChart strikes={gex.strikes} underlyingPrice={gex.underlyingPrice} />
+          {gex && chartWindow.rows.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Chart display: {chartWindow.isSubset
+                  ? `nearest ${chartWindow.displayedStrikeCount} of ${chartWindow.calculationStrikeCount} eligible GEX strike rows`
+                  : `all ${chartWindow.displayedStrikeCount} eligible GEX strike rows`}. Totals use every eligible strike row from the returned chain window.
+              </p>
+              <GexProxyChart strikes={chartWindow.rows} underlyingPrice={gex.underlyingPrice} />
+            </div>
           )}
         </Panel>
 
@@ -175,12 +205,14 @@ export default function GammaPage() {
           className="lg:col-span-4"
           noPadding
         >
-          <DataTable
-            columns={gexColumns}
-            rows={gex?.strikes ?? []}
-            rowKey={(row) => String(row.strikePrice)}
-            emptyMessage="No eligible returned-window GEX rows are available."
-          />
+          <div className="max-h-[32rem] overflow-y-auto">
+            <DataTable
+              columns={gexColumns}
+              rows={gex?.strikes ?? []}
+              rowKey={(row) => String(row.strikePrice)}
+              emptyMessage="No eligible returned-window GEX rows are available."
+            />
+          </div>
         </Panel>
 
         <Panel

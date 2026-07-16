@@ -294,6 +294,49 @@ test("bounded strike metadata is preserved from the Options Chain", () => {
   assert.equal(result.maximumReturnedStrike, 101);
 });
 
+test("expanded 40-strike chain contributes every eligible returned strike to GEX totals", () => {
+  const calls = Array.from({ length: 40 }, (_, index) =>
+    uniqueContract("CALL", 735 + index, { gamma: 0.01, openInterest: 100 + index }),
+  );
+  const puts = Array.from({ length: 40 }, (_, index) =>
+    uniqueContract("PUT", 735 + index, { gamma: 0.02, openInterest: 50 + index }),
+  );
+  const expanded = chain({
+    calls,
+    puts,
+    requestedStrikeCount: 40,
+    returnedUniqueStrikeCount: 40,
+    callContractCount: 40,
+    putContractCount: 40,
+    minimumReturnedStrike: 735,
+    maximumReturnedStrike: 774,
+    providerContractCount: 80,
+    totalContracts: 80,
+    contractsWithBidAsk: 80,
+    contractsWithGreeks: 80,
+    contractsWithOpenInterest: 80,
+    contractsWithVolume: 80,
+  });
+
+  const result = deriveSpyZeroDteGexProxy(expanded, NOW);
+  assert.equal(result.requestedStrikeCount, 40);
+  assert.equal(result.returnedUniqueStrikeCount, 40);
+  assert.equal(result.eligibleStrikeCount, 40);
+  assert.equal(result.eligibleCallContractCount, 40);
+  assert.equal(result.eligiblePutContractCount, 40);
+  assert.equal(result.minimumReturnedStrike, 735);
+  assert.equal(result.maximumReturnedStrike, 774);
+  assert.equal(result.strikes.length, 40);
+  assert.equal(
+    result.returnedWindowCallGammaExposure,
+    result.strikes.reduce((sum, row) => sum + row.callGammaExposure, 0),
+  );
+  assert.equal(
+    result.returnedWindowPutGammaExposureMagnitude,
+    result.strikes.reduce((sum, row) => sum + row.putGammaExposureMagnitude, 0),
+  );
+});
+
 test("missing required input with valid contributions produces PARTIAL numeric result", () => {
   const base = chain();
   base.calls = base.calls.map((item, index) => (index === 0 ? { ...item, gamma: null } : item));
