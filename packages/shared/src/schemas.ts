@@ -1129,3 +1129,170 @@ export const SpyZeroDteGexProxyResponseSchema = z
   });
 export type SpyZeroDteGexProxyResponse = z.infer<typeof SpyZeroDteGexProxyResponseSchema>;
 
+
+/** Deterministic availability and coverage for the returned-window SPY 0DTE DEX proxy. */
+export const DexMetricStateSchema = z.enum(["LIVE", "STALE", "UNAVAILABLE"]);
+export type DexMetricState = z.infer<typeof DexMetricStateSchema>;
+
+export const DexCoverageStateSchema = z.enum(["COMPLETE", "PARTIAL", "UNAVAILABLE"]);
+export type DexCoverageState = z.infer<typeof DexCoverageStateSchema>;
+
+export const DexCoverageScopeSchema = z.literal("RETURNED_CHAIN_WINDOW");
+export type DexCoverageScope = z.infer<typeof DexCoverageScopeSchema>;
+
+export const DexMethodologySchema = z.literal("OI_WEIGHTED_DELTA_NOTIONAL");
+export type DexMethodology = z.infer<typeof DexMethodologySchema>;
+
+export const DexWarningCodeSchema = z.enum([
+  "AUTH_REQUIRED",
+  "DATABASE_ERROR",
+  "OPTIONS_ACCESS_UNAVAILABLE",
+  "NO_CURRENT_DATE_EXPIRATION",
+  "OPTIONS_CHAIN_UNAVAILABLE",
+  "UNDERLYING_PRICE_UNAVAILABLE",
+  "NO_ELIGIBLE_DEX_CONTRACTS",
+  "INVALID_DEX_INPUTS",
+  "PARTIAL_DEX_INPUTS",
+  "RETAINED_STALE_CHAIN",
+]);
+export type DexWarningCode = z.infer<typeof DexWarningCodeSchema>;
+
+export const DexStrikeRowSchema = z.object({
+  strikePrice: z.number().finite().positive(),
+  callContractCount: z.number().int().nonnegative(),
+  putContractCount: z.number().int().nonnegative(),
+  callOpenInterest: z.number().int().nonnegative(),
+  putOpenInterest: z.number().int().nonnegative(),
+  callDeltaExposure: z.number().finite().nonnegative(),
+  putDeltaExposureMagnitude: z.number().finite().nonnegative(),
+  netDeltaExposureProxy: z.number().finite(),
+});
+export type DexStrikeRow = z.infer<typeof DexStrikeRowSchema>;
+
+export const SpyZeroDteDexProxyResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("ZERO_DTE_RETURNED_WINDOW_DEX_PROXY"),
+    methodology: DexMethodologySchema,
+    coverageScope: DexCoverageScopeSchema,
+    currentMarketDate: MarketDateSchema,
+    expirationDate: MarketDateSchema.nullable(),
+    metricState: DexMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    coverageState: DexCoverageStateSchema,
+    underlyingPrice: z.number().finite().positive().nullable(),
+    underlyingPriceSource: z.enum(["CHAIN_RESPONSE", "UNAVAILABLE"]),
+    requestedStrikeCount: z.number().int().positive().nullable(),
+    returnedUniqueStrikeCount: z.number().int().nonnegative(),
+    minimumReturnedStrike: z.number().finite().positive().nullable(),
+    maximumReturnedStrike: z.number().finite().positive().nullable(),
+    returnedWindowCallDeltaExposure: z.number().finite().nonnegative().nullable(),
+    returnedWindowPutDeltaExposureMagnitude: z.number().finite().nonnegative().nullable(),
+    returnedWindowNetDeltaExposureProxy: z.number().finite().nullable(),
+    eligibleCallContractCount: z.number().int().nonnegative(),
+    eligiblePutContractCount: z.number().int().nonnegative(),
+    excludedCallContractCount: z.number().int().nonnegative(),
+    excludedPutContractCount: z.number().int().nonnegative(),
+    contractsMissingDelta: z.number().int().nonnegative(),
+    contractsWithInvalidDelta: z.number().int().nonnegative(),
+    contractsMissingOpenInterest: z.number().int().nonnegative(),
+    contractsMissingMultiplier: z.number().int().nonnegative(),
+    nonstandardContractsExcluded: z.number().int().nonnegative(),
+    miniContractsExcluded: z.number().int().nonnegative(),
+    invalidMultiplierContractsExcluded: z.number().int().nonnegative(),
+    duplicateContractsExcluded: z.number().int().nonnegative(),
+    outOfScopeContractsExcluded: z.number().int().nonnegative(),
+    upstreamRejectedContractCount: z.number().int().nonnegative(),
+    eligibleStrikeCount: z.number().int().nonnegative(),
+    strikes: z.array(DexStrikeRowSchema),
+    latestOptionQuoteAt: z.string().datetime().nullable(),
+    chainFetchedAt: z.string().datetime().nullable(),
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    warningCode: DexWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const available = value.metricState !== "UNAVAILABLE";
+    const totals = [
+      value.returnedWindowCallDeltaExposure,
+      value.returnedWindowPutDeltaExposureMagnitude,
+      value.returnedWindowNetDeltaExposureProxy,
+    ];
+
+    if (value.expirationDate !== null && value.expirationDate !== value.currentMarketDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "DEX proxy must use current-date expiration" });
+    }
+
+    if ((value.underlyingPrice === null) !== (value.underlyingPriceSource === "UNAVAILABLE")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "DEX underlying source is inconsistent" });
+    }
+
+    if (available) {
+      if (
+        value.expirationDate === null ||
+        value.underlyingPrice === null ||
+        value.chainFetchedAt === null ||
+        value.coverageState === "UNAVAILABLE" ||
+        value.strikes.length === 0 ||
+        totals.some((item) => item === null)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Available DEX proxy requires a current chain snapshot, strike rows, and totals",
+        });
+      }
+      if (value.sourceState !== value.metricState) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "DEX proxy cannot exceed chain provenance" });
+      }
+    } else if (
+      value.coverageState !== "UNAVAILABLE" ||
+      value.strikes.length > 0 ||
+      totals.some((item) => item !== null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable DEX proxy cannot expose totals or strike rows",
+      });
+    }
+
+    if (value.eligibleStrikeCount !== value.strikes.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Eligible DEX strike count is inconsistent" });
+    }
+
+    const sorted = [...value.strikes].sort((a, b) => a.strikePrice - b.strikePrice);
+    if (value.strikes.some((row, index) => row.strikePrice !== sorted[index]?.strikePrice)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "DEX strike rows must be sorted ascending" });
+    }
+
+    for (const row of value.strikes) {
+      if (!closeEnough(row.netDeltaExposureProxy, row.callDeltaExposure - row.putDeltaExposureMagnitude)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Per-strike Net DEX proxy is inconsistent" });
+      }
+      if (row.callContractCount + row.putContractCount === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "DEX strike row requires an eligible contract" });
+      }
+    }
+
+    if (available) {
+      const callTotal = value.strikes.reduce((sum, row) => sum + row.callDeltaExposure, 0);
+      const putTotal = value.strikes.reduce((sum, row) => sum + row.putDeltaExposureMagnitude, 0);
+      const netTotal = callTotal - putTotal;
+      if (
+        value.returnedWindowCallDeltaExposure === null ||
+        value.returnedWindowPutDeltaExposureMagnitude === null ||
+        value.returnedWindowNetDeltaExposureProxy === null ||
+        !closeEnough(value.returnedWindowCallDeltaExposure, callTotal) ||
+        !closeEnough(value.returnedWindowPutDeltaExposureMagnitude, putTotal) ||
+        !closeEnough(value.returnedWindowNetDeltaExposureProxy, netTotal)
+      ) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Returned-window DEX totals are inconsistent" });
+      }
+
+      const callCount = value.strikes.reduce((sum, row) => sum + row.callContractCount, 0);
+      const putCount = value.strikes.reduce((sum, row) => sum + row.putContractCount, 0);
+      if (callCount !== value.eligibleCallContractCount || putCount !== value.eligiblePutContractCount) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Eligible DEX contract counts are inconsistent" });
+      }
+    }
+  });
+export type SpyZeroDteDexProxyResponse = z.infer<typeof SpyZeroDteDexProxyResponseSchema>;
