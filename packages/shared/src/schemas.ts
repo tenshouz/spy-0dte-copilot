@@ -656,3 +656,194 @@ export const SpyOpeningRangeResponseSchema = z
   });
 export type SpyOpeningRangeResponse = z.infer<typeof SpyOpeningRangeResponseSchema>;
 
+
+/** Package-level availability and freshness for the SPY current-date Options Chain. */
+export const OptionsChainMetricStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type OptionsChainMetricState = z.infer<typeof OptionsChainMetricStateSchema>;
+
+/** Source state includes UNAVAILABLE because no provider result may exist at all. */
+export const OptionsChainSourceStateSchema = z.enum(["LIVE", "STALE", "MOCK", "UNAVAILABLE"]);
+export type OptionsChainSourceState = z.infer<typeof OptionsChainSourceStateSchema>;
+
+export const OptionTypeSchema = z.enum(["CALL", "PUT"]);
+export type OptionType = z.infer<typeof OptionTypeSchema>;
+
+export const OptionsUnderlyingPriceSourceSchema = z.enum([
+  "CHAIN_RESPONSE",
+  "SPY_QUOTE_CACHE",
+  "UNAVAILABLE",
+]);
+export type OptionsUnderlyingPriceSource = z.infer<typeof OptionsUnderlyingPriceSourceSchema>;
+
+export const OptionsChainWarningCodeSchema = z.enum([
+  "AUTH_REQUIRED",
+  "DATABASE_ERROR",
+  "OPTIONS_ACCESS_UNAVAILABLE",
+  "NO_CURRENT_DATE_EXPIRATION",
+  "NO_VALID_CONTRACTS",
+  "UPSTREAM_RATE_LIMITED",
+  "UPSTREAM_TIMEOUT",
+  "UPSTREAM_NETWORK_ERROR",
+  "UPSTREAM_UNAVAILABLE",
+  "UPSTREAM_SCHEMA_INVALID",
+  "RETAINED_STALE_CHAIN",
+  "PARTIAL_CONTRACT_DATA",
+]);
+export type OptionsChainWarningCode = z.infer<typeof OptionsChainWarningCodeSchema>;
+
+/** LIVE/STALE is based on fetchedAt, never on the latest contract trade. */
+export const OPTIONS_CHAIN_FRESHNESS_THRESHOLD_MS = 60_000;
+
+/**
+ * Stable application-owned option contract. Provider-specific map keys and
+ * raw fields never cross this shared boundary. `impliedVolatilityPercent`
+ * preserves Schwab's observed percentage-point scale without local rescaling.
+ */
+export const NormalizedOptionContractSchema = z.object({
+  contractSymbol: z.string().min(1),
+  underlyingSymbol: z.literal("SPY"),
+  optionType: OptionTypeSchema,
+  expirationDate: MarketDateSchema,
+  strikePrice: z.number().finite().positive(),
+  description: z.string().nullable(),
+  bid: z.number().finite().nonnegative().nullable(),
+  ask: z.number().finite().nonnegative().nullable(),
+  last: z.number().finite().nonnegative().nullable(),
+  mark: z.number().finite().nonnegative().nullable(),
+  bidSize: z.number().int().nonnegative().nullable(),
+  askSize: z.number().int().nonnegative().nullable(),
+  lastSize: z.number().int().nonnegative().nullable(),
+  volume: z.number().int().nonnegative().nullable(),
+  openInterest: z.number().int().nonnegative().nullable(),
+  impliedVolatilityPercent: z.number().finite().nonnegative().nullable(),
+  delta: z.number().finite().nullable(),
+  gamma: z.number().finite().nonnegative().nullable(),
+  theta: z.number().finite().nullable(),
+  vega: z.number().finite().nullable(),
+  rho: z.number().finite().nullable(),
+  inTheMoney: z.boolean().nullable(),
+  nonStandard: z.boolean().nullable(),
+  multiplier: z.number().finite().positive().nullable(),
+  quoteAt: z.string().datetime().nullable(),
+  tradeAt: z.string().datetime().nullable(),
+});
+export type NormalizedOptionContract = z.infer<typeof NormalizedOptionContractSchema>;
+
+/**
+ * SPY-only current-New-York-date Options Chain Foundation. No alternate
+ * expiration fallback, local Greeks, IV calculation, rankings, or signals.
+ */
+export const SpyZeroDteOptionsChainResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("ZERO_DTE_OPTIONS_CHAIN"),
+    currentMarketDate: MarketDateSchema,
+    requestedExpirationDate: MarketDateSchema,
+    returnedExpirationDate: MarketDateSchema.nullable(),
+    metricState: OptionsChainMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    isDelayed: z.boolean().nullable(),
+    underlyingPrice: z.number().finite().positive().nullable(),
+    underlyingPriceSource: OptionsUnderlyingPriceSourceSchema,
+    calls: z.array(NormalizedOptionContractSchema),
+    puts: z.array(NormalizedOptionContractSchema),
+    requestedStrikeCount: z.number().int().positive(),
+    returnedUniqueStrikeCount: z.number().int().nonnegative(),
+    callContractCount: z.number().int().nonnegative(),
+    putContractCount: z.number().int().nonnegative(),
+    minimumReturnedStrike: z.number().finite().positive().nullable(),
+    maximumReturnedStrike: z.number().finite().positive().nullable(),
+    providerContractCount: z.number().int().nonnegative().nullable(),
+    totalContracts: z.number().int().nonnegative(),
+    contractsWithBidAsk: z.number().int().nonnegative(),
+    contractsWithGreeks: z.number().int().nonnegative(),
+    contractsWithOpenInterest: z.number().int().nonnegative(),
+    contractsWithVolume: z.number().int().nonnegative(),
+    rejectedContractCount: z.number().int().nonnegative(),
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    latestOptionQuoteAt: z.string().datetime().nullable(),
+    latestOptionTradeAt: z.string().datetime().nullable(),
+    warningCode: OptionsChainWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.currentMarketDate !== value.requestedExpirationDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "0DTE requested expiration must equal current New York date",
+      });
+    }
+
+    if (value.callContractCount !== value.calls.length || value.putContractCount !== value.puts.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options contract counts do not match arrays" });
+    }
+    if (value.totalContracts !== value.calls.length + value.puts.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options totalContracts does not match arrays" });
+    }
+
+    const contracts = [...value.calls, ...value.puts];
+    const uniqueSymbols = new Set(contracts.map((contract) => contract.contractSymbol));
+    if (uniqueSymbols.size !== contracts.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options contract symbols must be unique" });
+    }
+
+    if (
+      value.calls.some(
+        (contract) =>
+          contract.optionType !== "CALL" || contract.expirationDate !== value.requestedExpirationDate,
+      ) ||
+      value.puts.some(
+        (contract) =>
+          contract.optionType !== "PUT" || contract.expirationDate !== value.requestedExpirationDate,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Options arrays may contain only the requested expiration and matching option type",
+      });
+    }
+
+    const strikes = [...new Set(contracts.map((contract) => contract.strikePrice))].sort((a, b) => a - b);
+    if (value.returnedUniqueStrikeCount !== strikes.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unique strike count is inconsistent" });
+    }
+    if (
+      (strikes[0] ?? null) !== value.minimumReturnedStrike ||
+      (strikes[strikes.length - 1] ?? null) !== value.maximumReturnedStrike
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Returned strike bounds are inconsistent" });
+    }
+
+    const unavailable = value.metricState === "UNAVAILABLE";
+    if (unavailable) {
+      if (contracts.length > 0 || value.returnedExpirationDate !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "UNAVAILABLE Options Chain cannot expose contracts or a returned expiration",
+        });
+      }
+    } else if (
+      contracts.length === 0 ||
+      value.returnedExpirationDate !== value.requestedExpirationDate ||
+      value.sourceState === "UNAVAILABLE"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available Options Chain requires current-expiration contracts and a real/mock source",
+      });
+    }
+
+    if (
+      value.underlyingPrice === null &&
+      value.underlyingPriceSource !== "UNAVAILABLE"
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Missing underlying price needs UNAVAILABLE source" });
+    }
+    if (
+      value.underlyingPrice !== null &&
+      value.underlyingPriceSource === "UNAVAILABLE"
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Underlying price source is inconsistent" });
+    }
+  });
+export type SpyZeroDteOptionsChainResponse = z.infer<typeof SpyZeroDteOptionsChainResponseSchema>;

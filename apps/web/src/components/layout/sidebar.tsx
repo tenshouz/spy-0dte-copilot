@@ -7,6 +7,7 @@ import {
   BookOpen,
   LayoutDashboard,
   LineChart,
+  Rows3,
   Settings as SettingsIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,6 +18,7 @@ import { useUiStore } from "@/stores/ui-store";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/market-data", label: "Market Data", icon: LineChart },
+  { href: "/options", label: "Options Chain", icon: Rows3 },
   { href: "/gamma", label: "GEX / DEX", icon: BarChart3 },
   { href: "/trade-plan", label: "AI Trade Plan", icon: Activity },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
