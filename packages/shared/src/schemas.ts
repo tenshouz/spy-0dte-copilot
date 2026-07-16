@@ -1296,3 +1296,337 @@ export const SpyZeroDteDexProxyResponseSchema = z
     }
   });
 export type SpyZeroDteDexProxyResponse = z.infer<typeof SpyZeroDteDexProxyResponseSchema>;
+
+/** Integration-only readiness for the assembled SPY market context. */
+export const MarketContextStateSchema = z.enum(["READY", "DEGRADED", "UNAVAILABLE"]);
+export type MarketContextState = z.infer<typeof MarketContextStateSchema>;
+
+export const MarketContextComponentStatusValueSchema = z.enum([
+  "AVAILABLE",
+  "STALE",
+  "PARTIAL",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type MarketContextComponentStatusValue = z.infer<
+  typeof MarketContextComponentStatusValueSchema
+>;
+
+export const MarketContextRequirementSchema = z.enum([
+  "REQUIRED",
+  "SESSION_CONDITIONALLY_REQUIRED",
+  "OPTIONAL_ENRICHMENT",
+]);
+export type MarketContextRequirement = z.infer<typeof MarketContextRequirementSchema>;
+
+export const MarketContextComponentSchema = z.enum([
+  "QUOTE",
+  "CANDLES",
+  "SESSION_DATA",
+  "VWAP",
+  "SESSION_LEVELS",
+  "GAP",
+  "OPENING_RANGE",
+  "OPTIONS_CHAIN",
+  "EXPECTED_MOVE",
+  "GEX",
+  "DEX",
+]);
+export type MarketContextComponent = z.infer<typeof MarketContextComponentSchema>;
+
+export const MarketContextWarningCodeSchema = z.enum([
+  "AUTH_REQUIRED",
+  "CURRENT_PRICE_UNAVAILABLE",
+  "CURRENT_SESSION_DATA_UNAVAILABLE",
+  "PARTIAL_MARKET_CONTEXT",
+  "RETAINED_STALE_COMPONENTS",
+]);
+export type MarketContextWarningCode = z.infer<typeof MarketContextWarningCodeSchema>;
+
+export const MarketContextSessionWindowSchema = z.enum([
+  "PREMARKET",
+  "RTH",
+  "AFTER_HOURS",
+  "CLOSED",
+]);
+export type MarketContextSessionWindow = z.infer<typeof MarketContextSessionWindowSchema>;
+
+export const MarketContextComponentStatusSchema = z.object({
+  component: MarketContextComponentSchema,
+  status: MarketContextComponentStatusValueSchema,
+  requirement: MarketContextRequirementSchema,
+  applicable: z.boolean(),
+  dependencyGroup: z.enum(["OPTIONS_CHAIN", "BOUNDED_CANDLES"]).nullable(),
+  sourceState: z.string().nullable(),
+  metricState: z.string().nullable(),
+  coverageState: z.string().nullable(),
+  currentMarketDate: MarketDateSchema.nullable(),
+  sessionDate: MarketDateSchema.nullable(),
+  expirationDate: MarketDateSchema.nullable(),
+  latestDataAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime().nullable(),
+  dataAgeMs: z.number().nonnegative().nullable(),
+  warningCode: z.string().nullable(),
+});
+export type MarketContextComponentStatus = z.infer<typeof MarketContextComponentStatusSchema>;
+
+export const MarketContextComponentWarningSchema = z.object({
+  component: MarketContextComponentSchema,
+  warningCode: z.string().min(1),
+  dependencyGroup: z.enum(["OPTIONS_CHAIN", "BOUNDED_CANDLES"]).nullable(),
+});
+export type MarketContextComponentWarning = z.infer<typeof MarketContextComponentWarningSchema>;
+
+export const MarketContextQuoteSchema = SpyQuoteSchema.pick({
+  symbol: true,
+  lastPrice: true,
+  bidPrice: true,
+  askPrice: true,
+  volume: true,
+  quoteTimestamp: true,
+  fetchedAt: true,
+  marketStatus: true,
+  sourceState: true,
+  dataAgeMs: true,
+  warningCode: true,
+});
+export type MarketContextQuote = z.infer<typeof MarketContextQuoteSchema>;
+
+export const MarketContextCandleSummarySchema = z.object({
+  marketDate: MarketDateSchema.nullable(),
+  timeframe: z.literal("5m"),
+  sourceState: QuoteSourceStateSchema,
+  candleCount: z.number().int().nonnegative(),
+  sessionOpen: z.number().finite().positive().nullable(),
+  sessionHigh: z.number().finite().positive().nullable(),
+  sessionLow: z.number().finite().positive().nullable(),
+  latestCandle: SpyCandleSchema.nullable(),
+  previousCandle: SpyCandleSchema.nullable(),
+  latestCandleAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type MarketContextCandleSummary = z.infer<typeof MarketContextCandleSummarySchema>;
+
+export const MarketContextSessionSummarySchema = z.object({
+  currentMarketDate: MarketDateSchema,
+  currentSessionWindow: MarketContextSessionWindowSchema,
+  currentObservedMarketDate: MarketDateSchema.nullable(),
+  previousObservedMarketDate: MarketDateSchema.nullable(),
+  mostRecentRthSessionDate: MarketDateSchema.nullable(),
+  sourceState: QuoteSourceStateSchema,
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: CandleWarningCodeSchema.nullable(),
+});
+export type MarketContextSessionSummary = z.infer<typeof MarketContextSessionSummarySchema>;
+
+export const MarketContextVwapSummarySchema = SpyRthVwapResponseSchema.pick({
+  marketDate: true,
+  metricState: true,
+  candleSourceState: true,
+  latestVwap: true,
+  latestRthCandleAt: true,
+  rthCandleCount: true,
+  fetchedAt: true,
+  dataAgeMs: true,
+  warningCode: true,
+});
+export type MarketContextVwapSummary = z.infer<typeof MarketContextVwapSummarySchema>;
+
+export const MarketContextSessionLevelsSummarySchema = SpySessionLevelsResponseSchema.pick({
+  currentMarketDate: true,
+  currentMarketDateHasDefinedSessionData: true,
+  previousRthMarketDate: true,
+  candleSourceState: true,
+  premarketCoverageState: true,
+  previousRthCoverageState: true,
+  premarketHigh: true,
+  premarketLow: true,
+  previousDayHigh: true,
+  previousDayLow: true,
+  previousDayClose: true,
+  fetchedAt: true,
+  dataAgeMs: true,
+  latestCandleAt: true,
+  warningCode: true,
+});
+export type MarketContextSessionLevelsSummary = z.infer<
+  typeof MarketContextSessionLevelsSummarySchema
+>;
+
+export const MarketContextGapSummarySchema = z.object({
+  currentMarketDate: MarketDateSchema,
+  previousRthMarketDate: MarketDateSchema.nullable(),
+  metricState: GapMetricStateSchema,
+  candleSourceState: QuoteSourceStateSchema,
+  currentRthOpen: z.number().finite().positive().nullable(),
+  currentRthOpenAt: z.string().datetime().nullable(),
+  previousDayClose: z.number().finite().positive().nullable(),
+  gapPoints: z.number().finite().nullable(),
+  gapPercent: z.number().finite().nullable(),
+  direction: GapDirectionSchema,
+  fillState: GapFillStateSchema,
+  firstObservedFillCandleAt: z.string().datetime().nullable(),
+  currentRthCoverageState: CoverageStateSchema,
+  previousRthCoverageState: CoverageStateSchema,
+  latestRthCandleAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: GapWarningCodeSchema.nullable(),
+});
+export type MarketContextGapSummary = z.infer<typeof MarketContextGapSummarySchema>;
+
+export const MarketContextOpeningRangeSummarySchema = z.object({
+  currentMarketDate: MarketDateSchema,
+  metricState: OpeningRangeMetricStateSchema,
+  candleSourceState: QuoteSourceStateSchema,
+  phase: OpeningRangePhaseSchema,
+  openingRangeHigh: z.number().finite().positive().nullable(),
+  openingRangeLow: z.number().finite().positive().nullable(),
+  openingRangeStartAt: z.string().datetime().nullable(),
+  openingRangeEndAt: z.string().datetime().nullable(),
+  openingRangeCandleCount: z.number().int().min(0).max(3),
+  coverageState: CoverageStateSchema,
+  firstOpeningRangeCandleAt: z.string().datetime().nullable(),
+  latestOpeningRangeCandleAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: OpeningRangeWarningCodeSchema.nullable(),
+});
+export type MarketContextOpeningRangeSummary = z.infer<
+  typeof MarketContextOpeningRangeSummarySchema
+>;
+
+export const MarketContextOptionsSummarySchema = z.object({
+  underlyingPrice: z.number().finite().positive().nullable(),
+  underlyingPriceSource: OptionsUnderlyingPriceSourceSchema,
+  currentMarketDate: MarketDateSchema,
+  requestedExpirationDate: MarketDateSchema,
+  returnedExpirationDate: MarketDateSchema.nullable(),
+  requestedStrikeCount: z.number().int().positive(),
+  returnedUniqueStrikeCount: z.number().int().nonnegative(),
+  minimumReturnedStrike: z.number().finite().positive().nullable(),
+  maximumReturnedStrike: z.number().finite().positive().nullable(),
+  atmStrike: z.number().finite().positive().nullable(),
+  callContractCount: z.number().int().nonnegative(),
+  putContractCount: z.number().int().nonnegative(),
+  rejectedContractCount: z.number().int().nonnegative(),
+  sourceState: OptionsChainSourceStateSchema,
+  metricState: OptionsChainMetricStateSchema,
+  latestOptionQuoteAt: z.string().datetime().nullable(),
+  chainFetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: OptionsChainWarningCodeSchema.nullable(),
+});
+export type MarketContextOptionsSummary = z.infer<typeof MarketContextOptionsSummarySchema>;
+
+export const MarketContextExpectedMoveSummarySchema = z.object({
+  methodology: ExpectedMoveMethodologySchema,
+  currentMarketDate: MarketDateSchema,
+  expirationDate: MarketDateSchema.nullable(),
+  metricState: ExpectedMoveMetricStateSchema,
+  sourceState: OptionsChainSourceStateSchema,
+  underlyingPrice: z.number().finite().positive().nullable(),
+  underlyingPriceSource: z.enum(["CHAIN_RESPONSE", "UNAVAILABLE"]),
+  atmStrike: z.number().finite().positive().nullable(),
+  callContractSymbol: z.string().min(1).nullable(),
+  putContractSymbol: z.string().min(1).nullable(),
+  callMark: z.number().finite().nonnegative().nullable(),
+  putMark: z.number().finite().nonnegative().nullable(),
+  impliedMovePoints: z.number().finite().nonnegative().nullable(),
+  impliedMovePercent: z.number().finite().nonnegative().nullable(),
+  upperImpliedMoveLevel: z.number().finite().positive().nullable(),
+  lowerImpliedMoveLevel: z.number().finite().nullable(),
+  callQuoteAt: z.string().datetime().nullable(),
+  putQuoteAt: z.string().datetime().nullable(),
+  latestSelectedContractQuoteAt: z.string().datetime().nullable(),
+  chainFetchedAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: ExpectedMoveWarningCodeSchema.nullable(),
+});
+export type MarketContextExpectedMoveSummary = z.infer<
+  typeof MarketContextExpectedMoveSummarySchema
+>;
+
+export const MarketContextGexSummarySchema = z.object({
+  methodology: GexMethodologySchema,
+  coverageScope: GexCoverageScopeSchema,
+  currentMarketDate: MarketDateSchema,
+  expirationDate: MarketDateSchema.nullable(),
+  metricState: GexMetricStateSchema,
+  sourceState: OptionsChainSourceStateSchema,
+  coverageState: GexCoverageStateSchema,
+  underlyingPrice: z.number().finite().positive().nullable(),
+  requestedStrikeCount: z.number().int().positive().nullable(),
+  returnedUniqueStrikeCount: z.number().int().nonnegative(),
+  minimumReturnedStrike: z.number().finite().positive().nullable(),
+  maximumReturnedStrike: z.number().finite().positive().nullable(),
+  returnedWindowCallGammaExposure: z.number().finite().nonnegative().nullable(),
+  returnedWindowPutGammaExposureMagnitude: z.number().finite().nonnegative().nullable(),
+  returnedWindowNetGammaExposureProxy: z.number().finite().nullable(),
+  eligibleCallContractCount: z.number().int().nonnegative(),
+  eligiblePutContractCount: z.number().int().nonnegative(),
+  eligibleStrikeCount: z.number().int().nonnegative(),
+  latestOptionQuoteAt: z.string().datetime().nullable(),
+  chainFetchedAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: GexWarningCodeSchema.nullable(),
+});
+export type MarketContextGexSummary = z.infer<typeof MarketContextGexSummarySchema>;
+
+export const MarketContextDexSummarySchema = z.object({
+  methodology: DexMethodologySchema,
+  coverageScope: DexCoverageScopeSchema,
+  currentMarketDate: MarketDateSchema,
+  expirationDate: MarketDateSchema.nullable(),
+  metricState: DexMetricStateSchema,
+  sourceState: OptionsChainSourceStateSchema,
+  coverageState: DexCoverageStateSchema,
+  underlyingPrice: z.number().finite().positive().nullable(),
+  requestedStrikeCount: z.number().int().positive().nullable(),
+  returnedUniqueStrikeCount: z.number().int().nonnegative(),
+  minimumReturnedStrike: z.number().finite().positive().nullable(),
+  maximumReturnedStrike: z.number().finite().positive().nullable(),
+  returnedWindowCallDeltaExposure: z.number().finite().nonnegative().nullable(),
+  returnedWindowPutDeltaExposureMagnitude: z.number().finite().nonnegative().nullable(),
+  returnedWindowNetDeltaExposureProxy: z.number().finite().nullable(),
+  eligibleCallContractCount: z.number().int().nonnegative(),
+  eligiblePutContractCount: z.number().int().nonnegative(),
+  eligibleStrikeCount: z.number().int().nonnegative(),
+  latestOptionQuoteAt: z.string().datetime().nullable(),
+  chainFetchedAt: z.string().datetime().nullable(),
+  fetchedAt: z.string().datetime(),
+  dataAgeMs: z.number().nonnegative(),
+  warningCode: DexWarningCodeSchema.nullable(),
+});
+export type MarketContextDexSummary = z.infer<typeof MarketContextDexSummarySchema>;
+
+export const SpyZeroDteMarketContextResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  product: z.literal("SPY_ZERO_DTE_MARKET_CONTEXT"),
+  currentMarketDate: MarketDateSchema,
+  mostRecentRthSessionDate: MarketDateSchema.nullable(),
+  assembledAt: z.string().datetime(),
+  contextState: MarketContextStateSchema,
+  quote: MarketContextQuoteSchema,
+  candles: MarketContextCandleSummarySchema,
+  session: MarketContextSessionSummarySchema,
+  vwap: MarketContextVwapSummarySchema,
+  sessionLevels: MarketContextSessionLevelsSummarySchema,
+  gap: MarketContextGapSummarySchema,
+  openingRange: MarketContextOpeningRangeSummarySchema,
+  options: MarketContextOptionsSummarySchema,
+  expectedMove: MarketContextExpectedMoveSummarySchema,
+  gex: MarketContextGexSummarySchema,
+  dex: MarketContextDexSummarySchema,
+  components: z.array(MarketContextComponentStatusSchema).length(11),
+  componentWarnings: z.array(MarketContextComponentWarningSchema),
+  warningCode: MarketContextWarningCodeSchema.nullable(),
+});
+export type SpyZeroDteMarketContextResponse = z.infer<
+  typeof SpyZeroDteMarketContextResponseSchema
+>;
