@@ -53,6 +53,7 @@ function contract(
     multiplier: 100,
     inTheMoney: false,
     nonStandard: false,
+    isMini: false,
     ...overrides,
   };
 }

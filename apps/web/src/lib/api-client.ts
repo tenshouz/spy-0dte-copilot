@@ -8,6 +8,7 @@ import {
   SpyCandleResponseSchema,
   SpyOpeningRangeResponseSchema,
   SpyZeroDteExpectedMoveResponseSchema,
+  SpyZeroDteGexProxyResponseSchema,
   SpyZeroDteOptionsChainResponseSchema,
   SpyQuoteSchema,
   SpyRthGapResponseSchema,
@@ -23,6 +24,7 @@ import {
   type SpyCandleResponse,
   type SpyOpeningRangeResponse,
   type SpyZeroDteExpectedMoveResponse,
+  type SpyZeroDteGexProxyResponse,
   type SpyZeroDteOptionsChainResponse,
   type SpyQuote,
   type SpyRthGapResponse,
@@ -69,6 +71,8 @@ export const apiClient = {
     getJson("/api/options-chain/spy", SpyZeroDteOptionsChainResponseSchema),
   getSpyZeroDteExpectedMove: (): Promise<SpyZeroDteExpectedMoveResponse> =>
     getJson("/api/expected-move/spy", SpyZeroDteExpectedMoveResponseSchema),
+  getSpyZeroDteGexProxy: (): Promise<SpyZeroDteGexProxyResponse> =>
+    getJson("/api/gex/spy", SpyZeroDteGexProxyResponseSchema),
   getSpyQuote: (): Promise<SpyQuote> => getJson("/api/quote/spy", SpyQuoteSchema),
   getSpyCandles: (): Promise<SpyCandleResponse> => getJson("/api/candles/spy", SpyCandleResponseSchema),
   getSpyRthGap: (): Promise<SpyRthGapResponse> =>

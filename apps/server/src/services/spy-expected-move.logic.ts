@@ -36,6 +36,7 @@ function selectStandardContract(
           contract.expirationDate === expirationDate &&
           contract.strikePrice === strikePrice &&
           contract.nonStandard !== true &&
+          contract.mini !== true &&
           (contract.multiplier === null || contract.multiplier === 100),
       )
       .sort((a, b) => a.contractSymbol.localeCompare(b.contractSymbol))[0] ?? null

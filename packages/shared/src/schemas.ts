@@ -723,6 +723,7 @@ export const NormalizedOptionContractSchema = z.object({
   rho: z.number().finite().nullable(),
   inTheMoney: z.boolean().nullable(),
   nonStandard: z.boolean().nullable(),
+  mini: z.boolean().nullable(),
   multiplier: z.number().finite().positive().nullable(),
   quoteAt: z.string().datetime().nullable(),
   tradeAt: z.string().datetime().nullable(),
@@ -958,3 +959,173 @@ export const SpyZeroDteExpectedMoveResponseSchema = z
     }
   });
 export type SpyZeroDteExpectedMoveResponse = z.infer<typeof SpyZeroDteExpectedMoveResponseSchema>;
+
+/** Deterministic availability and coverage for the bounded SPY 0DTE GEX proxy. */
+export const GexMetricStateSchema = z.enum(["LIVE", "STALE", "UNAVAILABLE"]);
+export type GexMetricState = z.infer<typeof GexMetricStateSchema>;
+
+export const GexCoverageStateSchema = z.enum(["COMPLETE", "PARTIAL", "UNAVAILABLE"]);
+export type GexCoverageState = z.infer<typeof GexCoverageStateSchema>;
+
+export const GexCoverageScopeSchema = z.literal("RETURNED_CHAIN_WINDOW");
+export type GexCoverageScope = z.infer<typeof GexCoverageScopeSchema>;
+
+export const GexMethodologySchema = z.literal("OI_WEIGHTED_GAMMA_PER_1PCT_MOVE");
+export type GexMethodology = z.infer<typeof GexMethodologySchema>;
+
+export const GexWarningCodeSchema = z.enum([
+  "AUTH_REQUIRED",
+  "DATABASE_ERROR",
+  "OPTIONS_ACCESS_UNAVAILABLE",
+  "NO_CURRENT_DATE_EXPIRATION",
+  "OPTIONS_CHAIN_UNAVAILABLE",
+  "UNDERLYING_PRICE_UNAVAILABLE",
+  "NO_ELIGIBLE_GEX_CONTRACTS",
+  "INVALID_GEX_INPUTS",
+  "PARTIAL_GEX_INPUTS",
+  "RETAINED_STALE_CHAIN",
+]);
+export type GexWarningCode = z.infer<typeof GexWarningCodeSchema>;
+
+export const GexStrikeRowSchema = z.object({
+  strikePrice: z.number().finite().positive(),
+  callContractCount: z.number().int().nonnegative(),
+  putContractCount: z.number().int().nonnegative(),
+  callOpenInterest: z.number().int().nonnegative(),
+  putOpenInterest: z.number().int().nonnegative(),
+  callGammaExposure: z.number().finite().nonnegative(),
+  putGammaExposureMagnitude: z.number().finite().nonnegative(),
+  netGammaExposureProxy: z.number().finite(),
+});
+export type GexStrikeRow = z.infer<typeof GexStrikeRowSchema>;
+
+function closeEnough(left: number, right: number): boolean {
+  const tolerance = Math.max(1e-6, Math.max(Math.abs(left), Math.abs(right)) * 1e-12);
+  return Math.abs(left - right) <= tolerance;
+}
+
+export const SpyZeroDteGexProxyResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("ZERO_DTE_ATM_WINDOW_GEX_PROXY"),
+    methodology: GexMethodologySchema,
+    coverageScope: GexCoverageScopeSchema,
+    currentMarketDate: MarketDateSchema,
+    expirationDate: MarketDateSchema.nullable(),
+    metricState: GexMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    coverageState: GexCoverageStateSchema,
+    underlyingPrice: z.number().finite().positive().nullable(),
+    underlyingPriceSource: z.enum(["CHAIN_RESPONSE", "UNAVAILABLE"]),
+    requestedStrikeCount: z.number().int().positive().nullable(),
+    returnedUniqueStrikeCount: z.number().int().nonnegative(),
+    minimumReturnedStrike: z.number().finite().positive().nullable(),
+    maximumReturnedStrike: z.number().finite().positive().nullable(),
+    returnedWindowCallGammaExposure: z.number().finite().nonnegative().nullable(),
+    returnedWindowPutGammaExposureMagnitude: z.number().finite().nonnegative().nullable(),
+    returnedWindowNetGammaExposureProxy: z.number().finite().nullable(),
+    eligibleCallContractCount: z.number().int().nonnegative(),
+    eligiblePutContractCount: z.number().int().nonnegative(),
+    excludedCallContractCount: z.number().int().nonnegative(),
+    excludedPutContractCount: z.number().int().nonnegative(),
+    contractsMissingGamma: z.number().int().nonnegative(),
+    contractsMissingOpenInterest: z.number().int().nonnegative(),
+    contractsMissingMultiplier: z.number().int().nonnegative(),
+    nonstandardContractsExcluded: z.number().int().nonnegative(),
+    miniContractsExcluded: z.number().int().nonnegative(),
+    invalidMultiplierContractsExcluded: z.number().int().nonnegative(),
+    duplicateContractsExcluded: z.number().int().nonnegative(),
+    outOfScopeContractsExcluded: z.number().int().nonnegative(),
+    upstreamRejectedContractCount: z.number().int().nonnegative(),
+    eligibleStrikeCount: z.number().int().nonnegative(),
+    strikes: z.array(GexStrikeRowSchema),
+    latestOptionQuoteAt: z.string().datetime().nullable(),
+    chainFetchedAt: z.string().datetime().nullable(),
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    warningCode: GexWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const available = value.metricState !== "UNAVAILABLE";
+    const totals = [
+      value.returnedWindowCallGammaExposure,
+      value.returnedWindowPutGammaExposureMagnitude,
+      value.returnedWindowNetGammaExposureProxy,
+    ];
+
+    if (value.expirationDate !== null && value.expirationDate !== value.currentMarketDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GEX proxy must use current-date expiration" });
+    }
+
+    if ((value.underlyingPrice === null) !== (value.underlyingPriceSource === "UNAVAILABLE")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GEX underlying source is inconsistent" });
+    }
+
+    if (available) {
+      if (
+        value.expirationDate === null ||
+        value.underlyingPrice === null ||
+        value.chainFetchedAt === null ||
+        value.coverageState === "UNAVAILABLE" ||
+        value.strikes.length === 0 ||
+        totals.some((item) => item === null)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Available GEX proxy requires a current chain snapshot, strike rows, and totals",
+        });
+      }
+      if (value.sourceState !== value.metricState) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GEX proxy cannot exceed chain provenance" });
+      }
+    } else {
+      if (value.coverageState !== "UNAVAILABLE" || value.strikes.length > 0 || totals.some((item) => item !== null)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unavailable GEX proxy cannot expose totals or strike rows",
+        });
+      }
+    }
+
+    if (value.eligibleStrikeCount !== value.strikes.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Eligible GEX strike count is inconsistent" });
+    }
+
+    const sorted = [...value.strikes].sort((a, b) => a.strikePrice - b.strikePrice);
+    if (value.strikes.some((row, index) => row.strikePrice !== sorted[index]?.strikePrice)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GEX strike rows must be sorted ascending" });
+    }
+
+    for (const row of value.strikes) {
+      if (!closeEnough(row.netGammaExposureProxy, row.callGammaExposure - row.putGammaExposureMagnitude)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Per-strike Net GEX proxy is inconsistent" });
+      }
+      if (row.callContractCount + row.putContractCount === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GEX strike row requires an eligible contract" });
+      }
+    }
+
+    if (available) {
+      const callTotal = value.strikes.reduce((sum, row) => sum + row.callGammaExposure, 0);
+      const putTotal = value.strikes.reduce((sum, row) => sum + row.putGammaExposureMagnitude, 0);
+      const netTotal = callTotal - putTotal;
+      if (
+        value.returnedWindowCallGammaExposure === null ||
+        value.returnedWindowPutGammaExposureMagnitude === null ||
+        value.returnedWindowNetGammaExposureProxy === null ||
+        !closeEnough(value.returnedWindowCallGammaExposure, callTotal) ||
+        !closeEnough(value.returnedWindowPutGammaExposureMagnitude, putTotal) ||
+        !closeEnough(value.returnedWindowNetGammaExposureProxy, netTotal)
+      ) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Returned-window GEX totals are inconsistent" });
+      }
+
+      const callCount = value.strikes.reduce((sum, row) => sum + row.callContractCount, 0);
+      const putCount = value.strikes.reduce((sum, row) => sum + row.putContractCount, 0);
+      if (callCount !== value.eligibleCallContractCount || putCount !== value.eligiblePutContractCount) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Eligible GEX contract counts are inconsistent" });
+      }
+    }
+  });
+export type SpyZeroDteGexProxyResponse = z.infer<typeof SpyZeroDteGexProxyResponseSchema>;
+

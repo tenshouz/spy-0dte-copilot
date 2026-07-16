@@ -41,6 +41,7 @@ function contract(
     rho: 0,
     inTheMoney: false,
     nonStandard: false,
+    mini: false,
     multiplier: 100,
     quoteAt: optionType === "CALL" ? "2026-07-15T20:14:59.000Z" : "2026-07-15T20:14:58.000Z",
     tradeAt: null,
