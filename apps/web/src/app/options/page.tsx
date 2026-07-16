@@ -3,6 +3,7 @@
 import type {
   NormalizedOptionContract,
   OptionsChainMetricState,
+  SpyZeroDteExpectedMoveResponse,
 } from "@spy-copilot/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Panel } from "@/components/panels/panel";
@@ -19,6 +20,10 @@ import {
   OPTIONS_CHAIN_TRANSPORT_WARNING,
   useDisplaySpyZeroDteOptionsChain,
 } from "@/hooks/use-spy-options-chain";
+import {
+  EXPECTED_MOVE_TRANSPORT_WARNING,
+  useDisplaySpyZeroDteExpectedMove,
+} from "@/hooks/use-spy-expected-move";
 import { formatEasternTime, formatPrice, formatVolume } from "@/lib/format";
 import { selectAtmCenteredStrikeWindow } from "@/lib/options-chain-window";
 
@@ -125,8 +130,98 @@ function warningMessage(code: string | null): string | null {
   }
 }
 
+
+function expectedMoveWarningMessage(code: string | null): string | null {
+  switch (code) {
+    case "AUTH_REQUIRED":
+      return "Connect Schwab in Settings to calculate the live ATM implied move.";
+    case "OPTIONS_ACCESS_UNAVAILABLE":
+      return "Schwab did not authorize Options Chain access for this connection.";
+    case "NO_CURRENT_DATE_EXPIRATION":
+      return "SPY has no options expiration matching today’s New York date.";
+    case "UNDERLYING_PRICE_UNAVAILABLE":
+      return "The Options Chain did not provide a valid underlying-price snapshot.";
+    case "ATM_STRIKE_UNAVAILABLE":
+      return "No eligible returned strike could be selected as ATM.";
+    case "ATM_CALL_UNAVAILABLE":
+      return "No eligible standard ATM Call was available.";
+    case "ATM_PUT_UNAVAILABLE":
+      return "No eligible standard ATM Put was available.";
+    case "ATM_CALL_MARK_UNAVAILABLE":
+      return "The selected ATM Call did not provide a valid Mark.";
+    case "ATM_PUT_MARK_UNAVAILABLE":
+      return "The selected ATM Put did not provide a valid Mark.";
+    case "RETAINED_STALE_CHAIN":
+      return "The implied move is based on the last eligible retained Options Chain snapshot.";
+    case "OPTIONS_CHAIN_UNAVAILABLE":
+    case "DATABASE_ERROR":
+    case "INVALID_IMPLIED_MOVE_INPUTS":
+      return "The 0DTE ATM implied move is currently unavailable.";
+    default:
+      return null;
+  }
+}
+
+function ExpectedMoveSummary({
+  move,
+  transportFailed,
+}: {
+  move: SpyZeroDteExpectedMoveResponse | null;
+  transportFailed: boolean;
+}) {
+  const badge = move ? STATE_BADGE[move.metricState] : STATE_BADGE.UNAVAILABLE;
+  const warning = move ? expectedMoveWarningMessage(move.warningCode) : null;
+
+  return (
+    <div className="mb-3 rounded-md border border-panel-border bg-panel p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">0DTE ATM Implied Move</h2>
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">ATM Call Mark + ATM Put Mark. Descriptive only; not a probability range or forecast.</p>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-2xl font-semibold tabular">
+            {move?.impliedMovePoints == null ? "—" : `±$${move.impliedMovePoints.toFixed(2)}`}
+          </div>
+          <div className="font-mono text-xs tabular text-muted-foreground">
+            {move?.impliedMovePercent == null ? "—" : `${move.impliedMovePercent.toFixed(3)}%`}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-8">
+        <Summary label="Lower" value={move?.lowerImpliedMoveLevel == null ? "—" : `$${formatPrice(move.lowerImpliedMoveLevel)}`} />
+        <Summary label="Underlying" value={move?.underlyingPrice == null ? "—" : `$${formatPrice(move.underlyingPrice)}`} />
+        <Summary label="Upper" value={move?.upperImpliedMoveLevel == null ? "—" : `$${formatPrice(move.upperImpliedMoveLevel)}`} />
+        <Summary label="ATM Strike" value={move?.atmStrike == null ? "—" : `$${formatPrice(move.atmStrike)}`} />
+        <Summary label="Call Mark" value={move?.callMark == null ? "—" : `$${move.callMark.toFixed(2)}`} />
+        <Summary label="Put Mark" value={move?.putMark == null ? "—" : `$${move.putMark.toFixed(2)}`} />
+        <Summary label="Quote" value={move?.latestSelectedContractQuoteAt ? formatEasternTime(move.latestSelectedContractQuoteAt) : "—"} />
+        <Summary label="Fetched" value={move ? formatEasternTime(move.fetchedAt) : "—"} />
+      </div>
+
+      {move?.callContractSymbol && move?.putContractSymbol && (
+        <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
+          <div className="truncate" title={move.callContractSymbol}>Call: <span className="font-mono">{move.callContractSymbol}</span></div>
+          <div className="truncate" title={move.putContractSymbol}>Put: <span className="font-mono">{move.putContractSymbol}</span></div>
+        </div>
+      )}
+
+      {(transportFailed || warning) && (
+        <div className="mt-3 space-y-1 rounded-md border border-wait/30 bg-wait-muted px-3 py-2 text-xs text-wait">
+          {transportFailed && <p>{EXPECTED_MOVE_TRANSPORT_WARNING}</p>}
+          {warning && <p>{warning}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 export default function OptionsPage() {
   const { display, isLoading, isError } = useDisplaySpyZeroDteOptionsChain();
+  const expectedMoveQuery = useDisplaySpyZeroDteExpectedMove();
   const chain = display?.response ?? null;
   const strikeWindow = chain
     ? selectAtmCenteredStrikeWindow(
@@ -144,6 +239,11 @@ export default function OptionsPage() {
         title="SPY 0DTE Options Chain"
         description="Current New York date only. Provider quotes and Greeks are displayed without ranking or trade recommendations."
         action={<Badge variant={badge.variant}>{badge.label}</Badge>}
+      />
+
+      <ExpectedMoveSummary
+        move={expectedMoveQuery.display?.response ?? null}
+        transportFailed={expectedMoveQuery.display?.transportFailed ?? false}
       />
 
       <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">

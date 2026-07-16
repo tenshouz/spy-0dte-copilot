@@ -847,3 +847,114 @@ export const SpyZeroDteOptionsChainResponseSchema = z
     }
   });
 export type SpyZeroDteOptionsChainResponse = z.infer<typeof SpyZeroDteOptionsChainResponseSchema>;
+
+
+/** Deterministic source/availability state for the SPY 0DTE ATM implied move. */
+export const ExpectedMoveMetricStateSchema = z.enum(["LIVE", "STALE", "UNAVAILABLE"]);
+export type ExpectedMoveMetricState = z.infer<typeof ExpectedMoveMetricStateSchema>;
+
+export const ExpectedMoveMethodologySchema = z.literal("ATM_STRADDLE_MARK");
+export type ExpectedMoveMethodology = z.infer<typeof ExpectedMoveMethodologySchema>;
+
+export const ExpectedMoveWarningCodeSchema = z.enum([
+  "AUTH_REQUIRED",
+  "DATABASE_ERROR",
+  "OPTIONS_ACCESS_UNAVAILABLE",
+  "NO_CURRENT_DATE_EXPIRATION",
+  "OPTIONS_CHAIN_UNAVAILABLE",
+  "UNDERLYING_PRICE_UNAVAILABLE",
+  "ATM_STRIKE_UNAVAILABLE",
+  "ATM_CALL_UNAVAILABLE",
+  "ATM_PUT_UNAVAILABLE",
+  "ATM_CALL_MARK_UNAVAILABLE",
+  "ATM_PUT_MARK_UNAVAILABLE",
+  "INVALID_IMPLIED_MOVE_INPUTS",
+  "RETAINED_STALE_CHAIN",
+]);
+export type ExpectedMoveWarningCode = z.infer<typeof ExpectedMoveWarningCodeSchema>;
+
+export const SpyZeroDteExpectedMoveResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    metric: z.literal("ZERO_DTE_ATM_IMPLIED_MOVE"),
+    methodology: ExpectedMoveMethodologySchema,
+    currentMarketDate: MarketDateSchema,
+    expirationDate: MarketDateSchema.nullable(),
+    metricState: ExpectedMoveMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    underlyingPrice: z.number().finite().positive().nullable(),
+    underlyingPriceSource: z.enum(["CHAIN_RESPONSE", "UNAVAILABLE"]),
+    atmStrike: z.number().finite().positive().nullable(),
+    callContractSymbol: z.string().min(1).nullable(),
+    putContractSymbol: z.string().min(1).nullable(),
+    callMark: z.number().finite().nonnegative().nullable(),
+    putMark: z.number().finite().nonnegative().nullable(),
+    impliedMovePoints: z.number().finite().nonnegative().nullable(),
+    impliedMovePercent: z.number().finite().nonnegative().nullable(),
+    upperImpliedMoveLevel: z.number().finite().positive().nullable(),
+    lowerImpliedMoveLevel: z.number().finite().nullable(),
+    callQuoteAt: z.string().datetime().nullable(),
+    putQuoteAt: z.string().datetime().nullable(),
+    latestSelectedContractQuoteAt: z.string().datetime().nullable(),
+    chainFetchedAt: z.string().datetime().nullable(),
+    fetchedAt: z.string().datetime(),
+    dataAgeMs: z.number().nonnegative(),
+    warningCode: ExpectedMoveWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const available = value.metricState !== "UNAVAILABLE";
+    const requiredValues = [
+      value.expirationDate,
+      value.underlyingPrice,
+      value.atmStrike,
+      value.callContractSymbol,
+      value.putContractSymbol,
+      value.callMark,
+      value.putMark,
+      value.impliedMovePoints,
+      value.impliedMovePercent,
+      value.upperImpliedMoveLevel,
+      value.lowerImpliedMoveLevel,
+      value.chainFetchedAt,
+    ];
+
+    if (available && requiredValues.some((item) => item === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available ATM implied move requires complete selected-contract inputs and calculations",
+      });
+    }
+
+    if (!available) {
+      const calculated = [
+        value.atmStrike,
+        value.callContractSymbol,
+        value.putContractSymbol,
+        value.callMark,
+        value.putMark,
+        value.impliedMovePoints,
+        value.impliedMovePercent,
+        value.upperImpliedMoveLevel,
+        value.lowerImpliedMoveLevel,
+      ];
+      if (calculated.some((item) => item !== null)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unavailable ATM implied move cannot expose selected contracts or calculated values",
+        });
+      }
+    }
+
+    if (value.expirationDate !== null && value.expirationDate !== value.currentMarketDate) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ATM implied move must use current-date expiration" });
+    }
+
+    if ((value.underlyingPrice === null) !== (value.underlyingPriceSource === "UNAVAILABLE")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ATM implied move underlying source is inconsistent" });
+    }
+
+    if (available && value.sourceState !== value.metricState) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Derived ATM implied move cannot exceed chain provenance" });
+    }
+  });
+export type SpyZeroDteExpectedMoveResponse = z.infer<typeof SpyZeroDteExpectedMoveResponseSchema>;
