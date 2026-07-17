@@ -21,6 +21,7 @@ import { sessionDataRouter } from "./routes/session-data.routes";
 import { sessionLevelsRouter } from "./routes/session-levels.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 import { tradePlanRouter } from "./routes/trade-plan.routes";
+import { tradeRiskRouter } from "./routes/trade-risk.routes";
 import { vwapRouter } from "./routes/vwap.routes";
 
 const app = express();
@@ -43,6 +44,7 @@ app.use("/api/market-context", marketContextRouter);
 app.use("/api/market-bias", marketBiasRouter);
 app.use("/api/market-state", marketStateRouter);
 app.use("/api/trade-plan", tradePlanRouter);
+app.use("/api/trade-risk", tradeRiskRouter);
 app.use("/api/opening-range", openingRangeRouter);
 app.use("/api/options-chain", optionsChainRouter);
 app.use("/api/quote", quoteRouter);

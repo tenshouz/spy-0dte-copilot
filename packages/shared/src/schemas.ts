@@ -2634,3 +2634,350 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
 export type SpyZeroDteDeterministicTradePlanResponse = z.infer<
   typeof SpyZeroDteDeterministicTradePlanResponseSchema
 >;
+
+/** Deterministic, same-snapshot SPY underlying objective and risk framework. */
+export const RiskMethodologyVersionSchema = z.literal("RISK_V1");
+export type RiskMethodologyVersion = z.infer<typeof RiskMethodologyVersionSchema>;
+
+export const RiskFrameworkEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
+export type RiskFrameworkEngineState = z.infer<typeof RiskFrameworkEngineStateSchema>;
+
+export const ObjectiveRiskFrameworkStateSchema = z.enum([
+  "READY",
+  "PREVIEW",
+  "NOT_QUALIFIED",
+  "NO_SETUP",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type ObjectiveRiskFrameworkState = z.infer<typeof ObjectiveRiskFrameworkStateSchema>;
+
+export const ObjectiveRiskDirectionSchema = z.enum(["CALLS", "PUTS", "NONE", "UNAVAILABLE"]);
+export type ObjectiveRiskDirection = z.infer<typeof ObjectiveRiskDirectionSchema>;
+
+export const PlanningReferenceTypeSchema = z.enum([
+  "CURRENT_PRICE",
+  "TRIGGER_LEVEL",
+  "UNAVAILABLE",
+]);
+export type PlanningReferenceType = z.infer<typeof PlanningReferenceTypeSchema>;
+
+export const RiskQualificationStateSchema = z.enum([
+  "QUALIFIED",
+  "NOT_QUALIFIED",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type RiskQualificationState = z.infer<typeof RiskQualificationStateSchema>;
+
+export const RiskCandidateSourceStatusSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
+export type RiskCandidateSourceStatus = z.infer<typeof RiskCandidateSourceStatusSchema>;
+
+export const RiskCandidateEligibilityStatusSchema = z.enum([
+  "SELECTABLE",
+  "REJECTED",
+  "UNAVAILABLE",
+]);
+export type RiskCandidateEligibilityStatus = z.infer<typeof RiskCandidateEligibilityStatusSchema>;
+
+export const ObjectiveQualificationStatusSchema = z.enum([
+  "QUALIFIED",
+  "BELOW_MINIMUM_RATIO",
+  "NOT_EVALUATED",
+  "UNAVAILABLE",
+]);
+export type ObjectiveQualificationStatus = z.infer<typeof ObjectiveQualificationStatusSchema>;
+
+export const ObjectiveLevelTypeSchema = z.enum([
+  "PREVIOUS_DAY_HIGH",
+  "PREVIOUS_DAY_LOW",
+  "PREMARKET_HIGH",
+  "PREMARKET_LOW",
+  "EXPECTED_MOVE_UPPER",
+  "EXPECTED_MOVE_LOWER",
+]);
+export type ObjectiveLevelType = z.infer<typeof ObjectiveLevelTypeSchema>;
+
+export const ObjectiveCandidateIdSchema = z.enum([
+  "OBJECTIVE_PREVIOUS_DAY_HIGH",
+  "OBJECTIVE_PREVIOUS_DAY_LOW",
+  "OBJECTIVE_PREMARKET_HIGH",
+  "OBJECTIVE_PREMARKET_LOW",
+  "OBJECTIVE_EXPECTED_MOVE_UPPER",
+  "OBJECTIVE_EXPECTED_MOVE_LOWER",
+]);
+export type ObjectiveCandidateId = z.infer<typeof ObjectiveCandidateIdSchema>;
+
+export const InvalidationLevelTypeSchema = z.enum([
+  "CURRENT_RTH_VWAP",
+  "OPENING_RANGE_HIGH",
+  "OPENING_RANGE_LOW",
+]);
+export type InvalidationLevelType = z.infer<typeof InvalidationLevelTypeSchema>;
+
+export const InvalidationCandidateIdSchema = z.enum([
+  "INVALIDATION_CURRENT_RTH_VWAP",
+  "INVALIDATION_OPENING_RANGE_HIGH",
+  "INVALIDATION_OPENING_RANGE_LOW",
+]);
+export type InvalidationCandidateId = z.infer<typeof InvalidationCandidateIdSchema>;
+
+export const RiskLevelSemanticSchema = z.enum(["STRUCTURAL_LEVEL", "IMPLIED_MOVE_BOUNDARY"]);
+export type RiskLevelSemantic = z.infer<typeof RiskLevelSemanticSchema>;
+
+export const RiskPlanningReferenceDisclosureSchema = z.literal("PLANNING_REFERENCE_ONLY");
+export type RiskPlanningReferenceDisclosure = z.infer<typeof RiskPlanningReferenceDisclosureSchema>;
+
+export const RiskCandidateRejectionReasonCodeSchema = z.enum([
+  "LEVEL_NOT_FINITE",
+  "LEVEL_NOT_POSITIVE",
+  "LEVEL_NOT_ON_FAVORABLE_SIDE",
+  "LEVEL_NOT_ON_ADVERSE_SIDE",
+  "LEVEL_EQUALS_PLANNING_REFERENCE",
+  "SOURCE_UNAVAILABLE",
+  "SOURCE_PARTIAL",
+  "REFERENCE_DATE_MISMATCH",
+  "EXPIRATION_MISMATCH",
+  "NON_POSITIVE_DISTANCE",
+]);
+export type RiskCandidateRejectionReasonCode = z.infer<
+  typeof RiskCandidateRejectionReasonCodeSchema
+>;
+
+export const RiskPrimaryReasonCodeSchema = z.enum([
+  "RISK_FRAMEWORK_READY",
+  "RISK_FRAMEWORK_PREVIEW",
+  "SOURCE_TRADE_PLAN_NO_SETUP",
+  "SOURCE_TRADE_PLAN_NOT_APPLICABLE",
+  "SOURCE_TRADE_PLAN_UNAVAILABLE",
+  "PLANNING_REFERENCE_UNAVAILABLE",
+  "NO_ADVERSE_INVALIDATION_CANDIDATE",
+  "NO_FAVORABLE_OBJECTIVE_CANDIDATE",
+  "NO_OBJECTIVE_MEETS_MINIMUM_RATIO",
+  "REQUIRED_LEVEL_PARTIAL",
+  "CURRENT_SESSION_DATE_MISMATCH",
+  "EXPECTED_MOVE_EXPIRATION_MISMATCH",
+  "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+]);
+export type RiskPrimaryReasonCode = z.infer<typeof RiskPrimaryReasonCodeSchema>;
+
+export const RiskOverallWarningCodeSchema = z.enum([
+  "MARKET_STATE_UNAVAILABLE",
+  "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "TRADE_PLAN_UNAVAILABLE",
+  "PLANNING_REFERENCE_UNAVAILABLE",
+  "REQUIRED_LEVEL_PARTIAL",
+  "REQUIRED_LEVEL_STALE",
+  "CURRENT_SESSION_DATE_MISMATCH",
+  "EXPECTED_MOVE_EXPIRATION_MISMATCH",
+  "INVALID_NUMERIC_LEVEL",
+  "INSUFFICIENT_RISK_DATA",
+]);
+export type RiskOverallWarningCode = z.infer<typeof RiskOverallWarningCodeSchema>;
+
+export const RiskPlanningReferenceSchema = z.object({
+  type: PlanningReferenceTypeSchema,
+  price: z.number().finite().positive().nullable(),
+  priceSource: MarketStatePriceSourceSchema.nullable(),
+  sourceFeatureIds: z.array(MarketStateFeatureIdSchema),
+  sourceCalculatedAt: z.string().datetime().nullable(),
+  quoteTimestamp: z.string().datetime().nullable(),
+  triggerLevel: z.number().finite().positive().nullable(),
+  disclosureCode: RiskPlanningReferenceDisclosureSchema,
+});
+export type RiskPlanningReference = z.infer<typeof RiskPlanningReferenceSchema>;
+
+export const ObjectiveLevelCandidateSchema = z.object({
+  candidateId: ObjectiveCandidateIdSchema,
+  levelType: ObjectiveLevelTypeSchema,
+  levelSemantic: RiskLevelSemanticSchema,
+  level: z.number().finite().nullable(),
+  sourceStatus: RiskCandidateSourceStatusSchema,
+  eligibilityStatus: RiskCandidateEligibilityStatusSchema,
+  qualificationStatus: ObjectiveQualificationStatusSchema,
+  selectable: z.boolean(),
+  sourceFeatureId: MarketStateFeatureIdSchema,
+  sourceComponents: z.array(MarketContextComponentSchema).min(1),
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  objectiveDistancePoints: z.number().finite().positive().nullable(),
+  distanceRank: z.number().int().positive().nullable(),
+  rewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  minimumRewardRiskRatio: z.number().finite().positive(),
+  rejectionReasonCode: RiskCandidateRejectionReasonCodeSchema.nullable(),
+  warningCode: z.string().min(1).nullable(),
+});
+export type ObjectiveLevelCandidate = z.infer<typeof ObjectiveLevelCandidateSchema>;
+
+export const InvalidationLevelCandidateSchema = z.object({
+  candidateId: InvalidationCandidateIdSchema,
+  levelType: InvalidationLevelTypeSchema,
+  levelSemantic: z.literal("STRUCTURAL_LEVEL"),
+  level: z.number().finite().nullable(),
+  sourceStatus: RiskCandidateSourceStatusSchema,
+  eligibilityStatus: RiskCandidateEligibilityStatusSchema,
+  selectable: z.boolean(),
+  sourceFeatureId: MarketStateFeatureIdSchema,
+  sourceComponents: z.array(MarketContextComponentSchema).min(1),
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  riskDistancePoints: z.number().finite().positive().nullable(),
+  distanceRank: z.number().int().positive().nullable(),
+  rejectionReasonCode: RiskCandidateRejectionReasonCodeSchema.nullable(),
+  warningCode: z.string().min(1).nullable(),
+});
+export type InvalidationLevelCandidate = z.infer<typeof InvalidationLevelCandidateSchema>;
+
+export const SelectedInvalidationSchema = z.object({
+  candidateId: InvalidationCandidateIdSchema.nullable(),
+  levelType: InvalidationLevelTypeSchema.nullable(),
+  level: z.number().finite().positive().nullable(),
+  riskDistancePoints: z.number().finite().positive().nullable(),
+});
+export type SelectedInvalidation = z.infer<typeof SelectedInvalidationSchema>;
+
+export const SelectedObjectiveSchema = z.object({
+  candidateId: ObjectiveCandidateIdSchema.nullable(),
+  levelType: ObjectiveLevelTypeSchema.nullable(),
+  level: z.number().finite().positive().nullable(),
+  objectiveDistancePoints: z.number().finite().positive().nullable(),
+  rewardRiskRatio: z.number().finite().nonnegative().nullable(),
+});
+export type SelectedObjective = z.infer<typeof SelectedObjectiveSchema>;
+
+export const RiskMethodologySchema = z.object({
+  objectiveSourceTypes: z.array(ObjectiveLevelTypeSchema).length(6),
+  invalidationSourceTypes: z.array(InvalidationLevelTypeSchema).length(3),
+  objectiveTieBreakOrder: z.array(ObjectiveLevelTypeSchema).length(6),
+  invalidationTieBreakOrderCalls: z.array(InvalidationLevelTypeSchema).length(3),
+  invalidationTieBreakOrderPuts: z.array(InvalidationLevelTypeSchema).length(3),
+  invalidationSelection: z.literal("NEAREST_VALID_ADVERSE_STRUCTURAL_LEVEL"),
+  objectiveSelection: z.literal("NEAREST_QUALIFIED_FAVORABLE_LEVEL"),
+  minimumRewardRiskRatio: z.number().finite().positive(),
+  calculationsUse: z.literal("SPY_UNDERLYING_PRICE_POINTS"),
+  duplicateLevelPolicy: z.literal("PRESERVE_SEPARATE_CANDIDATES_EXACT_EQUALITY_ONLY"),
+  partialSelectionPolicy: z.literal("PARTIAL_CANDIDATES_VISIBLE_BUT_NOT_SELECTABLE"),
+});
+export type RiskMethodology = z.infer<typeof RiskMethodologySchema>;
+
+export const SpyZeroDteObjectiveRiskResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_OBJECTIVE_RISK_FRAMEWORK"),
+    methodologyVersion: RiskMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    sourceMarketStateEngineVersion: MarketStateFeatureVersionSchema,
+    sourceMarketStateEngineState: MarketStateEngineStateSchema,
+    sourceMarketStateCalculatedAt: z.string().datetime(),
+    sourceBiasMethodologyVersion: BiasMethodologyVersionSchema,
+    sourceBiasCalculatedAt: z.string().datetime(),
+    sourceBiasMarketStateCalculatedAt: z.string().datetime(),
+    sourceTradePlanMethodologyVersion: TradePlanMethodologyVersionSchema,
+    sourceTradePlanCalculatedAt: z.string().datetime(),
+    sourceTradePlanMarketStateCalculatedAt: z.string().datetime(),
+    sourceTradePlanBiasCalculatedAt: z.string().datetime(),
+    sameSnapshotGuaranteed: z.boolean(),
+    calculatedAt: z.string().datetime(),
+    engineState: RiskFrameworkEngineStateSchema,
+    frameworkState: ObjectiveRiskFrameworkStateSchema,
+    direction: ObjectiveRiskDirectionSchema,
+    riskQualification: RiskQualificationStateSchema,
+    isCurrentlyTradeEligible: z.boolean(),
+    sourceTradePlanSetupState: TradeSetupStateSchema,
+    sourceTradePlanSetupDirection: TradeSetupDirectionSchema,
+    currentPrice: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    quoteTimestamp: z.string().datetime().nullable(),
+    planningReference: RiskPlanningReferenceSchema,
+    minimumRewardRiskRatio: z.number().finite().positive(),
+    invalidationCandidates: z.array(InvalidationLevelCandidateSchema),
+    selectedInvalidation: SelectedInvalidationSchema,
+    objectiveCandidates: z.array(ObjectiveLevelCandidateSchema),
+    selectedObjective: SelectedObjectiveSchema,
+    primaryReasonCode: RiskPrimaryReasonCodeSchema,
+    warningCode: RiskOverallWarningCodeSchema.nullable(),
+    methodology: RiskMethodologySchema,
+  })
+  .superRefine((value, ctx) => {
+    const timestampsMatch =
+      value.sourceMarketStateCalculatedAt === value.sourceBiasMarketStateCalculatedAt &&
+      value.sourceMarketStateCalculatedAt === value.sourceTradePlanMarketStateCalculatedAt &&
+      value.sourceBiasCalculatedAt === value.sourceTradePlanBiasCalculatedAt;
+    if (value.sameSnapshotGuaranteed !== timestampsMatch) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Risk sameSnapshotGuaranteed must match all Market-State source timestamps",
+      });
+    }
+
+    const emptyPlanningReference = value.planningReference.price === null;
+    if (["NO_SETUP", "NOT_APPLICABLE"].includes(value.frameworkState)) {
+      if (!emptyPlanningReference || value.invalidationCandidates.length > 0 || value.objectiveCandidates.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "NO_SETUP and NOT_APPLICABLE Risk states cannot expose planning candidates",
+        });
+      }
+    }
+
+    if (value.frameworkState === "READY") {
+      if (
+        value.engineState !== "AVAILABLE" ||
+        value.sourceTradePlanSetupState !== "ELIGIBLE" ||
+        value.planningReference.type !== "CURRENT_PRICE" ||
+        !value.isCurrentlyTradeEligible ||
+        value.riskQualification !== "QUALIFIED"
+      ) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "READY Risk framework is inconsistent" });
+      }
+    }
+
+    if (value.frameworkState === "PREVIEW") {
+      if (
+        value.engineState !== "AVAILABLE" ||
+        value.sourceTradePlanSetupState !== "WAITING_FOR_TRIGGER" ||
+        value.planningReference.type !== "TRIGGER_LEVEL" ||
+        value.isCurrentlyTradeEligible ||
+        value.riskQualification !== "QUALIFIED"
+      ) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "PREVIEW Risk framework is inconsistent" });
+      }
+    }
+
+    if (value.frameworkState === "NOT_QUALIFIED" && value.riskQualification !== "NOT_QUALIFIED") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NOT_QUALIFIED framework requires matching Risk Qualification" });
+    }
+    if (["NO_SETUP", "NOT_APPLICABLE"].includes(value.frameworkState) && value.riskQualification !== "NOT_APPLICABLE") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Non-applicable framework requires NOT_APPLICABLE qualification" });
+    }
+    if (value.frameworkState === "UNAVAILABLE" && value.riskQualification !== "UNAVAILABLE") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "UNAVAILABLE framework requires UNAVAILABLE qualification" });
+    }
+
+    const selectedInvalidation = value.selectedInvalidation.candidateId === null
+      ? null
+      : value.invalidationCandidates.find((candidate) => candidate.candidateId === value.selectedInvalidation.candidateId) ?? null;
+    if (value.selectedInvalidation.candidateId !== null && (!selectedInvalidation || !selectedInvalidation.selectable)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selected invalidation must reference a selectable candidate" });
+    }
+
+    const selectedObjective = value.selectedObjective.candidateId === null
+      ? null
+      : value.objectiveCandidates.find((candidate) => candidate.candidateId === value.selectedObjective.candidateId) ?? null;
+    if (
+      value.selectedObjective.candidateId !== null &&
+      (!selectedObjective || selectedObjective.qualificationStatus !== "QUALIFIED")
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selected objective must reference a qualified candidate" });
+    }
+
+    if (value.riskQualification === "QUALIFIED") {
+      if (value.selectedInvalidation.candidateId === null || value.selectedObjective.candidateId === null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "QUALIFIED Risk requires selected objective and invalidation" });
+      }
+    }
+  });
+export type SpyZeroDteObjectiveRiskResponse = z.infer<
+  typeof SpyZeroDteObjectiveRiskResponseSchema
+>;
