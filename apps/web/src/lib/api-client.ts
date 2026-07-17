@@ -16,6 +16,7 @@ import {
   SpyRthVwapResponseSchema,
   SpySessionLevelsResponseSchema,
   SpyZeroDteMarketContextResponseSchema,
+  SpyZeroDteDeterministicMarketStateResponseSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
@@ -34,6 +35,7 @@ import {
   type SpyRthVwapResponse,
   type SpySessionLevelsResponse,
   type SpyZeroDteMarketContextResponse,
+  type SpyZeroDteDeterministicMarketStateResponse,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -89,6 +91,8 @@ export const apiClient = {
     getJson("/api/session-levels/spy", SpySessionLevelsResponseSchema),
   getSpyZeroDteMarketContext: (): Promise<SpyZeroDteMarketContextResponse> =>
     getJson("/api/market-context/spy", SpyZeroDteMarketContextResponseSchema),
+  getSpyZeroDteDeterministicMarketState: (): Promise<SpyZeroDteDeterministicMarketStateResponse> =>
+    getJson("/api/market-state/spy", SpyZeroDteDeterministicMarketStateResponseSchema),
 };
 
 export const schwabLoginUrl = `${API_BASE_URL}/api/auth/schwab/login`;

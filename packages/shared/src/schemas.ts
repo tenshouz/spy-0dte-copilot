@@ -1630,3 +1630,359 @@ export const SpyZeroDteMarketContextResponseSchema = z.object({
 export type SpyZeroDteMarketContextResponse = z.infer<
   typeof SpyZeroDteMarketContextResponseSchema
 >;
+
+/** Deterministic, recommendation-free feature layer derived only from Unified Market Context. */
+export const MarketStateEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
+export type MarketStateEngineState = z.infer<typeof MarketStateEngineStateSchema>;
+
+export const MarketStateFeatureStatusSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type MarketStateFeatureStatus = z.infer<typeof MarketStateFeatureStatusSchema>;
+
+export const MarketStateFeatureIdSchema = z.enum([
+  "SESSION_PHASE",
+  "PRICE_VS_VWAP",
+  "PRICE_VS_PRIOR_DAY_RANGE",
+  "PRICE_VS_PREMARKET_RANGE",
+  "PRICE_VS_OPENING_RANGE",
+  "RTH_GAP_CONTEXT",
+  "PRICE_VS_EXPECTED_MOVE_RANGE",
+  "RETURNED_WINDOW_NET_GEX_SIGN",
+  "RETURNED_WINDOW_NET_DEX_SIGN",
+]);
+export type MarketStateFeatureId = z.infer<typeof MarketStateFeatureIdSchema>;
+
+export const MarketStateFeatureVersionSchema = z.literal("V1");
+export type MarketStateFeatureVersion = z.infer<typeof MarketStateFeatureVersionSchema>;
+
+export const MarketStatePriceSourceSchema = z.literal("QUOTE_LAST_PRICE");
+export type MarketStatePriceSource = z.infer<typeof MarketStatePriceSourceSchema>;
+
+export const MarketStateReferenceDateRelationSchema = z.enum([
+  "CURRENT_MARKET_DATE",
+  "MOST_RECENT_RTH_SESSION",
+  "PREVIOUS_RTH_SESSION",
+  "CURRENT_EXPIRATION",
+  "UNKNOWN",
+]);
+export type MarketStateReferenceDateRelation = z.infer<
+  typeof MarketStateReferenceDateRelationSchema
+>;
+
+export const MarketStateRangePositionSchema = z.enum([
+  "ABOVE_RANGE",
+  "AT_HIGH",
+  "AT_BOUNDARY",
+  "INSIDE_RANGE",
+  "AT_LOW",
+  "BELOW_RANGE",
+]);
+export type MarketStateRangePosition = z.infer<typeof MarketStateRangePositionSchema>;
+
+export const MarketStateExpectedMovePositionSchema = z.enum([
+  "ABOVE_UPPER",
+  "AT_UPPER",
+  "AT_BOUNDARY",
+  "INSIDE_RANGE",
+  "AT_LOWER",
+  "BELOW_LOWER",
+]);
+export type MarketStateExpectedMovePosition = z.infer<
+  typeof MarketStateExpectedMovePositionSchema
+>;
+
+export const MarketStateSignSchema = z.enum(["POSITIVE", "NEGATIVE", "ZERO"]);
+export type MarketStateSign = z.infer<typeof MarketStateSignSchema>;
+
+export const MarketStateOverallWarningCodeSchema = z.enum([
+  "MARKET_CONTEXT_UNAVAILABLE",
+  "CURRENT_PRICE_UNAVAILABLE",
+  "REQUIRED_FEATURES_UNAVAILABLE",
+  "PARTIAL_MARKET_STATE",
+]);
+export type MarketStateOverallWarningCode = z.infer<
+  typeof MarketStateOverallWarningCodeSchema
+>;
+
+const MarketStateFeatureAuditBase = {
+  featureVersion: MarketStateFeatureVersionSchema,
+  status: MarketStateFeatureStatusSchema,
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  warningCode: z.string().min(1).nullable(),
+};
+
+export const SessionPhaseFeatureSchema = z.object({
+  featureId: z.literal("SESSION_PHASE"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketContextSessionWindowSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("SESSION_DATA")]),
+  inputs: z.object({
+    currentMarketDate: MarketDateSchema,
+    currentSessionWindow: MarketContextSessionWindowSchema,
+    currentObservedMarketDate: MarketDateSchema.nullable(),
+    sourceState: QuoteSourceStateSchema,
+  }),
+  derived: z.object({}),
+});
+export type SessionPhaseFeature = z.infer<typeof SessionPhaseFeatureSchema>;
+
+export const PriceVsVwapFeatureSchema = z.object({
+  featureId: z.literal("PRICE_VS_VWAP"),
+  ...MarketStateFeatureAuditBase,
+  state: z.enum(["ABOVE", "BELOW", "EQUAL"]).nullable(),
+  sourceComponents: z.tuple([z.literal("QUOTE"), z.literal("VWAP")]),
+  inputs: z.object({
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    vwap: z.number().finite().positive().nullable(),
+    vwapMarketDate: MarketDateSchema.nullable(),
+    quoteSourceState: QuoteSourceStateSchema,
+    vwapMetricState: VwapMetricStateSchema,
+    vwapSourceState: QuoteSourceStateSchema,
+  }),
+  derived: z.object({
+    distancePoints: z.number().finite().nullable(),
+    distancePercent: z.number().finite().nullable(),
+  }),
+});
+export type PriceVsVwapFeature = z.infer<typeof PriceVsVwapFeatureSchema>;
+
+export const PriceVsPriorDayRangeFeatureSchema = z.object({
+  featureId: z.literal("PRICE_VS_PRIOR_DAY_RANGE"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketStateRangePositionSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("QUOTE"), z.literal("SESSION_LEVELS")]),
+  inputs: z.object({
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    previousDayHigh: z.number().finite().positive().nullable(),
+    previousDayLow: z.number().finite().positive().nullable(),
+    previousDayHighState: SessionLevelStateSchema,
+    previousDayLowState: SessionLevelStateSchema,
+    previousRthMarketDate: MarketDateSchema.nullable(),
+    previousRthCoverageState: CoverageStateSchema,
+  }),
+  derived: z.object({
+    distanceToHighPoints: z.number().finite().nullable(),
+    distanceToLowPoints: z.number().finite().nullable(),
+  }),
+});
+export type PriceVsPriorDayRangeFeature = z.infer<
+  typeof PriceVsPriorDayRangeFeatureSchema
+>;
+
+export const PriceVsPremarketRangeFeatureSchema = z.object({
+  featureId: z.literal("PRICE_VS_PREMARKET_RANGE"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketStateRangePositionSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("QUOTE"), z.literal("SESSION_LEVELS")]),
+  inputs: z.object({
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    premarketHigh: z.number().finite().positive().nullable(),
+    premarketLow: z.number().finite().positive().nullable(),
+    premarketHighState: SessionLevelStateSchema,
+    premarketLowState: SessionLevelStateSchema,
+    currentMarketDate: MarketDateSchema,
+    currentSessionWindow: MarketContextSessionWindowSchema,
+    currentMarketDateHasDefinedSessionData: z.boolean(),
+    premarketCoverageState: CoverageStateSchema,
+  }),
+  derived: z.object({
+    distanceToHighPoints: z.number().finite().nullable(),
+    distanceToLowPoints: z.number().finite().nullable(),
+  }),
+});
+export type PriceVsPremarketRangeFeature = z.infer<
+  typeof PriceVsPremarketRangeFeatureSchema
+>;
+
+export const PriceVsOpeningRangeFeatureSchema = z.object({
+  featureId: z.literal("PRICE_VS_OPENING_RANGE"),
+  ...MarketStateFeatureAuditBase,
+  state: z.union([MarketStateRangePositionSchema, z.enum(["NOT_STARTED", "FORMING"])]).nullable(),
+  sourceComponents: z.tuple([z.literal("QUOTE"), z.literal("OPENING_RANGE")]),
+  inputs: z.object({
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    openingRangeHigh: z.number().finite().positive().nullable(),
+    openingRangeLow: z.number().finite().positive().nullable(),
+    phase: OpeningRangePhaseSchema,
+    currentMarketDate: MarketDateSchema,
+    metricState: OpeningRangeMetricStateSchema,
+    sourceState: QuoteSourceStateSchema,
+    coverageState: CoverageStateSchema,
+  }),
+  derived: z.object({
+    distanceToHighPoints: z.number().finite().nullable(),
+    distanceToLowPoints: z.number().finite().nullable(),
+  }),
+});
+export type PriceVsOpeningRangeFeature = z.infer<
+  typeof PriceVsOpeningRangeFeatureSchema
+>;
+
+export const RthGapContextFeatureSchema = z.object({
+  featureId: z.literal("RTH_GAP_CONTEXT"),
+  ...MarketStateFeatureAuditBase,
+  state: z.enum(["UP", "DOWN", "FLAT"]).nullable(),
+  sourceComponents: z.tuple([z.literal("GAP")]),
+  inputs: z.object({
+    currentMarketDate: MarketDateSchema,
+    previousRthMarketDate: MarketDateSchema.nullable(),
+    currentRthOpen: z.number().finite().positive().nullable(),
+    previousDayClose: z.number().finite().positive().nullable(),
+    gapPoints: z.number().finite().nullable(),
+    gapPercent: z.number().finite().nullable(),
+    direction: GapDirectionSchema,
+    fillState: GapFillStateSchema,
+    firstObservedFillCandleAt: z.string().datetime().nullable(),
+    metricState: GapMetricStateSchema,
+    sourceState: QuoteSourceStateSchema,
+    currentRthCoverageState: CoverageStateSchema,
+    previousRthCoverageState: CoverageStateSchema,
+  }),
+  derived: z.object({}),
+});
+export type RthGapContextFeature = z.infer<typeof RthGapContextFeatureSchema>;
+
+export const PriceVsExpectedMoveRangeFeatureSchema = z.object({
+  featureId: z.literal("PRICE_VS_EXPECTED_MOVE_RANGE"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketStateExpectedMovePositionSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("QUOTE"), z.literal("EXPECTED_MOVE")]),
+  inputs: z.object({
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    upperImpliedMoveLevel: z.number().finite().positive().nullable(),
+    lowerImpliedMoveLevel: z.number().finite().nullable(),
+    expirationDate: MarketDateSchema.nullable(),
+    currentMarketDate: MarketDateSchema,
+    metricState: ExpectedMoveMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+  }),
+  derived: z.object({
+    distanceToUpperPoints: z.number().finite().nullable(),
+    distanceToLowerPoints: z.number().finite().nullable(),
+  }),
+});
+export type PriceVsExpectedMoveRangeFeature = z.infer<
+  typeof PriceVsExpectedMoveRangeFeatureSchema
+>;
+
+export const NetGexProxySignFeatureSchema = z.object({
+  featureId: z.literal("RETURNED_WINDOW_NET_GEX_SIGN"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketStateSignSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("GEX")]),
+  inputs: z.object({
+    netGammaExposureProxy: z.number().finite().nullable(),
+    methodology: GexMethodologySchema,
+    coverageScope: GexCoverageScopeSchema,
+    coverageState: GexCoverageStateSchema,
+    metricState: GexMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    eligibleStrikeCount: z.number().int().nonnegative(),
+    expirationDate: MarketDateSchema.nullable(),
+  }),
+  derived: z.object({}),
+});
+export type NetGexProxySignFeature = z.infer<typeof NetGexProxySignFeatureSchema>;
+
+export const NetDexProxySignFeatureSchema = z.object({
+  featureId: z.literal("RETURNED_WINDOW_NET_DEX_SIGN"),
+  ...MarketStateFeatureAuditBase,
+  state: MarketStateSignSchema.nullable(),
+  sourceComponents: z.tuple([z.literal("DEX")]),
+  inputs: z.object({
+    netDeltaExposureProxy: z.number().finite().nullable(),
+    methodology: DexMethodologySchema,
+    coverageScope: DexCoverageScopeSchema,
+    coverageState: DexCoverageStateSchema,
+    metricState: DexMetricStateSchema,
+    sourceState: OptionsChainSourceStateSchema,
+    eligibleStrikeCount: z.number().int().nonnegative(),
+    expirationDate: MarketDateSchema.nullable(),
+  }),
+  derived: z.object({}),
+});
+export type NetDexProxySignFeature = z.infer<typeof NetDexProxySignFeatureSchema>;
+
+export const MarketStateFeatureStatusEntrySchema = z.object({
+  featureId: MarketStateFeatureIdSchema,
+  status: MarketStateFeatureStatusSchema,
+  warningCode: z.string().min(1).nullable(),
+});
+export type MarketStateFeatureStatusEntry = z.infer<
+  typeof MarketStateFeatureStatusEntrySchema
+>;
+
+export const MarketStateFeatureWarningSchema = z.object({
+  featureId: MarketStateFeatureIdSchema,
+  warningCode: z.string().min(1),
+});
+export type MarketStateFeatureWarning = z.infer<typeof MarketStateFeatureWarningSchema>;
+
+export const SpyZeroDteDeterministicMarketStateResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_MARKET_STATE"),
+    engineVersion: MarketStateFeatureVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    sourceContextState: MarketContextStateSchema,
+    sourceContextAssembledAt: z.string().datetime(),
+    calculatedAt: z.string().datetime(),
+    engineState: MarketStateEngineStateSchema,
+    price: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    quoteTimestamp: z.string().datetime().nullable(),
+    quoteSourceState: QuoteSourceStateSchema,
+    features: z.object({
+      sessionPhase: SessionPhaseFeatureSchema,
+      priceVsVwap: PriceVsVwapFeatureSchema,
+      priceVsPriorDayRange: PriceVsPriorDayRangeFeatureSchema,
+      priceVsPremarketRange: PriceVsPremarketRangeFeatureSchema,
+      priceVsOpeningRange: PriceVsOpeningRangeFeatureSchema,
+      gapContext: RthGapContextFeatureSchema,
+      priceVsExpectedMoveRange: PriceVsExpectedMoveRangeFeatureSchema,
+      netGexProxySign: NetGexProxySignFeatureSchema,
+      netDexProxySign: NetDexProxySignFeatureSchema,
+    }),
+    featureStatuses: z.array(MarketStateFeatureStatusEntrySchema).length(9),
+    featureWarnings: z.array(MarketStateFeatureWarningSchema),
+    warningCode: MarketStateOverallWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.price === null) !== (value.priceSource === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Market-State price and priceSource must be jointly available or unavailable",
+      });
+    }
+
+    const features = Object.values(value.features);
+    const ids = new Set(features.map((feature) => feature.featureId));
+    if (ids.size !== 9) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Market-State feature IDs must be unique" });
+    }
+
+    const statusById = new Map(value.featureStatuses.map((item) => [item.featureId, item]));
+    for (const feature of features) {
+      const entry = statusById.get(feature.featureId);
+      if (!entry || entry.status !== feature.status || entry.warningCode !== feature.warningCode) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Market-State status entry is inconsistent for ${feature.featureId}`,
+        });
+      }
+    }
+  });
+export type SpyZeroDteDeterministicMarketStateResponse = z.infer<
+  typeof SpyZeroDteDeterministicMarketStateResponseSchema
+>;
