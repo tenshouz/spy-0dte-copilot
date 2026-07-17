@@ -2243,3 +2243,394 @@ export const SpyZeroDteDeterministicBiasResponseSchema = z
 export type SpyZeroDteDeterministicBiasResponse = z.infer<
   typeof SpyZeroDteDeterministicBiasResponseSchema
 >;
+
+/** Deterministic, same-snapshot conditional setup-eligibility layer. */
+export const TradePlanMethodologyVersionSchema = z.literal("TRADE_PLAN_V1");
+export type TradePlanMethodologyVersion = z.infer<typeof TradePlanMethodologyVersionSchema>;
+
+export const TradePlanEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
+export type TradePlanEngineState = z.infer<typeof TradePlanEngineStateSchema>;
+
+export const TradeSetupDirectionSchema = z.enum(["CALLS", "PUTS", "NONE", "UNAVAILABLE"]);
+export type TradeSetupDirection = z.infer<typeof TradeSetupDirectionSchema>;
+
+export const TradeSetupStateSchema = z.enum([
+  "ELIGIBLE",
+  "WAITING_FOR_TRIGGER",
+  "NO_SETUP",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type TradeSetupState = z.infer<typeof TradeSetupStateSchema>;
+
+export const TradeTriggerComparisonSchema = z.enum([
+  "PRICE_GREATER_THAN",
+  "PRICE_LESS_THAN",
+]);
+export type TradeTriggerComparison = z.infer<typeof TradeTriggerComparisonSchema>;
+
+export const TradePlanGateStatusSchema = z.enum([
+  "PASSED",
+  "FAILED",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type TradePlanGateStatus = z.infer<typeof TradePlanGateStatusSchema>;
+
+export const TradePlanGateCategorySchema = z.enum([
+  "INPUT",
+  "APPLICABILITY",
+  "QUALITY",
+  "DIRECTION",
+  "COUNTEREVIDENCE",
+  "TRIGGER",
+]);
+export type TradePlanGateCategory = z.infer<typeof TradePlanGateCategorySchema>;
+
+export const TradePlanGateIdSchema = z.enum([
+  "MARKET_STATE_AVAILABLE",
+  "SAME_SNAPSHOT_GUARANTEED",
+  "SESSION_IS_RTH",
+  "OPENING_RANGE_COMPLETE",
+  "CURRENT_SESSION_DATES_COMPATIBLE",
+  "BIAS_AVAILABLE",
+  "DIRECTIONAL_BIAS_PRESENT",
+  "SOURCE_QUALITY_COMPLETE",
+  "COUNTEREVIDENCE_POLICY_PASSED",
+  "TRIGGER_INPUTS_VALID",
+  "VWAP_ALIGNED",
+  "OPENING_RANGE_ALIGNED",
+  "TRIGGER_SATISFIED",
+]);
+export type TradePlanGateId = z.infer<typeof TradePlanGateIdSchema>;
+
+export const TradePlanPrimaryReasonCodeSchema = z.enum([
+  "ELIGIBLE_CALLS_SETUP",
+  "ELIGIBLE_PUTS_SETUP",
+  "WAITING_FOR_CALLS_TRIGGER",
+  "WAITING_FOR_PUTS_TRIGGER",
+  "SESSION_NOT_RTH",
+  "OPENING_RANGE_NOT_STARTED",
+  "OPENING_RANGE_FORMING",
+  "OPENING_RANGE_UNAVAILABLE",
+  "BIAS_NEUTRAL",
+  "BIAS_UNAVAILABLE",
+  "CALLS_COUNTEREVIDENCE_PRESENT",
+  "PUTS_COUNTEREVIDENCE_PRESENT",
+  "REQUIRED_INPUT_PARTIAL",
+  "REQUIRED_INPUT_UNAVAILABLE",
+  "CURRENT_SESSION_DATE_MISMATCH",
+  "TRIGGER_INPUT_INVALID",
+  "MARKET_STATE_UNAVAILABLE",
+  "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+]);
+export type TradePlanPrimaryReasonCode = z.infer<
+  typeof TradePlanPrimaryReasonCodeSchema
+>;
+
+export const TradePlanGateReasonCodeSchema = z.enum([
+  "MARKET_STATE_AVAILABLE",
+  "MARKET_STATE_UNAVAILABLE",
+  "SAME_SNAPSHOT_GUARANTEED",
+  "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "SESSION_RTH",
+  "SESSION_NOT_RTH",
+  "SESSION_UNAVAILABLE",
+  "OPENING_RANGE_COMPLETE",
+  "OPENING_RANGE_NOT_STARTED",
+  "OPENING_RANGE_FORMING",
+  "OPENING_RANGE_UNAVAILABLE",
+  "CURRENT_SESSION_DATES_COMPATIBLE",
+  "CURRENT_SESSION_DATE_MISMATCH",
+  "BIAS_AVAILABLE",
+  "BIAS_UNAVAILABLE",
+  "DIRECTIONAL_BIAS_PRESENT",
+  "BIAS_NEUTRAL",
+  "SOURCE_QUALITY_COMPLETE",
+  "REQUIRED_INPUT_PARTIAL",
+  "REQUIRED_INPUT_UNAVAILABLE",
+  "COUNTEREVIDENCE_POLICY_PASSED",
+  "CALLS_COUNTEREVIDENCE_PRESENT",
+  "PUTS_COUNTEREVIDENCE_PRESENT",
+  "TRIGGER_INPUTS_VALID",
+  "TRIGGER_INPUT_INVALID",
+  "VWAP_ALIGNED_FOR_CALLS",
+  "VWAP_ALIGNED_FOR_PUTS",
+  "VWAP_NOT_ALIGNED_FOR_CALLS",
+  "VWAP_NOT_ALIGNED_FOR_PUTS",
+  "OPENING_RANGE_ALIGNED_FOR_CALLS",
+  "OPENING_RANGE_ALIGNED_FOR_PUTS",
+  "OPENING_RANGE_NOT_ALIGNED_FOR_CALLS",
+  "OPENING_RANGE_NOT_ALIGNED_FOR_PUTS",
+  "CALLS_TRIGGER_SATISFIED",
+  "PUTS_TRIGGER_SATISFIED",
+  "CALLS_TRIGGER_NOT_SATISFIED",
+  "PUTS_TRIGGER_NOT_SATISFIED",
+  "GATE_NOT_EVALUATED",
+]);
+export type TradePlanGateReasonCode = z.infer<typeof TradePlanGateReasonCodeSchema>;
+
+export const TradePlanOverallWarningCodeSchema = z.enum([
+  "MARKET_STATE_UNAVAILABLE",
+  "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "BIAS_UNAVAILABLE",
+  "CURRENT_SESSION_DATE_MISMATCH",
+  "TRIGGER_INPUT_INVALID",
+  "REQUIRED_INPUT_PARTIAL",
+  "REQUIRED_INPUT_STALE",
+  "INSUFFICIENT_PLAN_DATA",
+]);
+export type TradePlanOverallWarningCode = z.infer<
+  typeof TradePlanOverallWarningCodeSchema
+>;
+
+const TradePlanGateBase = {
+  status: TradePlanGateStatusSchema,
+  requiredForEligibility: z.boolean(),
+  category: TradePlanGateCategorySchema,
+  sourceFeatureIds: z.array(MarketStateFeatureIdSchema),
+  reasonCode: TradePlanGateReasonCodeSchema,
+  warningCode: z.string().min(1).nullable(),
+};
+
+export const TradePlanMarketStateAvailableGateSchema = z.object({
+  gateId: z.literal("MARKET_STATE_AVAILABLE"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    marketStateEngineState: MarketStateEngineStateSchema,
+    currentPriceAvailable: z.boolean(),
+  }),
+});
+export const TradePlanSameSnapshotGateSchema = z.object({
+  gateId: z.literal("SAME_SNAPSHOT_GUARANTEED"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    marketStateCalculatedAt: z.string().datetime(),
+    biasSourceMarketStateCalculatedAt: z.string().datetime(),
+    sameSnapshotGuaranteed: z.boolean(),
+  }),
+});
+export const TradePlanSessionGateSchema = z.object({
+  gateId: z.literal("SESSION_IS_RTH"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    sessionPhase: MarketContextSessionWindowSchema.nullable(),
+    featureStatus: MarketStateFeatureStatusSchema,
+  }),
+});
+export const TradePlanOpeningRangeGateSchema = z.object({
+  gateId: z.literal("OPENING_RANGE_COMPLETE"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    phase: OpeningRangePhaseSchema,
+    featureState: z
+      .union([MarketStateRangePositionSchema, z.enum(["NOT_STARTED", "FORMING"])])
+      .nullable(),
+    featureStatus: MarketStateFeatureStatusSchema,
+  }),
+});
+export const TradePlanDateGateSchema = z.object({
+  gateId: z.literal("CURRENT_SESSION_DATES_COMPATIBLE"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    currentMarketDate: MarketDateSchema,
+    sessionReferenceDate: MarketDateSchema.nullable(),
+    vwapReferenceDate: MarketDateSchema.nullable(),
+    openingRangeReferenceDate: MarketDateSchema.nullable(),
+  }),
+});
+export const TradePlanBiasAvailableGateSchema = z.object({
+  gateId: z.literal("BIAS_AVAILABLE"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    biasState: DeterministicBiasStateSchema,
+    biasEngineState: BiasEngineStateSchema,
+  }),
+});
+export const TradePlanDirectionalBiasGateSchema = z.object({
+  gateId: z.literal("DIRECTIONAL_BIAS_PRESENT"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    biasState: DeterministicBiasStateSchema,
+  }),
+});
+export const TradePlanSourceQualityGateSchema = z.object({
+  gateId: z.literal("SOURCE_QUALITY_COMPLETE"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    biasEngineState: BiasEngineStateSchema,
+    biasSourceQuality: BiasSourceQualityStateSchema,
+    sessionFeatureStatus: MarketStateFeatureStatusSchema,
+    vwapFeatureStatus: MarketStateFeatureStatusSchema,
+    openingRangeFeatureStatus: MarketStateFeatureStatusSchema,
+  }),
+});
+export const TradePlanCounterevidenceGateSchema = z.object({
+  gateId: z.literal("COUNTEREVIDENCE_POLICY_PASSED"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    candidateDirection: z.enum(["CALLS", "PUTS"]).nullable(),
+    opposingEvidenceCount: z.number().int().nonnegative(),
+  }),
+});
+export const TradePlanTriggerInputsGateSchema = z.object({
+  gateId: z.literal("TRIGGER_INPUTS_VALID"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    currentPrice: z.number().finite().positive().nullable(),
+    vwap: z.number().finite().positive().nullable(),
+    openingRangeHigh: z.number().finite().positive().nullable(),
+    openingRangeLow: z.number().finite().positive().nullable(),
+  }),
+});
+export const TradePlanVwapAlignedGateSchema = z.object({
+  gateId: z.literal("VWAP_ALIGNED"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    candidateDirection: z.enum(["CALLS", "PUTS"]).nullable(),
+    priceVsVwapState: z.enum(["ABOVE", "BELOW", "EQUAL"]).nullable(),
+  }),
+});
+export const TradePlanOpeningRangeAlignedGateSchema = z.object({
+  gateId: z.literal("OPENING_RANGE_ALIGNED"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    candidateDirection: z.enum(["CALLS", "PUTS"]).nullable(),
+    priceVsOpeningRangeState: z
+      .union([MarketStateRangePositionSchema, z.enum(["NOT_STARTED", "FORMING"])])
+      .nullable(),
+  }),
+});
+export const TradePlanTriggerSatisfiedGateSchema = z.object({
+  gateId: z.literal("TRIGGER_SATISFIED"),
+  ...TradePlanGateBase,
+  observedValues: z.object({
+    candidateDirection: z.enum(["CALLS", "PUTS"]).nullable(),
+    currentPrice: z.number().finite().positive().nullable(),
+    triggerLevel: z.number().finite().positive().nullable(),
+    comparison: TradeTriggerComparisonSchema.nullable(),
+    satisfied: z.boolean().nullable(),
+  }),
+});
+
+export const TradePlanGateSchema = z.discriminatedUnion("gateId", [
+  TradePlanMarketStateAvailableGateSchema,
+  TradePlanSameSnapshotGateSchema,
+  TradePlanSessionGateSchema,
+  TradePlanOpeningRangeGateSchema,
+  TradePlanDateGateSchema,
+  TradePlanBiasAvailableGateSchema,
+  TradePlanDirectionalBiasGateSchema,
+  TradePlanSourceQualityGateSchema,
+  TradePlanCounterevidenceGateSchema,
+  TradePlanTriggerInputsGateSchema,
+  TradePlanVwapAlignedGateSchema,
+  TradePlanOpeningRangeAlignedGateSchema,
+  TradePlanTriggerSatisfiedGateSchema,
+]);
+export type TradePlanGate = z.infer<typeof TradePlanGateSchema>;
+
+export const TradePlanTriggerSchema = z.object({
+  level: z.number().finite().positive().nullable(),
+  comparison: TradeTriggerComparisonSchema.nullable(),
+  satisfied: z.boolean().nullable(),
+  signedDistancePoints: z.number().finite().nullable(),
+  sourceFeatureIds: z.array(MarketStateFeatureIdSchema),
+  sourceValues: z.object({
+    vwap: z.number().finite().positive().nullable(),
+    openingRangeBoundary: z.number().finite().positive().nullable(),
+  }),
+});
+export type TradePlanTrigger = z.infer<typeof TradePlanTriggerSchema>;
+
+export const SpyZeroDteDeterministicTradePlanResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONDITIONAL_TRADE_PLAN"),
+    methodologyVersion: TradePlanMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    sourceMarketStateEngineVersion: MarketStateFeatureVersionSchema,
+    sourceMarketStateEngineState: MarketStateEngineStateSchema,
+    sourceMarketStateCalculatedAt: z.string().datetime(),
+    sourceBiasMethodologyVersion: BiasMethodologyVersionSchema,
+    sourceBiasCalculatedAt: z.string().datetime(),
+    sourceBiasMarketStateCalculatedAt: z.string().datetime(),
+    sameSnapshotGuaranteed: z.boolean(),
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanEngineStateSchema,
+    setupDirection: TradeSetupDirectionSchema,
+    setupState: TradeSetupStateSchema,
+    primaryReasonCode: TradePlanPrimaryReasonCodeSchema,
+    currentPrice: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    quoteTimestamp: z.string().datetime().nullable(),
+    sessionPhase: MarketContextSessionWindowSchema.nullable(),
+    biasState: DeterministicBiasStateSchema,
+    biasEngineState: BiasEngineStateSchema,
+    biasConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+    biasConfidenceScope: BiasConfidenceScopeSchema,
+    biasSourceQuality: BiasSourceQualityStateSchema,
+    trigger: TradePlanTriggerSchema,
+    gates: z.array(TradePlanGateSchema).length(13),
+    supportingBiasEvidenceIds: z.array(MarketStateFeatureIdSchema),
+    counterBiasEvidenceIds: z.array(MarketStateFeatureIdSchema),
+    warningCode: TradePlanOverallWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const expectedGateOrder = [
+      "MARKET_STATE_AVAILABLE",
+      "SAME_SNAPSHOT_GUARANTEED",
+      "SESSION_IS_RTH",
+      "OPENING_RANGE_COMPLETE",
+      "CURRENT_SESSION_DATES_COMPATIBLE",
+      "BIAS_AVAILABLE",
+      "DIRECTIONAL_BIAS_PRESENT",
+      "SOURCE_QUALITY_COMPLETE",
+      "COUNTEREVIDENCE_POLICY_PASSED",
+      "TRIGGER_INPUTS_VALID",
+      "VWAP_ALIGNED",
+      "OPENING_RANGE_ALIGNED",
+      "TRIGGER_SATISFIED",
+    ];
+    if (value.gates.some((gate, index) => gate.gateId !== expectedGateOrder[index])) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Trade-Plan gates must use deterministic methodology order" });
+    }
+
+    const timestampsMatch =
+      value.sourceMarketStateCalculatedAt === value.sourceBiasMarketStateCalculatedAt;
+    if (value.sameSnapshotGuaranteed !== timestampsMatch) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "sameSnapshotGuaranteed must match source timestamps" });
+    }
+
+    if (value.setupState === "ELIGIBLE") {
+      if (value.engineState !== "AVAILABLE" || !["CALLS", "PUTS"].includes(value.setupDirection)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ELIGIBLE requires an AVAILABLE directional setup" });
+      }
+      if (value.trigger.satisfied !== true) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "ELIGIBLE requires a satisfied trigger" });
+      }
+    }
+    if (value.setupState === "WAITING_FOR_TRIGGER") {
+      if (!value.sameSnapshotGuaranteed || !["CALLS", "PUTS"].includes(value.setupDirection)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "WAITING_FOR_TRIGGER requires a same-snapshot directional candidate" });
+      }
+      if (value.trigger.satisfied !== false) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "WAITING_FOR_TRIGGER requires an unsatisfied trigger" });
+      }
+    }
+    if (["NO_SETUP", "NOT_APPLICABLE"].includes(value.setupState) && value.setupDirection !== "NONE") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "NO_SETUP and NOT_APPLICABLE require setupDirection NONE" });
+    }
+    if (value.setupState === "UNAVAILABLE" && value.setupDirection !== "UNAVAILABLE") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "UNAVAILABLE setup state requires UNAVAILABLE direction" });
+    }
+    if (["NO_SETUP", "NOT_APPLICABLE", "UNAVAILABLE"].includes(value.setupState)) {
+      if (value.trigger.level !== null || value.trigger.comparison !== null || value.trigger.satisfied !== null || value.trigger.signedDistancePoints !== null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Non-candidate setup states must not expose an active trigger" });
+      }
+    }
+  });
+export type SpyZeroDteDeterministicTradePlanResponse = z.infer<
+  typeof SpyZeroDteDeterministicTradePlanResponseSchema
+>;
