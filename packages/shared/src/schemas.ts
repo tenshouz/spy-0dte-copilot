@@ -2981,3 +2981,403 @@ export const SpyZeroDteObjectiveRiskResponseSchema = z
 export type SpyZeroDteObjectiveRiskResponse = z.infer<
   typeof SpyZeroDteObjectiveRiskResponseSchema
 >;
+
+/** Deterministic SPY 0DTE contract-selection and liquidity foundation. */
+export const ContractMethodologyVersionSchema = z.literal("CONTRACT_V1");
+export type ContractMethodologyVersion = z.infer<typeof ContractMethodologyVersionSchema>;
+
+export const ContractSourceCompatibilityStateSchema = z.enum([
+  "NOT_EVALUATED",
+  "COMPATIBLE",
+  "PARTIAL",
+  "INCOMPATIBLE",
+  "UNAVAILABLE",
+]);
+export type ContractSourceCompatibilityState = z.infer<
+  typeof ContractSourceCompatibilityStateSchema
+>;
+
+export const ContractSelectionEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type ContractSelectionEngineState = z.infer<
+  typeof ContractSelectionEngineStateSchema
+>;
+
+export const ContractSelectionStateSchema = z.enum([
+  "SELECTED",
+  "NO_QUALIFIED_CONTRACT",
+  "DEFERRED",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type ContractSelectionState = z.infer<typeof ContractSelectionStateSchema>;
+
+export const SelectedContractDirectionSchema = z.enum([
+  "CALL",
+  "PUT",
+  "NONE",
+  "UNAVAILABLE",
+]);
+export type SelectedContractDirection = z.infer<typeof SelectedContractDirectionSchema>;
+
+export const ContractQuoteFreshnessStateSchema = z.enum([
+  "FRESH",
+  "STALE",
+  "UNKNOWN",
+  "UNAVAILABLE",
+]);
+export type ContractQuoteFreshnessState = z.infer<
+  typeof ContractQuoteFreshnessStateSchema
+>;
+
+export const ContractMoneynessSchema = z.enum(["ITM", "ATM", "OTM", "UNAVAILABLE"]);
+export type ContractMoneyness = z.infer<typeof ContractMoneynessSchema>;
+
+export const ContractCandidateSourceStatusSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type ContractCandidateSourceStatus = z.infer<
+  typeof ContractCandidateSourceStatusSchema
+>;
+
+export const ContractCandidateEligibilityStatusSchema = z.enum([
+  "SELECTABLE",
+  "REJECTED",
+  "UNAVAILABLE",
+]);
+export type ContractCandidateEligibilityStatus = z.infer<
+  typeof ContractCandidateEligibilityStatusSchema
+>;
+
+export const ContractCandidateRejectionReasonCodeSchema = z.enum([
+  "SOURCE_UNAVAILABLE",
+  "SOURCE_PARTIAL",
+  "CONTRACT_DIRECTION_MISMATCH",
+  "EXPIRATION_MISMATCH",
+  "NON_STANDARD_CONTRACT",
+  "MINI_CONTRACT",
+  "STANDARD_STATUS_UNAVAILABLE",
+  "MINI_STATUS_UNAVAILABLE",
+  "MULTIPLIER_MISMATCH",
+  "STRIKE_NOT_FINITE",
+  "STRIKE_NOT_POSITIVE",
+  "BID_NOT_FINITE",
+  "BID_NOT_POSITIVE",
+  "ASK_NOT_FINITE",
+  "ASK_NOT_POSITIVE",
+  "CROSSED_QUOTE",
+  "MIDPOINT_NOT_POSITIVE",
+  "SPREAD_NOT_FINITE",
+  "SPREAD_RATIO_NOT_FINITE",
+  "SPREAD_EXCEEDS_MAXIMUM",
+  "CHAIN_UNDERLYING_PRICE_INVALID",
+  "CONTRACT_QUOTE_FRESHNESS_UNKNOWN",
+  "CONTRACT_QUOTE_STALE",
+]);
+export type ContractCandidateRejectionReasonCode = z.infer<
+  typeof ContractCandidateRejectionReasonCodeSchema
+>;
+
+export const ContractCandidateWarningCodeSchema = z.enum([
+  "SOURCE_PARTIAL",
+  "CONTRACT_QUOTE_TIMESTAMP_UNAVAILABLE",
+  "CONTRACT_QUOTE_STALE",
+]);
+export type ContractCandidateWarningCode = z.infer<
+  typeof ContractCandidateWarningCodeSchema
+>;
+
+export const ContractSelectionPrimaryReasonCodeSchema = z.enum([
+  "CONTRACT_SELECTED",
+  "NO_CONTRACT_PASSES_ELIGIBILITY",
+  "CONTRACT_SELECTION_DEFERRED_UNTIL_SETUP_READY",
+  "SOURCE_RISK_NOT_QUALIFIED",
+  "SOURCE_RISK_NO_SETUP",
+  "SOURCE_RISK_NOT_APPLICABLE",
+  "SOURCE_RISK_UNAVAILABLE",
+  "OPTIONS_CHAIN_UNAVAILABLE",
+  "OPTIONS_CHAIN_STALE",
+  "OPTIONS_CHAIN_DELAYED",
+  "OPTIONS_CHAIN_EXPIRATION_MISMATCH",
+  "OPTIONS_CHAIN_SYMBOL_MISMATCH",
+  "SOURCE_ASSEMBLY_SKEW_EXCEEDED",
+  "SOURCE_COMPATIBILITY_PARTIAL",
+  "SOURCE_COMPATIBILITY_INCOMPATIBLE",
+]);
+export type ContractSelectionPrimaryReasonCode = z.infer<
+  typeof ContractSelectionPrimaryReasonCodeSchema
+>;
+
+export const ContractSelectionOverallWarningCodeSchema = z.enum([
+  "RISK_FRAMEWORK_UNAVAILABLE",
+  "OPTIONS_CHAIN_UNAVAILABLE",
+  "OPTIONS_CHAIN_STALE",
+  "OPTIONS_CHAIN_DELAYED",
+  "CURRENT_EXPIRATION_MISMATCH",
+  "SOURCE_ASSEMBLY_SKEW_EXCEEDED",
+  "CONTRACT_QUOTE_TIMESTAMP_UNAVAILABLE",
+  "CONTRACT_QUOTE_STALE",
+  "SOURCE_COMPATIBILITY_PARTIAL",
+  "INVALID_CONTRACT_NUMERIC_DATA",
+  "INSUFFICIENT_CONTRACT_DATA",
+]);
+export type ContractSelectionOverallWarningCode = z.infer<
+  typeof ContractSelectionOverallWarningCodeSchema
+>;
+
+export const ContractSelectionCandidateSchema = z.object({
+  candidateId: z.string().min(1),
+  contractSymbol: z.string().min(1),
+  contractDirection: z.enum(["CALL", "PUT"]),
+  description: z.string().nullable(),
+  strikePrice: z.number().finite().positive(),
+  expirationDate: MarketDateSchema,
+  nonStandard: z.boolean().nullable(),
+  mini: z.boolean().nullable(),
+  multiplier: z.number().finite().positive().nullable(),
+  sourceStatus: ContractCandidateSourceStatusSchema,
+  eligibilityStatus: ContractCandidateEligibilityStatusSchema,
+  selectable: z.boolean(),
+  moneyness: ContractMoneynessSchema,
+  providerInTheMoney: z.boolean().nullable(),
+  chainUnderlyingPrice: z.number().finite().positive().nullable(),
+  strikeDistancePoints: z.number().finite().nonnegative().nullable(),
+  bid: z.number().finite().nonnegative().nullable(),
+  ask: z.number().finite().nonnegative().nullable(),
+  calculatedMidpoint: z.number().finite().positive().nullable(),
+  providerMark: z.number().finite().nonnegative().nullable(),
+  spreadPoints: z.number().finite().nonnegative().nullable(),
+  spreadRatio: z.number().finite().nonnegative().nullable(),
+  spreadPercent: z.number().finite().nonnegative().nullable(),
+  bidSize: z.number().int().nonnegative().nullable(),
+  askSize: z.number().int().nonnegative().nullable(),
+  openInterest: z.number().int().nonnegative().nullable(),
+  volume: z.number().int().nonnegative().nullable(),
+  delta: z.number().finite().nullable(),
+  gamma: z.number().finite().nonnegative().nullable(),
+  theta: z.number().finite().nullable(),
+  vega: z.number().finite().nullable(),
+  rho: z.number().finite().nullable(),
+  impliedVolatilityPercent: z.number().finite().nonnegative().nullable(),
+  quoteAt: z.string().datetime().nullable(),
+  tradeAt: z.string().datetime().nullable(),
+  quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
+  quoteFreshnessState: ContractQuoteFreshnessStateSchema,
+  selectionRank: z.number().int().positive().nullable(),
+  rejectionReasonCodes: z.array(ContractCandidateRejectionReasonCodeSchema),
+  warningCode: ContractCandidateWarningCodeSchema.nullable(),
+});
+export type ContractSelectionCandidate = z.infer<typeof ContractSelectionCandidateSchema>;
+
+export const SelectedContractSchema = z.object({
+  candidateId: z.string().min(1).nullable(),
+  contractSymbol: z.string().min(1).nullable(),
+  contractDirection: z.enum(["CALL", "PUT"]).nullable(),
+  strikePrice: z.number().finite().positive().nullable(),
+  expirationDate: MarketDateSchema.nullable(),
+  moneyness: ContractMoneynessSchema.nullable(),
+  bid: z.number().finite().positive().nullable(),
+  ask: z.number().finite().positive().nullable(),
+  calculatedMidpoint: z.number().finite().positive().nullable(),
+  spreadPoints: z.number().finite().nonnegative().nullable(),
+  spreadRatio: z.number().finite().nonnegative().nullable(),
+  spreadPercent: z.number().finite().nonnegative().nullable(),
+  quoteAt: z.string().datetime().nullable(),
+  quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
+  strikeDistancePoints: z.number().finite().nonnegative().nullable(),
+  selectionRank: z.number().int().positive().nullable(),
+});
+export type SelectedContract = z.infer<typeof SelectedContractSchema>;
+
+export const ContractPremiumReferenceSchema = z.object({
+  type: z.enum(["CALCULATED_BID_ASK_MIDPOINT", "UNAVAILABLE"]),
+  value: z.number().finite().positive().nullable(),
+  disclosureCode: z.literal("MIDPOINT_REFERENCE_ONLY"),
+});
+export type ContractPremiumReference = z.infer<typeof ContractPremiumReferenceSchema>;
+
+export const ContractSelectionMethodologySchema = z.object({
+  maximumSpreadRatio: z.literal(0.15),
+  maximumSpreadPercent: z.literal(15),
+  maximumSourceAssemblySkewMilliseconds: z.literal(60_000),
+  maximumContractQuoteAgeMilliseconds: z.literal(60_000),
+  quoteFreshnessPolicy: z.literal("NORMALIZED_QUOTE_AT_EPOCH_MILLISECONDS"),
+  sourceAssemblySkewPolicy: z.literal("RISK_CALCULATED_AT_VS_CHAIN_FETCHED_AT"),
+  rankingMethod: z.literal("ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS"),
+  itmExactDistanceTiePreference: z.literal(true),
+  openInterestHardMinimum: z.null(),
+  volumeHardMinimum: z.null(),
+  deltaHardRange: z.null(),
+  gammaHardRange: z.null(),
+  thetaHardRange: z.null(),
+  impliedVolatilityHardRange: z.null(),
+  evaluationScope: z.literal("RETURNED_CHAIN_WINDOW_SELECTED_SIDE"),
+  calculationsUse: z.literal("OPTIONS_CHAIN_BID_ASK_AND_CHAIN_UNDERLYING"),
+  midpointDisclosureCode: z.literal("MIDPOINT_REFERENCE_ONLY"),
+  thresholdPolicy: z.literal("EXPLICIT_CONTRACT_V1_PRODUCT_POLICY_NOT_BACKTESTED"),
+});
+export type ContractSelectionMethodology = z.infer<
+  typeof ContractSelectionMethodologySchema
+>;
+
+export const SpyZeroDteContractSelectionResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONTRACT_SELECTION_LIQUIDITY"),
+    methodologyVersion: ContractMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    sourceMarketStateCalculatedAt: z.string().datetime(),
+    sourceBiasMarketStateCalculatedAt: z.string().datetime(),
+    sourceBiasCalculatedAt: z.string().datetime(),
+    sourceTradePlanMarketStateCalculatedAt: z.string().datetime(),
+    sourceTradePlanBiasCalculatedAt: z.string().datetime(),
+    sourceTradePlanCalculatedAt: z.string().datetime(),
+    sourceRiskMarketStateCalculatedAt: z.string().datetime(),
+    sourceRiskBiasCalculatedAt: z.string().datetime(),
+    sourceRiskTradePlanCalculatedAt: z.string().datetime(),
+    sourceRiskCalculatedAt: z.string().datetime(),
+    upstreamSameSnapshotGuaranteed: z.boolean(),
+    sourceOptionsChainFetchedAt: z.string().datetime().nullable(),
+    sourceOptionsChainMetricState: OptionsChainMetricStateSchema.nullable(),
+    sourceOptionsChainSourceState: OptionsChainSourceStateSchema.nullable(),
+    sourceOptionsChainWarningCode: OptionsChainWarningCodeSchema.nullable(),
+    sourceOptionsChainIsDelayed: z.boolean().nullable(),
+    sourceOptionsChainLatestQuoteAt: z.string().datetime().nullable(),
+    sourceOptionsChainLatestTradeAt: z.string().datetime().nullable(),
+    calculatedAt: z.string().datetime(),
+    sourceCompatibilityState: ContractSourceCompatibilityStateSchema,
+    sourceAssemblySkewMilliseconds: z.number().finite().nonnegative().nullable(),
+    engineState: ContractSelectionEngineStateSchema,
+    selectionState: ContractSelectionStateSchema,
+    contractDirection: SelectedContractDirectionSchema,
+    sourceRiskFrameworkState: ObjectiveRiskFrameworkStateSchema,
+    sourceRiskQualification: RiskQualificationStateSchema,
+    sourceRiskDirection: ObjectiveRiskDirectionSchema,
+    sourceRiskIsCurrentlyTradeEligible: z.boolean(),
+    riskCurrentPrice: z.number().finite().positive().nullable(),
+    chainUnderlyingPrice: z.number().finite().positive().nullable(),
+    underlyingPriceDifferencePoints: z.number().finite().nullable(),
+    expirationDate: MarketDateSchema.nullable(),
+    evaluationScope: z.literal("RETURNED_CHAIN_WINDOW_SELECTED_SIDE"),
+    evaluatedCandidateCount: z.number().int().nonnegative(),
+    selectableCandidateCount: z.number().int().nonnegative(),
+    rejectedCandidateCount: z.number().int().nonnegative(),
+    unavailableCandidateCount: z.number().int().nonnegative(),
+    candidates: z.array(ContractSelectionCandidateSchema),
+    selectedContract: SelectedContractSchema,
+    premiumReference: ContractPremiumReferenceSchema,
+    primaryReasonCode: ContractSelectionPrimaryReasonCodeSchema,
+    warningCode: ContractSelectionOverallWarningCodeSchema.nullable(),
+    methodology: ContractSelectionMethodologySchema,
+  })
+  .superRefine((value, ctx) => {
+    const upstreamMatch =
+      value.sourceMarketStateCalculatedAt === value.sourceBiasMarketStateCalculatedAt &&
+      value.sourceMarketStateCalculatedAt === value.sourceTradePlanMarketStateCalculatedAt &&
+      value.sourceMarketStateCalculatedAt === value.sourceRiskMarketStateCalculatedAt &&
+      value.sourceBiasCalculatedAt === value.sourceTradePlanBiasCalculatedAt &&
+      value.sourceBiasCalculatedAt === value.sourceRiskBiasCalculatedAt &&
+      value.sourceTradePlanCalculatedAt === value.sourceRiskTradePlanCalculatedAt;
+    if (value.upstreamSameSnapshotGuaranteed !== upstreamMatch) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Contract upstreamSameSnapshotGuaranteed must match all upstream timestamps",
+      });
+    }
+
+    if (value.evaluatedCandidateCount !== value.candidates.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Contract evaluatedCandidateCount must equal candidates length",
+      });
+    }
+    if (
+      value.evaluatedCandidateCount !==
+      value.selectableCandidateCount + value.rejectedCandidateCount + value.unavailableCandidateCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Contract candidate counts must reconcile",
+      });
+    }
+
+    const selectable = value.candidates.filter((candidate) => candidate.eligibilityStatus === "SELECTABLE");
+    const rejected = value.candidates.filter((candidate) => candidate.eligibilityStatus === "REJECTED");
+    const unavailable = value.candidates.filter((candidate) => candidate.eligibilityStatus === "UNAVAILABLE");
+    if (
+      selectable.length !== value.selectableCandidateCount ||
+      rejected.length !== value.rejectedCandidateCount ||
+      unavailable.length !== value.unavailableCandidateCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Contract candidate status counts are inconsistent",
+      });
+    }
+
+    const symbols = value.candidates.map((candidate) => candidate.contractSymbol);
+    if (new Set(symbols).size !== symbols.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Contract candidates must be unique" });
+    }
+
+    if (["DEFERRED", "NOT_APPLICABLE"].includes(value.selectionState)) {
+      if (
+        value.sourceCompatibilityState !== "NOT_EVALUATED" ||
+        value.sourceOptionsChainFetchedAt !== null ||
+        value.candidates.length > 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Deferred/non-applicable Contract response cannot expose Chain evaluation",
+        });
+      }
+    }
+
+    if (value.engineState === "PARTIAL" && value.selectionState === "SELECTED") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "PARTIAL Contract engine cannot select" });
+    }
+
+    const selected = value.selectedContract.candidateId === null
+      ? null
+      : value.candidates.find((candidate) => candidate.candidateId === value.selectedContract.candidateId) ?? null;
+
+    if (value.selectionState === "SELECTED") {
+      if (
+        value.engineState !== "AVAILABLE" ||
+        value.sourceCompatibilityState !== "COMPATIBLE" ||
+        !selected ||
+        !selected.selectable ||
+        selected.selectionRank !== 1 ||
+        selected.quoteFreshnessState !== "FRESH" ||
+        value.premiumReference.type !== "CALCULATED_BID_ASK_MIDPOINT" ||
+        value.premiumReference.value !== selected.calculatedMidpoint
+      ) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selected Contract response is inconsistent" });
+      }
+    } else if (
+      value.selectedContract.candidateId !== null ||
+      value.premiumReference.type !== "UNAVAILABLE" ||
+      value.premiumReference.value !== null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-selected Contract response cannot expose a selected contract or premium reference",
+      });
+    }
+
+    if (
+      value.selectionState === "SELECTED" &&
+      !["CALL", "PUT"].includes(value.contractDirection)
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Selected Contract requires CALL or PUT direction" });
+    }
+  });
+export type SpyZeroDteContractSelectionResponse = z.infer<
+  typeof SpyZeroDteContractSelectionResponseSchema
+>;
