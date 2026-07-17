@@ -1986,3 +1986,260 @@ export const SpyZeroDteDeterministicMarketStateResponseSchema = z
 export type SpyZeroDteDeterministicMarketStateResponse = z.infer<
   typeof SpyZeroDteDeterministicMarketStateResponseSchema
 >;
+
+/** Deterministic, recommendation-free Bias and Confidence layer derived only from Market State. */
+export const BiasMethodologyVersionSchema = z.literal("BIAS_V1");
+export type BiasMethodologyVersion = z.infer<typeof BiasMethodologyVersionSchema>;
+
+export const BiasEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
+export type BiasEngineState = z.infer<typeof BiasEngineStateSchema>;
+
+export const DeterministicBiasStateSchema = z.enum([
+  "BULLISH",
+  "BEARISH",
+  "NEUTRAL",
+  "UNAVAILABLE",
+]);
+export type DeterministicBiasState = z.infer<typeof DeterministicBiasStateSchema>;
+
+export const BiasEvidenceDirectionSchema = z.enum([
+  "BULLISH",
+  "BEARISH",
+  "NEUTRAL",
+  "NON_DIRECTIONAL",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type BiasEvidenceDirection = z.infer<typeof BiasEvidenceDirectionSchema>;
+
+export const BiasSourceQualityStateSchema = z.enum(["COMPLETE", "PARTIAL", "UNAVAILABLE"]);
+export type BiasSourceQualityState = z.infer<typeof BiasSourceQualityStateSchema>;
+
+export const NeutralBiasReasonSchema = z.enum([
+  "BALANCED_DIRECTIONAL_EVIDENCE",
+  "ALL_NEUTRAL_DIRECTIONAL_STATES",
+]);
+export type NeutralBiasReason = z.infer<typeof NeutralBiasReasonSchema>;
+
+export const BiasConfidenceUnitSchema = z.literal("PERCENT");
+export const BiasConfidenceMethodologySchema = z.literal(
+  "DIRECTIONAL_SUPPORT_TIMES_SUFFICIENCY",
+);
+export const BiasConfidenceScopeSchema = z.literal("STRUCTURAL_EVIDENCE_ONLY");
+
+export const BiasOverallWarningCodeSchema = z.enum([
+  "MARKET_STATE_UNAVAILABLE",
+  "CURRENT_PRICE_UNAVAILABLE",
+  "INSUFFICIENT_DIRECTIONAL_EVIDENCE",
+  "PARTIAL_BIAS_INPUTS",
+  "STALE_DIRECTIONAL_INPUTS",
+]);
+export type BiasOverallWarningCode = z.infer<typeof BiasOverallWarningCodeSchema>;
+
+export const BiasRationaleCodeSchema = z.enum([
+  "PRICE_ABOVE_VWAP",
+  "PRICE_BELOW_VWAP",
+  "PRICE_EQUAL_VWAP",
+  "PRICE_ABOVE_PRIOR_DAY_RANGE",
+  "PRICE_BELOW_PRIOR_DAY_RANGE",
+  "PRICE_AT_PRIOR_DAY_HIGH",
+  "PRICE_AT_PRIOR_DAY_LOW",
+  "PRICE_AT_PRIOR_DAY_BOUNDARY",
+  "PRICE_INSIDE_PRIOR_DAY_RANGE",
+  "PRICE_ABOVE_PREMARKET_RANGE",
+  "PRICE_BELOW_PREMARKET_RANGE",
+  "PRICE_AT_PREMARKET_HIGH",
+  "PRICE_AT_PREMARKET_LOW",
+  "PRICE_AT_PREMARKET_BOUNDARY",
+  "PRICE_INSIDE_PREMARKET_RANGE",
+  "PRICE_ABOVE_OPENING_RANGE",
+  "PRICE_BELOW_OPENING_RANGE",
+  "PRICE_AT_OPENING_RANGE_HIGH",
+  "PRICE_AT_OPENING_RANGE_LOW",
+  "PRICE_AT_OPENING_RANGE_BOUNDARY",
+  "PRICE_INSIDE_OPENING_RANGE",
+  "OPENING_RANGE_NOT_STARTED",
+  "OPENING_RANGE_FORMING",
+  "SESSION_PHASE_NON_DIRECTIONAL",
+  "GAP_CONTEXT_NON_DIRECTIONAL",
+  "EXPECTED_MOVE_CONTEXT_NON_DIRECTIONAL",
+  "GEX_SIGN_NON_DIRECTIONAL",
+  "DEX_SIGN_NON_DIRECTIONAL",
+  "FEATURE_NOT_APPLICABLE",
+  "FEATURE_UNAVAILABLE",
+]);
+export type BiasRationaleCode = z.infer<typeof BiasRationaleCodeSchema>;
+
+const BiasEvidenceFeatureStateSchema = z.union([
+  MarketContextSessionWindowSchema,
+  z.enum(["ABOVE", "BELOW", "EQUAL"]),
+  MarketStateRangePositionSchema,
+  z.enum(["NOT_STARTED", "FORMING"]),
+  z.enum(["UP", "DOWN", "FLAT"]),
+  MarketStateExpectedMovePositionSchema,
+  MarketStateSignSchema,
+]);
+
+export const BiasEvidenceItemSchema = z.object({
+  featureId: MarketStateFeatureIdSchema,
+  featureVersion: MarketStateFeatureVersionSchema,
+  featureStatus: MarketStateFeatureStatusSchema,
+  featureState: BiasEvidenceFeatureStateSchema.nullable(),
+  evidenceDirection: BiasEvidenceDirectionSchema,
+  configuredWeight: z.number().finite().nonnegative(),
+  appliedWeight: z.number().finite().nonnegative(),
+  weightedContribution: z.number().finite(),
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  sourceComponents: z.array(MarketContextComponentSchema).min(1),
+  warningCode: z.string().min(1).nullable(),
+  rationaleCode: BiasRationaleCodeSchema,
+});
+export type BiasEvidenceItem = z.infer<typeof BiasEvidenceItemSchema>;
+
+export const BiasEvidenceWarningSchema = z.object({
+  featureId: MarketStateFeatureIdSchema,
+  warningCode: z.string().min(1),
+});
+export type BiasEvidenceWarning = z.infer<typeof BiasEvidenceWarningSchema>;
+
+export const BiasFeatureWeightSchema = z.object({
+  featureId: MarketStateFeatureIdSchema,
+  weight: z.number().finite().positive(),
+});
+export type BiasFeatureWeight = z.infer<typeof BiasFeatureWeightSchema>;
+
+export const BiasMethodologySchema = z.object({
+  directionalFeatureIds: z.array(MarketStateFeatureIdSchema).length(4),
+  nonDirectionalFeatureIds: z.array(MarketStateFeatureIdSchema).length(5),
+  featureWeights: z.array(BiasFeatureWeightSchema).length(4),
+  minimumUsableDirectionalEvidenceCount: z.number().int().positive(),
+  confidenceFormula: z.literal(
+    "DIRECTIONAL_SUPPORT_RATIO_X_SUFFICIENCY_RATIO_X_100; NEUTRAL_USES_NEUTRAL_BALANCE_RATIO_X_SUFFICIENCY_RATIO_X_100",
+  ),
+  partialEvidencePolicy: z.literal(
+    "FULL_CONFIGURED_WEIGHT_WITH_PARTIAL_PROVENANCE_NO_NUMERIC_MULTIPLIER",
+  ),
+});
+export type BiasMethodology = z.infer<typeof BiasMethodologySchema>;
+
+export const SpyZeroDteDeterministicBiasResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_BIAS_CONFIDENCE"),
+    methodologyVersion: BiasMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    sourceMarketStateEngineVersion: MarketStateFeatureVersionSchema,
+    sourceMarketStateEngineState: MarketStateEngineStateSchema,
+    sourceMarketStateCalculatedAt: z.string().datetime(),
+    calculatedAt: z.string().datetime(),
+    engineState: BiasEngineStateSchema,
+    biasState: DeterministicBiasStateSchema,
+    neutralReason: NeutralBiasReasonSchema.nullable(),
+    confidenceScore: z.number().finite().min(0).max(100).nullable(),
+    confidenceUnit: BiasConfidenceUnitSchema,
+    confidenceMethodology: BiasConfidenceMethodologySchema,
+    confidenceScope: BiasConfidenceScopeSchema,
+    sourceQualityState: BiasSourceQualityStateSchema,
+    minimumUsableDirectionalEvidenceCount: z.number().int().positive(),
+    bullishScore: z.number().finite().nonnegative(),
+    bearishScore: z.number().finite().nonnegative(),
+    netDirectionalScore: z.number().finite(),
+    neutralEvidenceWeight: z.number().finite().nonnegative(),
+    applicableDirectionalWeight: z.number().finite().nonnegative(),
+    usableDirectionalWeight: z.number().finite().nonnegative(),
+    usableDirectionalEvidenceCount: z.number().int().nonnegative(),
+    applicableDirectionalEvidenceCount: z.number().int().nonnegative(),
+    bullishEvidenceCount: z.number().int().nonnegative(),
+    bearishEvidenceCount: z.number().int().nonnegative(),
+    neutralEvidenceCount: z.number().int().nonnegative(),
+    unavailableDirectionalEvidenceCount: z.number().int().nonnegative(),
+    notApplicableDirectionalEvidenceCount: z.number().int().nonnegative(),
+    directionalSupportRatio: z.number().finite().min(0).max(1).nullable(),
+    sufficiencyRatio: z.number().finite().min(0).max(1).nullable(),
+    contradictionRatio: z.number().finite().min(0).max(1).nullable(),
+    neutralEvidenceRatio: z.number().finite().min(0).max(1).nullable(),
+    neutralBalanceRatio: z.number().finite().min(0).max(1).nullable(),
+    supportingEvidenceDirection: z.enum(["BULLISH", "BEARISH"]).nullable(),
+    counterEvidenceDirection: z.enum(["BULLISH", "BEARISH"]).nullable(),
+    bullishEvidence: z.array(BiasEvidenceItemSchema),
+    bearishEvidence: z.array(BiasEvidenceItemSchema),
+    neutralEvidence: z.array(BiasEvidenceItemSchema),
+    nonDirectionalContext: z.array(BiasEvidenceItemSchema),
+    notApplicableEvidence: z.array(BiasEvidenceItemSchema),
+    unavailableEvidence: z.array(BiasEvidenceItemSchema),
+    evidenceWarnings: z.array(BiasEvidenceWarningSchema),
+    methodology: BiasMethodologySchema,
+    warningCode: BiasOverallWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.biasState === "UNAVAILABLE" && value.confidenceScore !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable Bias must not expose a numeric confidence score",
+      });
+    }
+    if (value.biasState !== "NEUTRAL" && value.neutralReason !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "neutralReason is only valid for a NEUTRAL Bias",
+      });
+    }
+
+    const allEvidence = [
+      ...value.bullishEvidence,
+      ...value.bearishEvidence,
+      ...value.neutralEvidence,
+      ...value.nonDirectionalContext,
+      ...value.notApplicableEvidence,
+      ...value.unavailableEvidence,
+    ];
+    const ids = new Set(allEvidence.map((item) => item.featureId));
+    if (allEvidence.length !== 9 || ids.size !== 9) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Every Market-State feature must appear in exactly one Bias evidence category",
+      });
+    }
+
+    const expectedDirections: Array<[BiasEvidenceItem[], BiasEvidenceDirection]> = [
+      [value.bullishEvidence, "BULLISH"],
+      [value.bearishEvidence, "BEARISH"],
+      [value.neutralEvidence, "NEUTRAL"],
+      [value.nonDirectionalContext, "NON_DIRECTIONAL"],
+      [value.notApplicableEvidence, "NOT_APPLICABLE"],
+      [value.unavailableEvidence, "UNAVAILABLE"],
+    ];
+    for (const [items, direction] of expectedDirections) {
+      if (items.some((item) => item.evidenceDirection !== direction)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Evidence category contains an item that is not ${direction}`,
+        });
+      }
+    }
+
+    const directionalIds = new Set(value.methodology.directionalFeatureIds);
+    const nonDirectionalIds = new Set(value.methodology.nonDirectionalFeatureIds);
+    if (directionalIds.size !== 4 || nonDirectionalIds.size !== 5) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Bias feature IDs must be unique" });
+    }
+    if ([...directionalIds].some((id) => nonDirectionalIds.has(id))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Directional and non-directional feature sets must not overlap",
+      });
+    }
+
+    const weightIds = new Set(value.methodology.featureWeights.map((item) => item.featureId));
+    if (weightIds.size !== 4 || [...weightIds].some((id) => !directionalIds.has(id))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Bias weight table must cover exactly the four directional features",
+      });
+    }
+  });
+export type SpyZeroDteDeterministicBiasResponse = z.infer<
+  typeof SpyZeroDteDeterministicBiasResponseSchema
+>;
