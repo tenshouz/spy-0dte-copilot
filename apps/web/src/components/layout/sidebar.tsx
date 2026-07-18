@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { href: "/market-data", label: "Market Data", icon: LineChart },
   { href: "/options", label: "Options Chain", icon: Rows3 },
   { href: "/gamma", label: "GEX / DEX", icon: BarChart3 },
-  { href: "/trade-plan", label: "AI Trade Plan", icon: Activity },
+  { href: "/trade-plan", label: "Trade Plan", icon: Activity },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/journal", label: "Trade Journal", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: SettingsIcon },

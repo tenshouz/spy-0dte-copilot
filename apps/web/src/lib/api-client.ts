@@ -21,6 +21,7 @@ import {
   SpyZeroDteDeterministicTradePlanResponseSchema,
   SpyZeroDteObjectiveRiskResponseSchema,
   SpyZeroDteContractSelectionResponseSchema,
+  SpyZeroDteTradePlanAssemblyResponseSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
@@ -44,6 +45,7 @@ import {
   type SpyZeroDteDeterministicTradePlanResponse,
   type SpyZeroDteObjectiveRiskResponse,
   type SpyZeroDteContractSelectionResponse,
+  type SpyZeroDteTradePlanAssemblyResponse,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -109,6 +111,8 @@ export const apiClient = {
     getJson("/api/trade-risk/spy", SpyZeroDteObjectiveRiskResponseSchema),
   getSpyZeroDteContractSelection: (): Promise<SpyZeroDteContractSelectionResponse> =>
     getJson("/api/trade-contract/spy", SpyZeroDteContractSelectionResponseSchema),
+  getSpyZeroDteTradePlanAssembly: (): Promise<SpyZeroDteTradePlanAssemblyResponse> =>
+    getJson("/api/trade-plan-assembly/spy", SpyZeroDteTradePlanAssemblyResponseSchema),
 };
 
 export const schwabLoginUrl = `${API_BASE_URL}/api/auth/schwab/login`;

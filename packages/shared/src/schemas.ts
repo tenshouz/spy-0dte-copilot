@@ -3381,3 +3381,524 @@ export const SpyZeroDteContractSelectionResponseSchema = z
 export type SpyZeroDteContractSelectionResponse = z.infer<
   typeof SpyZeroDteContractSelectionResponseSchema
 >;
+
+/** Concise deterministic SPY 0DTE Trade Plan assembly and display contract. */
+export const TradePlanAssemblyMethodologyVersionSchema = z.literal("ASSEMBLY_V1");
+export type TradePlanAssemblyMethodologyVersion = z.infer<
+  typeof TradePlanAssemblyMethodologyVersionSchema
+>;
+
+export const TradePlanAssemblyEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type TradePlanAssemblyEngineState = z.infer<
+  typeof TradePlanAssemblyEngineStateSchema
+>;
+
+export const DeterministicTradePlanStateSchema = z.enum([
+  "READY",
+  "WAITING_FOR_TRIGGER",
+  "NO_QUALIFIED_CONTRACT",
+  "NOT_QUALIFIED",
+  "NO_SETUP",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type DeterministicTradePlanState = z.infer<
+  typeof DeterministicTradePlanStateSchema
+>;
+
+export const AssembledTradePlanDirectionSchema = z.enum([
+  "CALLS",
+  "PUTS",
+  "NONE",
+  "UNAVAILABLE",
+]);
+export type AssembledTradePlanDirection = z.infer<
+  typeof AssembledTradePlanDirectionSchema
+>;
+
+export const TradePlanAssemblyEntryConditionStateSchema = z.enum([
+  "SATISFIED",
+  "WAITING",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type TradePlanAssemblyEntryConditionState = z.infer<
+  typeof TradePlanAssemblyEntryConditionStateSchema
+>;
+
+export const TradePlanAssemblyPrimaryReasonCodeSchema = z.enum([
+  "TRADE_PLAN_READY",
+  "TRADE_PLAN_WAITING_FOR_TRIGGER",
+  "TRADE_PLAN_NO_QUALIFIED_CONTRACT",
+  "TRADE_PLAN_NOT_QUALIFIED",
+  "TRADE_PLAN_NO_SETUP",
+  "TRADE_PLAN_NOT_APPLICABLE",
+  "TRADE_PLAN_UNAVAILABLE",
+  "SOURCE_DIRECTION_MISMATCH",
+  "SOURCE_SELECTED_INVALIDATION_MISSING",
+  "SOURCE_SELECTED_INVALIDATION_DUPLICATED",
+  "SOURCE_SELECTED_OBJECTIVE_MISSING",
+  "SOURCE_SELECTED_OBJECTIVE_DUPLICATED",
+  "SOURCE_SELECTED_CONTRACT_MISSING",
+  "SOURCE_SELECTED_CONTRACT_DUPLICATED",
+  "SOURCE_SELECTED_CONTRACT_NOT_RANK_ONE",
+  "SOURCE_SELECTED_CONTRACT_NOT_FRESH",
+  "SOURCE_RISK_SELECTION_INCONSISTENT",
+  "SOURCE_CONTRACT_SELECTION_INCONSISTENT",
+  "SOURCE_COMPATIBILITY_UNAVAILABLE",
+  "UPSTREAM_SAME_SNAPSHOT_UNAVAILABLE",
+  "SOURCE_STATE_COMBINATION_UNRECOGNIZED",
+]);
+export type TradePlanAssemblyPrimaryReasonCode = z.infer<
+  typeof TradePlanAssemblyPrimaryReasonCodeSchema
+>;
+
+export const TradePlanAssemblyWarningCodeSchema = z.enum([
+  "MARKET_STATE_UNAVAILABLE",
+  "BIAS_UNAVAILABLE",
+  "TRADE_PLAN_UNAVAILABLE",
+  "RISK_FRAMEWORK_UNAVAILABLE",
+  "RISK_FRAMEWORK_PARTIAL",
+  "CONTRACT_SELECTION_UNAVAILABLE",
+  "CONTRACT_SELECTION_PARTIAL",
+  "SOURCE_COMPATIBILITY_PARTIAL",
+  "SOURCE_DIRECTION_MISMATCH",
+  "UPSTREAM_SNAPSHOT_MISMATCH",
+  "SOURCE_SELECTED_VALUE_MISSING",
+  "SOURCE_SELECTED_VALUE_DUPLICATED",
+  "SOURCE_SELECTED_VALUE_INCONSISTENT",
+  "INVALID_ASSEMBLY_NUMERIC_DATA",
+  "ASSEMBLY_VALIDATION_FAILED",
+]);
+export type TradePlanAssemblyWarningCode = z.infer<
+  typeof TradePlanAssemblyWarningCodeSchema
+>;
+
+export const TradePlanAssemblyBiasSummarySchema = z.object({
+  biasState: DeterministicBiasStateSchema,
+  confidenceScore: z.number().finite().min(0).max(100).nullable(),
+  confidenceUnit: BiasConfidenceUnitSchema,
+  confidenceScope: BiasConfidenceScopeSchema,
+  sourceQualityState: BiasSourceQualityStateSchema,
+  minimumUsableDirectionalEvidenceCount: z.number().int().positive(),
+  usableDirectionalEvidenceCount: z.number().int().nonnegative(),
+  applicableDirectionalEvidenceCount: z.number().int().nonnegative(),
+  bullishEvidenceCount: z.number().int().nonnegative(),
+  bearishEvidenceCount: z.number().int().nonnegative(),
+  neutralEvidenceCount: z.number().int().nonnegative(),
+  unavailableDirectionalEvidenceCount: z.number().int().nonnegative(),
+  notApplicableDirectionalEvidenceCount: z.number().int().nonnegative(),
+});
+export type TradePlanAssemblyBiasSummary = z.infer<
+  typeof TradePlanAssemblyBiasSummarySchema
+>;
+
+export const TradePlanAssemblyEntryConditionSchema = z.object({
+  state: TradePlanAssemblyEntryConditionStateSchema,
+  planningReferenceType: PlanningReferenceTypeSchema,
+  planningReferencePrice: z.number().finite().positive().nullable(),
+  currentPrice: z.number().finite().positive().nullable(),
+  triggerLevel: z.number().finite().positive().nullable(),
+  comparison: TradeTriggerComparisonSchema.nullable(),
+  triggerSatisfied: z.boolean().nullable(),
+  signedDistancePoints: z.number().finite().nullable(),
+  sourceFeatureIds: z.array(MarketStateFeatureIdSchema),
+  sourceValues: z.object({
+    vwap: z.number().finite().positive().nullable(),
+    openingRangeBoundary: z.number().finite().positive().nullable(),
+  }),
+  disclosureCode: z.literal("PLANNING_REFERENCE_ONLY"),
+});
+export type TradePlanAssemblyEntryCondition = z.infer<
+  typeof TradePlanAssemblyEntryConditionSchema
+>;
+
+export const TradePlanAssemblyInvalidationSummarySchema = z.object({
+  candidateId: InvalidationCandidateIdSchema.nullable(),
+  levelType: InvalidationLevelTypeSchema.nullable(),
+  levelSemantic: z.literal("STRUCTURAL_LEVEL").nullable(),
+  level: z.number().finite().positive().nullable(),
+  riskDistancePoints: z.number().finite().positive().nullable(),
+  sourceFeatureId: MarketStateFeatureIdSchema.nullable(),
+  sourceComponents: z.array(MarketContextComponentSchema),
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  distanceRank: z.number().int().positive().nullable(),
+  disclosureCode: z.literal("STRUCTURAL_INVALIDATION_REFERENCE_ONLY"),
+});
+export type TradePlanAssemblyInvalidationSummary = z.infer<
+  typeof TradePlanAssemblyInvalidationSummarySchema
+>;
+
+export const TradePlanAssemblyObjectiveSummarySchema = z.object({
+  candidateId: ObjectiveCandidateIdSchema.nullable(),
+  levelType: ObjectiveLevelTypeSchema.nullable(),
+  levelSemantic: RiskLevelSemanticSchema.nullable(),
+  level: z.number().finite().positive().nullable(),
+  objectiveDistancePoints: z.number().finite().positive().nullable(),
+  rewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  minimumRewardRiskRatio: z.number().finite().positive(),
+  qualificationStatus: ObjectiveQualificationStatusSchema.nullable(),
+  sourceFeatureId: MarketStateFeatureIdSchema.nullable(),
+  sourceComponents: z.array(MarketContextComponentSchema),
+  referenceDate: MarketDateSchema.nullable(),
+  referenceDateRelation: MarketStateReferenceDateRelationSchema.nullable(),
+  distanceRank: z.number().int().positive().nullable(),
+  disclosureCode: z.literal("UNDERLYING_OBJECTIVE_REFERENCE_ONLY"),
+});
+export type TradePlanAssemblyObjectiveSummary = z.infer<
+  typeof TradePlanAssemblyObjectiveSummarySchema
+>;
+
+export const TradePlanAssemblyRiskRewardSummarySchema = z.object({
+  riskDistancePoints: z.number().finite().positive().nullable(),
+  rewardDistancePoints: z.number().finite().positive().nullable(),
+  rewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  minimumRequiredRewardRiskRatio: z.number().finite().positive(),
+  qualification: RiskQualificationStateSchema,
+  calculationUnit: z.literal("SPY_UNDERLYING_PRICE_POINTS"),
+});
+export type TradePlanAssemblyRiskRewardSummary = z.infer<
+  typeof TradePlanAssemblyRiskRewardSummarySchema
+>;
+
+export const TradePlanAssemblySelectedContractSummarySchema = z.object({
+  candidateId: z.string().min(1).nullable(),
+  contractSymbol: z.string().min(1).nullable(),
+  contractDirection: z.enum(["CALL", "PUT"]).nullable(),
+  description: z.string().nullable(),
+  strikePrice: z.number().finite().positive().nullable(),
+  expirationDate: MarketDateSchema.nullable(),
+  nonStandard: z.boolean().nullable(),
+  mini: z.boolean().nullable(),
+  multiplier: z.number().finite().positive().nullable(),
+  moneyness: ContractMoneynessSchema.nullable(),
+  bid: z.number().finite().positive().nullable(),
+  ask: z.number().finite().positive().nullable(),
+  calculatedMidpoint: z.number().finite().positive().nullable(),
+  providerMark: z.number().finite().nonnegative().nullable(),
+  spreadPoints: z.number().finite().nonnegative().nullable(),
+  spreadRatio: z.number().finite().nonnegative().nullable(),
+  spreadPercent: z.number().finite().nonnegative().nullable(),
+  bidSize: z.number().int().nonnegative().nullable(),
+  askSize: z.number().int().nonnegative().nullable(),
+  openInterest: z.number().int().nonnegative().nullable(),
+  volume: z.number().int().nonnegative().nullable(),
+  delta: z.number().finite().nullable(),
+  gamma: z.number().finite().nonnegative().nullable(),
+  theta: z.number().finite().nullable(),
+  vega: z.number().finite().nullable(),
+  rho: z.number().finite().nullable(),
+  impliedVolatilityPercent: z.number().finite().nonnegative().nullable(),
+  quoteAt: z.string().datetime().nullable(),
+  tradeAt: z.string().datetime().nullable(),
+  quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
+  quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
+  strikeDistancePoints: z.number().finite().nonnegative().nullable(),
+  selectionRank: z.number().int().positive().nullable(),
+});
+export type TradePlanAssemblySelectedContractSummary = z.infer<
+  typeof TradePlanAssemblySelectedContractSummarySchema
+>;
+
+export const TradePlanAssemblyPremiumReferenceSchema = z.object({
+  type: z.enum(["CALCULATED_BID_ASK_MIDPOINT", "UNAVAILABLE"]),
+  value: z.number().finite().positive().nullable(),
+  disclosureCode: z.literal("MIDPOINT_REFERENCE_ONLY"),
+});
+export type TradePlanAssemblyPremiumReference = z.infer<
+  typeof TradePlanAssemblyPremiumReferenceSchema
+>;
+
+export const TradePlanAssemblySourceSummarySchema = z.object({
+  upstreamSameSnapshotGuaranteed: z.boolean(),
+  marketState: z.object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_MARKET_STATE"),
+    version: MarketStateFeatureVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: MarketStateEngineStateSchema,
+    warningCode: MarketStateOverallWarningCodeSchema.nullable(),
+  }),
+  bias: z.object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_BIAS_CONFIDENCE"),
+    version: BiasMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: BiasEngineStateSchema,
+    biasState: DeterministicBiasStateSchema,
+    warningCode: BiasOverallWarningCodeSchema.nullable(),
+  }),
+  tradePlan: z.object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONDITIONAL_TRADE_PLAN"),
+    version: TradePlanMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanEngineStateSchema,
+    setupState: TradeSetupStateSchema,
+    setupDirection: TradeSetupDirectionSchema,
+    primaryReasonCode: TradePlanPrimaryReasonCodeSchema,
+    warningCode: TradePlanOverallWarningCodeSchema.nullable(),
+  }),
+  risk: z.object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_OBJECTIVE_RISK_FRAMEWORK"),
+    version: RiskMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: RiskFrameworkEngineStateSchema,
+    frameworkState: ObjectiveRiskFrameworkStateSchema,
+    riskQualification: RiskQualificationStateSchema,
+    direction: ObjectiveRiskDirectionSchema,
+    primaryReasonCode: RiskPrimaryReasonCodeSchema,
+    warningCode: RiskOverallWarningCodeSchema.nullable(),
+  }),
+  contract: z.object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONTRACT_SELECTION_LIQUIDITY"),
+    version: ContractMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: ContractSelectionEngineStateSchema,
+    selectionState: ContractSelectionStateSchema,
+    contractDirection: SelectedContractDirectionSchema,
+    sourceCompatibilityState: ContractSourceCompatibilityStateSchema,
+    sourceOptionsChainFetchedAt: z.string().datetime().nullable(),
+    sourceOptionsChainMetricState: OptionsChainMetricStateSchema.nullable(),
+    sourceOptionsChainSourceState: OptionsChainSourceStateSchema.nullable(),
+    sourceOptionsChainWarningCode: OptionsChainWarningCodeSchema.nullable(),
+    sourceOptionsChainIsDelayed: z.boolean().nullable(),
+    primaryReasonCode: ContractSelectionPrimaryReasonCodeSchema,
+    warningCode: ContractSelectionOverallWarningCodeSchema.nullable(),
+  }),
+  selectedContractQuoteAt: z.string().datetime().nullable(),
+});
+export type TradePlanAssemblySourceSummary = z.infer<
+  typeof TradePlanAssemblySourceSummarySchema
+>;
+
+export const TradePlanAssemblyDisclosuresSchema = z.object({
+  planningReference: z.literal("PLANNING_REFERENCE_ONLY"),
+  structuralInvalidation: z.literal("STRUCTURAL_INVALIDATION_REFERENCE_ONLY"),
+  underlyingObjective: z.literal("UNDERLYING_OBJECTIVE_REFERENCE_ONLY"),
+  premiumReference: z.literal("MIDPOINT_REFERENCE_ONLY"),
+  confidence: z.literal("STRUCTURAL_EVIDENCE_ONLY"),
+  noOrderExecution: z.literal(true),
+  noPositionSizing: z.literal(true),
+  noGuaranteedFill: z.literal(true),
+  noPremiumTarget: z.literal(true),
+  noPremiumStop: z.literal(true),
+});
+export type TradePlanAssemblyDisclosures = z.infer<
+  typeof TradePlanAssemblyDisclosuresSchema
+>;
+
+export const TradePlanAssemblyMethodologySchema = z.object({
+  sourceProducts: z.tuple([
+    z.literal("SPY_ZERO_DTE_DETERMINISTIC_MARKET_STATE"),
+    z.literal("SPY_ZERO_DTE_DETERMINISTIC_BIAS_CONFIDENCE"),
+    z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONDITIONAL_TRADE_PLAN"),
+    z.literal("SPY_ZERO_DTE_DETERMINISTIC_OBJECTIVE_RISK_FRAMEWORK"),
+    z.literal("SPY_ZERO_DTE_DETERMINISTIC_CONTRACT_SELECTION_LIQUIDITY"),
+  ]),
+  sourceMethodologies: z.tuple([
+    z.literal("V1"),
+    z.literal("BIAS_V1"),
+    z.literal("TRADE_PLAN_V1"),
+    z.literal("RISK_V1"),
+    z.literal("CONTRACT_V1"),
+  ]),
+  calculationUnit: z.literal("SPY_UNDERLYING_PRICE_POINTS"),
+  assemblyOnly: z.literal(true),
+  contractCandidateDetailsRoute: z.literal("/api/trade-contract/spy"),
+});
+export type TradePlanAssemblyMethodology = z.infer<
+  typeof TradePlanAssemblyMethodologySchema
+>;
+
+export const SpyZeroDteTradePlanAssemblyResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY"),
+    methodologyVersion: TradePlanAssemblyMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    mostRecentRthSessionDate: MarketDateSchema.nullable(),
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    currentPrice: z.number().finite().positive().nullable(),
+    priceSource: MarketStatePriceSourceSchema.nullable(),
+    quoteTimestamp: z.string().datetime().nullable(),
+    sessionPhase: MarketContextSessionWindowSchema.nullable(),
+    bias: TradePlanAssemblyBiasSummarySchema,
+    entryCondition: TradePlanAssemblyEntryConditionSchema,
+    structuralInvalidation: TradePlanAssemblyInvalidationSummarySchema,
+    primaryObjective: TradePlanAssemblyObjectiveSummarySchema,
+    underlyingRiskReward: TradePlanAssemblyRiskRewardSummarySchema,
+    selectedContract: TradePlanAssemblySelectedContractSummarySchema,
+    premiumReference: TradePlanAssemblyPremiumReferenceSchema,
+    sourceSummary: TradePlanAssemblySourceSummarySchema,
+    disclosures: TradePlanAssemblyDisclosuresSchema,
+    methodology: TradePlanAssemblyMethodologySchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.engineState === "PARTIAL" && value.planState === "READY") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PARTIAL Assembly engine cannot produce READY",
+      });
+    }
+
+    if (
+      (value.planState === "UNAVAILABLE") !==
+      (value.engineState === "UNAVAILABLE")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "UNAVAILABLE Assembly plan and engine states must match",
+      });
+    }
+
+    if (
+      ["READY", "WAITING_FOR_TRIGGER", "NO_QUALIFIED_CONTRACT"].includes(value.planState) &&
+      !["CALLS", "PUTS"].includes(value.direction)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Directional Assembly states require CALLS or PUTS",
+      });
+    }
+    if (
+      ["NO_SETUP", "NOT_APPLICABLE"].includes(value.planState) &&
+      value.direction !== "NONE"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "NO_SETUP and NOT_APPLICABLE Assembly states require NONE direction",
+      });
+    }
+    if (value.planState === "UNAVAILABLE" && value.direction !== "UNAVAILABLE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "UNAVAILABLE Assembly state requires UNAVAILABLE direction",
+      });
+    }
+
+    const hasSelectedContract = value.selectedContract.candidateId !== null;
+    const selectedContractHasAnyValue = Object.values(value.selectedContract).some(
+      (item) => item !== null,
+    );
+    if (value.planState === "READY") {
+      if (
+        value.engineState !== "AVAILABLE" ||
+        !["CALLS", "PUTS"].includes(value.direction) ||
+        !value.sourceSummary.upstreamSameSnapshotGuaranteed ||
+        value.sourceSummary.risk.frameworkState !== "READY" ||
+        value.sourceSummary.risk.riskQualification !== "QUALIFIED" ||
+        value.sourceSummary.contract.selectionState !== "SELECTED" ||
+        value.sourceSummary.contract.sourceCompatibilityState !== "COMPATIBLE" ||
+        !hasSelectedContract ||
+        value.selectedContract.selectionRank !== 1 ||
+        value.selectedContract.quoteFreshnessState !== "FRESH" ||
+        (value.direction === "CALLS" && value.selectedContract.contractDirection !== "CALL") ||
+        (value.direction === "PUTS" && value.selectedContract.contractDirection !== "PUT") ||
+        value.structuralInvalidation.candidateId === null ||
+        value.structuralInvalidation.levelSemantic !== "STRUCTURAL_LEVEL" ||
+        value.primaryObjective.candidateId === null ||
+        value.primaryObjective.qualificationStatus !== "QUALIFIED" ||
+        value.underlyingRiskReward.qualification !== "QUALIFIED" ||
+        value.underlyingRiskReward.rewardRiskRatio === null ||
+        value.underlyingRiskReward.rewardRiskRatio <
+          value.underlyingRiskReward.minimumRequiredRewardRiskRatio ||
+        value.premiumReference.type !== "CALCULATED_BID_ASK_MIDPOINT" ||
+        value.premiumReference.value === null ||
+        value.premiumReference.value !== value.selectedContract.calculatedMidpoint ||
+        value.entryCondition.state !== "SATISFIED" ||
+        value.entryCondition.planningReferenceType !== "CURRENT_PRICE"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "READY Assembly response is inconsistent",
+        });
+      }
+    } else if (
+      selectedContractHasAnyValue ||
+      value.premiumReference.type !== "UNAVAILABLE" ||
+      value.premiumReference.value !== null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-READY Assembly cannot expose a selected contract or midpoint",
+      });
+    }
+
+    if (value.planState === "WAITING_FOR_TRIGGER") {
+      if (
+        value.sourceSummary.risk.frameworkState !== "PREVIEW" ||
+        value.sourceSummary.contract.selectionState !== "DEFERRED" ||
+        value.entryCondition.state !== "WAITING" ||
+        value.entryCondition.planningReferenceType !== "TRIGGER_LEVEL" ||
+        value.entryCondition.triggerLevel === null ||
+        value.entryCondition.triggerSatisfied !== false
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "WAITING_FOR_TRIGGER Assembly response is inconsistent",
+        });
+      }
+    }
+
+    if (value.planState === "NO_QUALIFIED_CONTRACT") {
+      if (
+        value.sourceSummary.risk.frameworkState !== "READY" ||
+        value.sourceSummary.risk.riskQualification !== "QUALIFIED" ||
+        value.sourceSummary.contract.selectionState !== "NO_QUALIFIED_CONTRACT" ||
+        value.structuralInvalidation.candidateId === null ||
+        value.primaryObjective.candidateId === null
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "NO_QUALIFIED_CONTRACT Assembly response is inconsistent",
+        });
+      }
+    }
+
+    if (value.planState === "NOT_QUALIFIED") {
+      if (
+        value.sourceSummary.risk.frameworkState !== "NOT_QUALIFIED" ||
+        value.sourceSummary.contract.selectionState !== "NOT_APPLICABLE"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "NOT_QUALIFIED Assembly response is inconsistent",
+        });
+      }
+    }
+
+    if (["NO_SETUP", "NOT_APPLICABLE"].includes(value.planState)) {
+      const structuralHasAnyValue = Object.entries(value.structuralInvalidation).some(
+        ([key, item]) => key !== "disclosureCode" && key !== "sourceComponents" && item !== null,
+      ) || value.structuralInvalidation.sourceComponents.length > 0;
+      const objectiveHasAnyValue = Object.entries(value.primaryObjective).some(
+        ([key, item]) =>
+          !["disclosureCode", "sourceComponents", "minimumRewardRiskRatio"].includes(key) &&
+          item !== null,
+      ) || value.primaryObjective.sourceComponents.length > 0;
+      if (
+        value.entryCondition.state !== "NOT_APPLICABLE" ||
+        structuralHasAnyValue ||
+        objectiveHasAnyValue ||
+        value.underlyingRiskReward.riskDistancePoints !== null ||
+        value.underlyingRiskReward.rewardDistancePoints !== null ||
+        value.underlyingRiskReward.rewardRiskRatio !== null
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Non-candidate Assembly state cannot expose structural selections",
+        });
+      }
+    }
+  });
+export type SpyZeroDteTradePlanAssemblyResponse = z.infer<
+  typeof SpyZeroDteTradePlanAssemblyResponseSchema
+>;
