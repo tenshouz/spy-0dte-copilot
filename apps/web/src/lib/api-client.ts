@@ -22,6 +22,8 @@ import {
   SpyZeroDteObjectiveRiskResponseSchema,
   SpyZeroDteContractSelectionResponseSchema,
   SpyZeroDteTradePlanAssemblyResponseSchema,
+  SpyZeroDtePositionSizingRequestSchema,
+  SpyZeroDtePositionSizingResponseSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
@@ -46,6 +48,8 @@ import {
   type SpyZeroDteObjectiveRiskResponse,
   type SpyZeroDteContractSelectionResponse,
   type SpyZeroDteTradePlanAssemblyResponse,
+  type SpyZeroDtePositionSizingRequest,
+  type SpyZeroDtePositionSizingResponse,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -68,6 +72,25 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
   }
   const data = await res.json();
   return schema.parse(data);
+}
+
+async function postJson<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  requestSchema: z.ZodType<TRequest>,
+  responseSchema: z.ZodType<TResponse>,
+): Promise<TResponse> {
+  const validatedBody = requestSchema.parse(body);
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(validatedBody),
+  });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
+  return responseSchema.parse(await res.json());
 }
 
 export const apiClient = {
@@ -113,6 +136,15 @@ export const apiClient = {
     getJson("/api/trade-contract/spy", SpyZeroDteContractSelectionResponseSchema),
   getSpyZeroDteTradePlanAssembly: (): Promise<SpyZeroDteTradePlanAssemblyResponse> =>
     getJson("/api/trade-plan-assembly/spy", SpyZeroDteTradePlanAssemblyResponseSchema),
+  calculateSpyZeroDtePositionSizing: (
+    request: SpyZeroDtePositionSizingRequest,
+  ): Promise<SpyZeroDtePositionSizingResponse> =>
+    postJson(
+      "/api/trade-sizing/spy",
+      request,
+      SpyZeroDtePositionSizingRequestSchema,
+      SpyZeroDtePositionSizingResponseSchema,
+    ),
 };
 
 export const schwabLoginUrl = `${API_BASE_URL}/api/auth/schwab/login`;

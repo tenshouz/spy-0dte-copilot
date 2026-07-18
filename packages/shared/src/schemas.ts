@@ -3902,3 +3902,548 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
 export type SpyZeroDteTradePlanAssemblyResponse = z.infer<
   typeof SpyZeroDteTradePlanAssemblyResponseSchema
 >;
+
+/** Deterministic SPY 0DTE position-sizing and caller-supplied account-risk contract. */
+export const PositionSizingMethodologyVersionSchema = z.literal("SIZING_V1");
+export type PositionSizingMethodologyVersion = z.infer<
+  typeof PositionSizingMethodologyVersionSchema
+>;
+
+export const PositionSizingEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type PositionSizingEngineState = z.infer<
+  typeof PositionSizingEngineStateSchema
+>;
+
+export const PositionSizingStateSchema = z.enum([
+  "SIZED",
+  "NO_CAPACITY",
+  "BLOCKED",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type PositionSizingState = z.infer<typeof PositionSizingStateSchema>;
+
+export const PositionSizingPrimaryReasonCodeSchema = z.enum([
+  "POSITION_SIZE_CALCULATED",
+  "NO_CAPACITY_FOR_ONE_CONTRACT",
+  "BLOCKED_MAXIMUM_RISK_PER_TRADE_ZERO",
+  "BLOCKED_DAILY_LOSS_BUDGET_EXHAUSTED",
+  "BLOCKED_PORTFOLIO_RISK_BUDGET_EXHAUSTED",
+  "BLOCKED_AVAILABLE_CASH_EXHAUSTED",
+  "BLOCKED_MAXIMUM_CAPITAL_ALLOCATION_ZERO",
+  "BLOCKED_MAXIMUM_CONTRACTS_ZERO",
+  "SOURCE_ASSEMBLY_NOT_READY",
+  "SOURCE_ASSEMBLY_UNAVAILABLE",
+  "SOURCE_SELECTED_CONTRACT_MISSING",
+  "SOURCE_SELECTED_CONTRACT_NOT_FRESH",
+  "SOURCE_SELECTED_CONTRACT_ASK_INVALID",
+  "SOURCE_SELECTED_CONTRACT_MULTIPLIER_INVALID",
+  "SOURCE_SELECTED_CONTRACT_EXPIRATION_INVALID",
+  "SOURCE_DIRECTION_MISMATCH",
+  "SIZING_CALCULATION_UNAVAILABLE",
+]);
+export type PositionSizingPrimaryReasonCode = z.infer<
+  typeof PositionSizingPrimaryReasonCodeSchema
+>;
+
+export const PositionSizingWarningCodeSchema = z.enum([
+  "ASSEMBLY_UNAVAILABLE",
+  "ASSEMBLY_PARTIAL",
+  "SELECTED_CONTRACT_UNAVAILABLE",
+  "SELECTED_CONTRACT_QUOTE_STALE",
+  "SELECTED_CONTRACT_ASK_UNAVAILABLE",
+  "SELECTED_CONTRACT_MULTIPLIER_INVALID",
+  "SELECTED_CONTRACT_EXPIRATION_INVALID",
+  "INVALID_SIZING_NUMERIC_DATA",
+  "SIZING_VALIDATION_FAILED",
+]);
+export type PositionSizingWarningCode = z.infer<
+  typeof PositionSizingWarningCodeSchema
+>;
+
+export const RiskBudgetControlSchema = z.enum([
+  "MAXIMUM_RISK_PER_TRADE",
+  "REMAINING_DAILY_LOSS_BUDGET",
+  "REMAINING_PORTFOLIO_RISK_BUDGET",
+]);
+export type RiskBudgetControl = z.infer<typeof RiskBudgetControlSchema>;
+
+export const CapitalBudgetControlSchema = z.enum([
+  "AVAILABLE_CASH",
+  "MAXIMUM_CAPITAL_ALLOCATION",
+]);
+export type CapitalBudgetControl = z.infer<typeof CapitalBudgetControlSchema>;
+
+export const QuantityLimitingControlSchema = z.enum([
+  "RISK_BUDGET",
+  "CAPITAL_BUDGET",
+  "MAXIMUM_CONTRACTS",
+]);
+export type QuantityLimitingControl = z.infer<
+  typeof QuantityLimitingControlSchema
+>;
+
+export const PositionSizingBlockingControlSchema = z.enum([
+  "MAXIMUM_RISK_PER_TRADE",
+  "REMAINING_DAILY_LOSS_BUDGET",
+  "REMAINING_PORTFOLIO_RISK_BUDGET",
+  "AVAILABLE_CASH",
+  "MAXIMUM_CAPITAL_ALLOCATION",
+  "MAXIMUM_CONTRACTS",
+]);
+export type PositionSizingBlockingControl = z.infer<
+  typeof PositionSizingBlockingControlSchema
+>;
+
+const NonnegativeSafeIntegerSchema = z
+  .number()
+  .int()
+  .nonnegative()
+  .max(Number.MAX_SAFE_INTEGER);
+
+export const PositionSizingAccountSnapshotSchema = z
+  .object({
+    accountEquityDollars: z.number().finite().positive(),
+    availableCashDollars: z.number().finite().nonnegative(),
+    remainingDailyLossBudgetDollars: z.number().finite().nonnegative(),
+    remainingPortfolioRiskBudgetDollars: z.number().finite().nonnegative(),
+  })
+  .strict();
+export type PositionSizingAccountSnapshot = z.infer<
+  typeof PositionSizingAccountSnapshotSchema
+>;
+
+export const PositionSizingRiskPolicySchema = z
+  .object({
+    maximumRiskPerTradeDollars: z.number().finite().nonnegative(),
+    maximumCapitalAllocationDollars: z.number().finite().nonnegative(),
+    maximumContracts: NonnegativeSafeIntegerSchema,
+  })
+  .strict();
+export type PositionSizingRiskPolicy = z.infer<
+  typeof PositionSizingRiskPolicySchema
+>;
+
+export const SpyZeroDtePositionSizingRequestSchema = z
+  .object({
+    accountSnapshot: PositionSizingAccountSnapshotSchema,
+    riskPolicy: PositionSizingRiskPolicySchema,
+  })
+  .strict();
+export type SpyZeroDtePositionSizingRequest = z.infer<
+  typeof SpyZeroDtePositionSizingRequestSchema
+>;
+
+export const PositionSizingRequestIssueCodeSchema = z.enum([
+  "REQUIRED",
+  "INVALID_TYPE",
+  "NOT_FINITE",
+  "MUST_BE_POSITIVE",
+  "MUST_BE_NONNEGATIVE",
+  "MUST_BE_SAFE_INTEGER",
+  "UNRECOGNIZED_KEY",
+  "INVALID_JSON",
+]);
+export type PositionSizingRequestIssueCode = z.infer<
+  typeof PositionSizingRequestIssueCodeSchema
+>;
+
+export const PositionSizingRequestErrorResponseSchema = z
+  .object({
+    error: z.literal("INVALID_POSITION_SIZING_REQUEST"),
+    issues: z
+      .array(
+        z
+          .object({
+            path: z.string().min(1),
+            code: PositionSizingRequestIssueCodeSchema,
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type PositionSizingRequestErrorResponse = z.infer<
+  typeof PositionSizingRequestErrorResponseSchema
+>;
+
+export const PositionSizingSourceAssemblySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY"),
+    methodologyVersion: TradePlanAssemblyMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    upstreamSameSnapshotGuaranteed: z.boolean(),
+    contractSourceCompatibilityState: ContractSourceCompatibilityStateSchema,
+    sourceContractCalculatedAt: z.string().datetime(),
+    sourceOptionsChainFetchedAt: z.string().datetime().nullable(),
+    selectedContractQuoteAt: z.string().datetime().nullable(),
+  })
+  .strict();
+export type PositionSizingSourceAssembly = z.infer<
+  typeof PositionSizingSourceAssemblySchema
+>;
+
+export const PositionSizingSelectedContractSchema = z
+  .object({
+    candidateId: z.string().min(1).nullable(),
+    contractSymbol: z.string().min(1).nullable(),
+    contractDirection: z.enum(["CALL", "PUT"]).nullable(),
+    strikePrice: z.number().finite().positive().nullable(),
+    expirationDate: MarketDateSchema.nullable(),
+    multiplier: z.number().finite().positive().nullable(),
+    ask: z.number().finite().positive().nullable(),
+    quoteAt: z.string().datetime().nullable(),
+    quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
+    quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
+    selectionRank: z.number().int().positive().nullable(),
+  })
+  .strict();
+export type PositionSizingSelectedContract = z.infer<
+  typeof PositionSizingSelectedContractSchema
+>;
+
+export const PositionSizingAccountSnapshotAuditSchema = PositionSizingAccountSnapshotSchema.extend({
+  disclosureCode: z.literal("CALLER_SUPPLIED_ACCOUNT_SNAPSHOT"),
+}).strict();
+export type PositionSizingAccountSnapshotAudit = z.infer<
+  typeof PositionSizingAccountSnapshotAuditSchema
+>;
+
+export const PositionSizingPremiumRiskReferenceSchema = z
+  .object({
+    premiumPriceReferenceType: z.enum(["CURRENT_ASK", "UNAVAILABLE"]),
+    premiumPriceReference: z.number().finite().positive().nullable(),
+    multiplier: z.number().finite().positive().nullable(),
+    premiumDebitReferencePerContractDollars: z.number().finite().positive().nullable(),
+    fullPremiumLossReferencePerContractDollars: z.number().finite().positive().nullable(),
+    disclosureCode: z.literal("CURRENT_ASK_FULL_PREMIUM_LOSS_REFERENCE_ONLY"),
+  })
+  .strict();
+export type PositionSizingPremiumRiskReference = z.infer<
+  typeof PositionSizingPremiumRiskReferenceSchema
+>;
+
+export const PositionSizingBudgetsSchema = z
+  .object({
+    effectiveRiskBudgetDollars: z.number().finite().nonnegative().nullable(),
+    limitingRiskControls: z.array(RiskBudgetControlSchema),
+    effectiveCapitalBudgetDollars: z.number().finite().nonnegative().nullable(),
+    limitingCapitalControls: z.array(CapitalBudgetControlSchema),
+  })
+  .strict();
+export type PositionSizingBudgets = z.infer<typeof PositionSizingBudgetsSchema>;
+
+export const PositionSizingQuantityCalculationSchema = z
+  .object({
+    contractsPermittedByRisk: NonnegativeSafeIntegerSchema.nullable(),
+    contractsPermittedByCapital: NonnegativeSafeIntegerSchema.nullable(),
+    maximumContractsPolicyLimit: NonnegativeSafeIntegerSchema,
+    maximumContractsUnderPolicy: NonnegativeSafeIntegerSchema.nullable(),
+    limitingQuantityControls: z.array(QuantityLimitingControlSchema),
+    blockingControls: z.array(PositionSizingBlockingControlSchema),
+    disclosureCode: z.literal("POSITION_SIZE_REFERENCE_ONLY"),
+  })
+  .strict();
+export type PositionSizingQuantityCalculation = z.infer<
+  typeof PositionSizingQuantityCalculationSchema
+>;
+
+export const PositionSizingPositionReferencesSchema = z
+  .object({
+    totalPremiumDebitReferenceDollars: z.number().finite().nonnegative().nullable(),
+    totalFullPremiumLossReferenceDollars: z.number().finite().nonnegative().nullable(),
+    riskPercentOfAccountEquity: z.number().finite().nonnegative().nullable(),
+    capitalPercentOfAccountEquity: z.number().finite().nonnegative().nullable(),
+  })
+  .strict();
+export type PositionSizingPositionReferences = z.infer<
+  typeof PositionSizingPositionReferencesSchema
+>;
+
+export const PositionSizingRevalidationSchema = z
+  .object({
+    required: z.boolean(),
+    disclosureCode: z.literal("REVALIDATE_CURRENT_ASK_BEFORE_ANY_ORDER"),
+  })
+  .strict();
+export type PositionSizingRevalidation = z.infer<
+  typeof PositionSizingRevalidationSchema
+>;
+
+export const PositionSizingDisclosuresSchema = z
+  .object({
+    callerSuppliedAccountSnapshot: z.literal(true),
+    currentAskIsNotGuaranteed: z.literal(true),
+    fullPremiumLossAssumption: z.literal(true),
+    quantityIsReferenceOnly: z.literal(true),
+    noOrderExecution: z.literal(true),
+    noBrokerAccountAccess: z.literal(true),
+    noPersistence: z.literal(true),
+    noPremiumStop: z.literal(true),
+    noPremiumTarget: z.literal(true),
+  })
+  .strict();
+export type PositionSizingDisclosures = z.infer<
+  typeof PositionSizingDisclosuresSchema
+>;
+
+export const PositionSizingMethodologySchema = z
+  .object({
+    sizingPremiumReference: z.literal("CURRENT_ASK"),
+    maximumLossMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    effectiveRiskBudgetMethod: z.literal("MINIMUM_OF_EXPLICIT_RISK_LIMITS"),
+    effectiveCapitalBudgetMethod: z.literal(
+      "MINIMUM_OF_AVAILABLE_CASH_AND_ALLOCATION_LIMIT",
+    ),
+    quantityMethod: z.literal("FLOOR_THEN_MINIMUM_OF_ALL_CONTROLS"),
+    multiplierRequirement: z.literal(100),
+    positionType: z.literal("LONG_SINGLE_LEG_OPTION_ONLY"),
+    calculationCurrency: z.literal("USD"),
+  })
+  .strict();
+export type PositionSizingMethodology = z.infer<
+  typeof PositionSizingMethodologySchema
+>;
+
+function sameOrderedValues(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+export const SpyZeroDtePositionSizingResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_POSITION_SIZING_ACCOUNT_RISK"),
+    methodologyVersion: PositionSizingMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: PositionSizingEngineStateSchema,
+    sizingState: PositionSizingStateSchema,
+    primaryReasonCode: PositionSizingPrimaryReasonCodeSchema,
+    warningCode: PositionSizingWarningCodeSchema.nullable(),
+    sourceAssembly: PositionSizingSourceAssemblySchema,
+    selectedContract: PositionSizingSelectedContractSchema,
+    accountSnapshot: PositionSizingAccountSnapshotAuditSchema,
+    riskPolicy: PositionSizingRiskPolicySchema,
+    premiumRiskReference: PositionSizingPremiumRiskReferenceSchema,
+    budgets: PositionSizingBudgetsSchema,
+    quantityCalculation: PositionSizingQuantityCalculationSchema,
+    positionReferences: PositionSizingPositionReferencesSchema,
+    revalidation: PositionSizingRevalidationSchema,
+    disclosures: PositionSizingDisclosuresSchema,
+    methodology: PositionSizingMethodologySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const add = (message: string): void => {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    };
+
+    if (value.currentMarketDate !== value.sourceAssembly.currentMarketDate) {
+      add("Sizing and Assembly market dates must match");
+    }
+    if (value.engineState === "PARTIAL" && value.sizingState === "SIZED") {
+      add("PARTIAL Sizing engine cannot produce a positive size");
+    }
+    if ((value.engineState === "UNAVAILABLE") !== (value.sizingState === "UNAVAILABLE")) {
+      add("UNAVAILABLE Sizing engine and sizing states must match");
+    }
+
+    const quantity = value.quantityCalculation.maximumContractsUnderPolicy;
+    if (value.sizingState === "SIZED" && (quantity === null || quantity < 1)) {
+      add("SIZED requires a positive contract reference");
+    }
+    if (["NO_CAPACITY", "BLOCKED"].includes(value.sizingState) && quantity !== 0) {
+      add("NO_CAPACITY and BLOCKED require zero contracts");
+    }
+    if (["NOT_APPLICABLE", "UNAVAILABLE"].includes(value.sizingState) && quantity !== null) {
+      add("Non-applicable and unavailable sizing require null quantity");
+    }
+
+    const applicable = ["SIZED", "NO_CAPACITY", "BLOCKED"].includes(value.sizingState);
+    if (applicable) {
+      const contract = value.selectedContract;
+      const directionMatches =
+        (value.sourceAssembly.direction === "CALLS" && contract.contractDirection === "CALL") ||
+        (value.sourceAssembly.direction === "PUTS" && contract.contractDirection === "PUT");
+      if (
+        value.engineState !== "AVAILABLE" ||
+        value.sourceAssembly.engineState !== "AVAILABLE" ||
+        value.sourceAssembly.planState !== "READY" ||
+        !value.sourceAssembly.upstreamSameSnapshotGuaranteed ||
+        value.sourceAssembly.contractSourceCompatibilityState !== "COMPATIBLE" ||
+        !directionMatches ||
+        contract.candidateId === null ||
+        contract.contractSymbol === null ||
+        contract.strikePrice === null ||
+        contract.expirationDate !== value.currentMarketDate ||
+        contract.multiplier !== 100 ||
+        contract.ask === null ||
+        contract.quoteAt === null ||
+        contract.quoteFreshnessState !== "FRESH" ||
+        contract.selectionRank !== 1
+      ) {
+        add("Applicable sizing requires a complete READY Assembly contract");
+      }
+
+      const premium = value.premiumRiskReference;
+      if (
+        premium.premiumPriceReferenceType !== "CURRENT_ASK" ||
+        premium.premiumPriceReference !== contract.ask ||
+        premium.multiplier !== 100 ||
+        premium.premiumDebitReferencePerContractDollars === null ||
+        premium.fullPremiumLossReferencePerContractDollars === null ||
+        premium.premiumDebitReferencePerContractDollars !== contract.ask! * 100 ||
+        premium.fullPremiumLossReferencePerContractDollars !==
+          premium.premiumDebitReferencePerContractDollars
+      ) {
+        add("Applicable sizing premium references are inconsistent");
+      }
+
+      const expectedRiskBudget = Math.min(
+        value.riskPolicy.maximumRiskPerTradeDollars,
+        value.accountSnapshot.remainingDailyLossBudgetDollars,
+        value.accountSnapshot.remainingPortfolioRiskBudgetDollars,
+      );
+      const expectedRiskControls: RiskBudgetControl[] = [];
+      if (value.riskPolicy.maximumRiskPerTradeDollars === expectedRiskBudget) {
+        expectedRiskControls.push("MAXIMUM_RISK_PER_TRADE");
+      }
+      if (value.accountSnapshot.remainingDailyLossBudgetDollars === expectedRiskBudget) {
+        expectedRiskControls.push("REMAINING_DAILY_LOSS_BUDGET");
+      }
+      if (value.accountSnapshot.remainingPortfolioRiskBudgetDollars === expectedRiskBudget) {
+        expectedRiskControls.push("REMAINING_PORTFOLIO_RISK_BUDGET");
+      }
+
+      const expectedCapitalBudget = Math.min(
+        value.accountSnapshot.availableCashDollars,
+        value.riskPolicy.maximumCapitalAllocationDollars,
+      );
+      const expectedCapitalControls: CapitalBudgetControl[] = [];
+      if (value.accountSnapshot.availableCashDollars === expectedCapitalBudget) {
+        expectedCapitalControls.push("AVAILABLE_CASH");
+      }
+      if (value.riskPolicy.maximumCapitalAllocationDollars === expectedCapitalBudget) {
+        expectedCapitalControls.push("MAXIMUM_CAPITAL_ALLOCATION");
+      }
+
+      if (
+        value.budgets.effectiveRiskBudgetDollars !== expectedRiskBudget ||
+        !sameOrderedValues(value.budgets.limitingRiskControls, expectedRiskControls) ||
+        value.budgets.effectiveCapitalBudgetDollars !== expectedCapitalBudget ||
+        !sameOrderedValues(value.budgets.limitingCapitalControls, expectedCapitalControls)
+      ) {
+        add("Sizing budget calculations are inconsistent");
+      }
+
+      const perContract = premium.premiumDebitReferencePerContractDollars!;
+      const byRisk = Math.floor(expectedRiskBudget / perContract);
+      const byCapital = Math.floor(expectedCapitalBudget / perContract);
+      const finalQuantity = Math.min(
+        byRisk,
+        byCapital,
+        value.riskPolicy.maximumContracts,
+      );
+      const expectedQuantityControls: QuantityLimitingControl[] = [];
+      if (byRisk === finalQuantity) expectedQuantityControls.push("RISK_BUDGET");
+      if (byCapital === finalQuantity) expectedQuantityControls.push("CAPITAL_BUDGET");
+      if (value.riskPolicy.maximumContracts === finalQuantity) {
+        expectedQuantityControls.push("MAXIMUM_CONTRACTS");
+      }
+
+      const expectedBlockers: PositionSizingBlockingControl[] = [];
+      if (value.riskPolicy.maximumRiskPerTradeDollars === 0) {
+        expectedBlockers.push("MAXIMUM_RISK_PER_TRADE");
+      }
+      if (value.accountSnapshot.remainingDailyLossBudgetDollars === 0) {
+        expectedBlockers.push("REMAINING_DAILY_LOSS_BUDGET");
+      }
+      if (value.accountSnapshot.remainingPortfolioRiskBudgetDollars === 0) {
+        expectedBlockers.push("REMAINING_PORTFOLIO_RISK_BUDGET");
+      }
+      if (value.accountSnapshot.availableCashDollars === 0) {
+        expectedBlockers.push("AVAILABLE_CASH");
+      }
+      if (value.riskPolicy.maximumCapitalAllocationDollars === 0) {
+        expectedBlockers.push("MAXIMUM_CAPITAL_ALLOCATION");
+      }
+      if (value.riskPolicy.maximumContracts === 0) {
+        expectedBlockers.push("MAXIMUM_CONTRACTS");
+      }
+
+      if (
+        value.quantityCalculation.contractsPermittedByRisk !== byRisk ||
+        value.quantityCalculation.contractsPermittedByCapital !== byCapital ||
+        value.quantityCalculation.maximumContractsPolicyLimit !==
+          value.riskPolicy.maximumContracts ||
+        value.quantityCalculation.maximumContractsUnderPolicy !== finalQuantity ||
+        !sameOrderedValues(
+          value.quantityCalculation.limitingQuantityControls,
+          expectedQuantityControls,
+        ) ||
+        !sameOrderedValues(value.quantityCalculation.blockingControls, expectedBlockers)
+      ) {
+        add("Sizing quantity calculations are inconsistent");
+      }
+
+      const expectedState =
+        expectedBlockers.length > 0
+          ? "BLOCKED"
+          : finalQuantity > 0
+            ? "SIZED"
+            : "NO_CAPACITY";
+      if (value.sizingState !== expectedState) {
+        add("Sizing state does not match the calculated quantity and blockers");
+      }
+
+      const expectedTotal = finalQuantity * perContract;
+      const expectedPercent =
+        (expectedTotal / value.accountSnapshot.accountEquityDollars) * 100;
+      if (
+        value.positionReferences.totalPremiumDebitReferenceDollars !== expectedTotal ||
+        value.positionReferences.totalFullPremiumLossReferenceDollars !== expectedTotal ||
+        value.positionReferences.riskPercentOfAccountEquity !== expectedPercent ||
+        value.positionReferences.capitalPercentOfAccountEquity !== expectedPercent
+      ) {
+        add("Sizing position references are inconsistent");
+      }
+
+      const expectedRevalidation = ["SIZED", "NO_CAPACITY"].includes(value.sizingState);
+      if (value.revalidation.required !== expectedRevalidation) {
+        add("Sizing revalidation state is inconsistent");
+      }
+    } else {
+      if (
+        value.premiumRiskReference.premiumPriceReferenceType !== "UNAVAILABLE" ||
+        value.premiumRiskReference.premiumPriceReference !== null ||
+        value.premiumRiskReference.multiplier !== null ||
+        value.premiumRiskReference.premiumDebitReferencePerContractDollars !== null ||
+        value.premiumRiskReference.fullPremiumLossReferencePerContractDollars !== null ||
+        value.budgets.effectiveRiskBudgetDollars !== null ||
+        value.budgets.limitingRiskControls.length !== 0 ||
+        value.budgets.effectiveCapitalBudgetDollars !== null ||
+        value.budgets.limitingCapitalControls.length !== 0 ||
+        value.quantityCalculation.contractsPermittedByRisk !== null ||
+        value.quantityCalculation.contractsPermittedByCapital !== null ||
+        value.quantityCalculation.limitingQuantityControls.length !== 0 ||
+        value.quantityCalculation.blockingControls.length !== 0 ||
+        Object.values(value.positionReferences).some((entry) => entry !== null) ||
+        value.revalidation.required
+      ) {
+        add("Non-applicable or unavailable sizing must not expose derived calculations");
+      }
+    }
+  });
+export type SpyZeroDtePositionSizingResponse = z.infer<
+  typeof SpyZeroDtePositionSizingResponseSchema
+>;

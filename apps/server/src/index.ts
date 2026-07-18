@@ -1,6 +1,6 @@
 import "./bootstrap-env";
 import cors from "cors";
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
@@ -24,6 +24,7 @@ import { tradePlanRouter } from "./routes/trade-plan.routes";
 import { tradePlanAssemblyRouter } from "./routes/trade-plan-assembly.routes";
 import { tradeContractRouter } from "./routes/trade-contract.routes";
 import { tradeRiskRouter } from "./routes/trade-risk.routes";
+import { tradeSizingRouter } from "./routes/trade-sizing.routes";
 import { vwapRouter } from "./routes/vwap.routes";
 
 const app = express();
@@ -49,6 +50,7 @@ app.use("/api/trade-plan", tradePlanRouter);
 app.use("/api/trade-plan-assembly", tradePlanAssemblyRouter);
 app.use("/api/trade-contract", tradeContractRouter);
 app.use("/api/trade-risk", tradeRiskRouter);
+app.use("/api/trade-sizing", tradeSizingRouter);
 app.use("/api/opening-range", openingRangeRouter);
 app.use("/api/options-chain", optionsChainRouter);
 app.use("/api/quote", quoteRouter);
@@ -62,6 +64,27 @@ app.use("/api/session-levels", sessionLevelsRouter);
 app.use("/api/vwap", vwapRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
+
+app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? (error as { status?: unknown }).status
+      : null;
+  if (
+    req.originalUrl.startsWith("/api/trade-sizing/") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+    res.status(400).json({
+      error: "INVALID_POSITION_SIZING_REQUEST",
+      issues: [{ path: "$", code: "INVALID_JSON" }],
+    });
+    return;
+  }
+  next(error);
+});
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
