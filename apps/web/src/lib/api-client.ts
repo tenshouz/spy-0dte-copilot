@@ -4,6 +4,8 @@ import {
   JournalEntrySchema,
   DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
   DiscordAutomaticTradePlanAlertDeliveryResponseSchema,
+  DeterministicScheduledReportRequestSchema,
+  SpyZeroDteDeterministicScheduledReportResponseSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
   DiscordTradePlanAlertDeliveryResponseSchema,
   DiscordWebhookStatusResponseSchema,
@@ -41,6 +43,8 @@ import {
   type Candle,
   type JournalEntry,
   type DiscordAutomaticTradePlanAlertDeliveryRequest,
+  type DeterministicScheduledReportRequest,
+  type SpyZeroDteDeterministicScheduledReportResponse,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
   type DiscordTradePlanAlertDeliveryRequest,
   type DiscordTradePlanAlertDeliveryResponse,
@@ -137,6 +141,18 @@ export const apiClient = {
   getReportHistory: (): Promise<Report[]> => getJson("/api/reports", z.array(ReportSchema)),
   getJournalEntries: (): Promise<JournalEntry[]> => getJson("/api/journal", z.array(JournalEntrySchema)),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
+  generateSpyDeterministicScheduledReport: (
+    request: DeterministicScheduledReportRequest,
+  ): Promise<SpyZeroDteDeterministicScheduledReportResponse> =>
+    postJson<
+      DeterministicScheduledReportRequest,
+      SpyZeroDteDeterministicScheduledReportResponse
+    >(
+      "/api/reports/spy/deterministic",
+      request,
+      DeterministicScheduledReportRequestSchema,
+      SpyZeroDteDeterministicScheduledReportResponseSchema,
+    ),
   getSchwabStatus: (): Promise<SchwabConnectionStatus> =>
     getJson("/api/auth/schwab/status", SchwabConnectionStatusSchema),
   getDiscordWebhookStatus: (): Promise<DiscordWebhookStatusResponse> =>

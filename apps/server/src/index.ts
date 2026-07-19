@@ -21,7 +21,7 @@ import { marketStateRouter } from "./routes/market-state.routes";
 import { openingRangeRouter } from "./routes/opening-range.routes";
 import { optionsChainRouter } from "./routes/options-chain.routes";
 import { quoteRouter } from "./routes/quote.routes";
-import { reportRouter } from "./routes/report.routes";
+import { reportRouter, setDeterministicReportHeaders } from "./routes/report.routes";
 import { sessionDataRouter } from "./routes/session-data.routes";
 import { sessionLevelsRouter } from "./routes/session-levels.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
@@ -83,6 +83,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: unknown }).status
       : null;
+  if (
+    req.originalUrl.startsWith("/api/reports/spy/deterministic") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setDeterministicReportHeaders(res);
+    res.status(400).json({ error: "INVALID_DETERMINISTIC_REPORT_REQUEST" });
+    return;
+  }
   if (
     req.originalUrl.startsWith(
       "/api/discord/trade-plan-alert/automatic",

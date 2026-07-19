@@ -6215,3 +6215,226 @@ export const DiscordAutomaticTradePlanAlertDeliveryResponseSchema = z
 export type DiscordAutomaticTradePlanAlertDeliveryResponse = z.infer<
   typeof DiscordAutomaticTradePlanAlertDeliveryResponseSchema
 >;
+
+
+/** Deterministic current-snapshot report foundation for scheduled SPY market updates. */
+export const DeterministicScheduledReportTypeSchema = z.enum([
+  "PREMARKET_0925",
+  "OPENING_0935",
+  "OPENING_0945",
+  "UPDATE_1000",
+]);
+export type DeterministicScheduledReportType = z.infer<
+  typeof DeterministicScheduledReportTypeSchema
+>;
+
+export const DeterministicScheduledReportRequestSchema = z
+  .object({
+    reportType: DeterministicScheduledReportTypeSchema,
+  })
+  .strict();
+export type DeterministicScheduledReportRequest = z.infer<
+  typeof DeterministicScheduledReportRequestSchema
+>;
+
+export const DeterministicScheduledReportMethodologyVersionSchema = z.literal(
+  "SCHEDULED_REPORT_V1",
+);
+export type DeterministicScheduledReportMethodologyVersion = z.infer<
+  typeof DeterministicScheduledReportMethodologyVersionSchema
+>;
+
+export const DeterministicScheduledReportStateSchema = z.enum([
+  "READY",
+  "INFORMATIONAL",
+  "UNAVAILABLE",
+]);
+export type DeterministicScheduledReportState = z.infer<
+  typeof DeterministicScheduledReportStateSchema
+>;
+
+export const DeterministicScheduledReportPrimaryReasonCodeSchema = z.enum([
+  "READY_PLAN_SUMMARY",
+  "WAITING_FOR_TRIGGER_SUMMARY",
+  "NO_QUALIFIED_CONTRACT_SUMMARY",
+  "NOT_QUALIFIED_SUMMARY",
+  "NO_SETUP_SUMMARY",
+  "NOT_APPLICABLE_SUMMARY",
+  "SOURCE_ASSEMBLY_UNAVAILABLE",
+  "SOURCE_ASSEMBLY_INCONSISTENT",
+]);
+export type DeterministicScheduledReportPrimaryReasonCode = z.infer<
+  typeof DeterministicScheduledReportPrimaryReasonCodeSchema
+>;
+
+export const DeterministicScheduledReportChecklistStatusSchema = z.enum([
+  "PASS",
+  "WAIT",
+  "BLOCKED",
+  "INFO",
+  "UNAVAILABLE",
+]);
+export type DeterministicScheduledReportChecklistStatus = z.infer<
+  typeof DeterministicScheduledReportChecklistStatusSchema
+>;
+
+export const DeterministicScheduledReportChecklistItemSchema = z
+  .object({
+    code: z.enum([
+      "SOURCE_ASSEMBLY",
+      "BIAS_EVIDENCE",
+      "ENTRY_CONDITION",
+      "RISK_FRAMEWORK",
+      "CONTRACT_SELECTION",
+    ]),
+    status: DeterministicScheduledReportChecklistStatusSchema,
+    message: z.string().min(1),
+  })
+  .strict();
+export type DeterministicScheduledReportChecklistItem = z.infer<
+  typeof DeterministicScheduledReportChecklistItemSchema
+>;
+
+export const DeterministicScheduledReportWarningSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .strict();
+export type DeterministicScheduledReportWarning = z.infer<
+  typeof DeterministicScheduledReportWarningSchema
+>;
+
+export const DeterministicScheduledReportSourceAssemblySummarySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY"),
+    methodologyVersion: TradePlanAssemblyMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    currentPrice: z.number().finite().positive().nullable(),
+    sessionPhase: MarketContextSessionWindowSchema.nullable(),
+    biasState: DeterministicBiasStateSchema,
+    confidenceScore: z.number().finite().min(0).max(100).nullable(),
+    confidenceUnit: BiasConfidenceUnitSchema,
+    sourceQualityState: BiasSourceQualityStateSchema,
+  })
+  .strict();
+export type DeterministicScheduledReportSourceAssemblySummary = z.infer<
+  typeof DeterministicScheduledReportSourceAssemblySummarySchema
+>;
+
+export const DeterministicScheduledReportPlanSnapshotSchema = z
+  .object({
+    entryCondition: TradePlanAssemblyEntryConditionSchema,
+    structuralInvalidation: TradePlanAssemblyInvalidationSummarySchema,
+    primaryObjective: TradePlanAssemblyObjectiveSummarySchema,
+    underlyingRiskReward: TradePlanAssemblyRiskRewardSummarySchema,
+    selectedContract: TradePlanAssemblySelectedContractSummarySchema,
+    premiumReference: TradePlanAssemblyPremiumReferenceSchema,
+  })
+  .strict();
+export type DeterministicScheduledReportPlanSnapshot = z.infer<
+  typeof DeterministicScheduledReportPlanSnapshotSchema
+>;
+
+export const SpyZeroDteDeterministicScheduledReportResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULED_REPORT"),
+    methodologyVersion: DeterministicScheduledReportMethodologyVersionSchema,
+    reportType: DeterministicScheduledReportTypeSchema,
+    scheduleReferenceEasternTime: z.enum(["09:25", "09:35", "09:45", "10:00"]),
+    currentMarketDate: MarketDateSchema,
+    generatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    reportState: DeterministicScheduledReportStateSchema,
+    primaryReasonCode: DeterministicScheduledReportPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    sourceAssembly: DeterministicScheduledReportSourceAssemblySummarySchema,
+    title: z.string().min(1),
+    headline: z.string().min(1),
+    plan: DeterministicScheduledReportPlanSnapshotSchema,
+    checklist: z.array(DeterministicScheduledReportChecklistItemSchema).length(5),
+    warnings: z.array(DeterministicScheduledReportWarningSchema),
+    disclosures: z
+      .object({
+        deterministicOnly: z.literal(true),
+        currentSnapshotOnly: z.literal(true),
+        noFutureData: z.literal(true),
+        noHistoricalReconstruction: z.literal(true),
+        noLlmGeneration: z.literal(true),
+        noPersistence: z.literal(true),
+        noNotificationDelivery: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noPositionSizing: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
+        ),
+        sourceMethodology: z.literal("ASSEMBLY_V1"),
+        reportMethod: z.literal("FIXED_COPY_FROM_CURRENT_ASSEMBLY_SNAPSHOT"),
+        scheduleMethod: z.literal("CALLER_SELECTED_REPORT_TYPE_REFERENCE_ONLY"),
+        persistenceMethod: z.literal("NONE"),
+        deliveryMethod: z.literal("NONE"),
+        languageModelMethod: z.literal("NONE"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    const scheduleByType: Record<DeterministicScheduledReportType, string> = {
+      PREMARKET_0925: "09:25",
+      OPENING_0935: "09:35",
+      OPENING_0945: "09:45",
+      UPDATE_1000: "10:00",
+    };
+    if (value.scheduleReferenceEasternTime !== scheduleByType[value.reportType]) {
+      issue("Scheduled report time must match the requested report type");
+    }
+    if (value.currentMarketDate !== value.sourceAssembly.currentMarketDate) {
+      issue("Scheduled report market date must match Assembly");
+    }
+    if (value.engineState !== value.sourceAssembly.engineState) {
+      issue("Scheduled report engine state must match Assembly");
+    }
+    if (value.reportState === "READY") {
+      if (
+        value.sourceAssembly.planState !== "READY" ||
+        value.primaryReasonCode !== "READY_PLAN_SUMMARY"
+      ) {
+        issue("READY report requires a READY Assembly plan");
+      }
+    } else if (value.reportState === "UNAVAILABLE") {
+      if (
+        value.engineState !== "UNAVAILABLE" ||
+        value.sourceAssembly.planState !== "UNAVAILABLE" ||
+        ![
+          "SOURCE_ASSEMBLY_UNAVAILABLE",
+          "SOURCE_ASSEMBLY_INCONSISTENT",
+        ].includes(value.primaryReasonCode)
+      ) {
+        issue("UNAVAILABLE report requires unavailable Assembly provenance");
+      }
+    } else if (
+      value.engineState === "UNAVAILABLE" ||
+      value.sourceAssembly.planState === "READY" ||
+      value.sourceAssembly.planState === "UNAVAILABLE"
+    ) {
+      issue("INFORMATIONAL report requires an available non-READY Assembly state");
+    }
+  });
+export type SpyZeroDteDeterministicScheduledReportResponse = z.infer<
+  typeof SpyZeroDteDeterministicScheduledReportResponseSchema
+>;
