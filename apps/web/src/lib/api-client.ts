@@ -4,6 +4,8 @@ import {
   JournalEntrySchema,
   DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
   DiscordAutomaticTradePlanAlertDeliveryResponseSchema,
+  DiscordScheduledReportDeliveryRequestSchema,
+  DiscordScheduledReportDeliveryResponseSchema,
   DeterministicScheduledReportRequestSchema,
   SpyZeroDteDeterministicScheduledReportResponseSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
@@ -43,6 +45,8 @@ import {
   type Candle,
   type JournalEntry,
   type DiscordAutomaticTradePlanAlertDeliveryRequest,
+  type DiscordScheduledReportDeliveryRequest,
+  type DiscordScheduledReportDeliveryResponse,
   type DeterministicScheduledReportRequest,
   type SpyZeroDteDeterministicScheduledReportResponse,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
@@ -166,6 +170,18 @@ export const apiClient = {
       {},
       DiscordWebhookTestRequestSchema,
       DiscordWebhookTestDeliveryResponseSchema,
+    ),
+  sendDiscordScheduledReport: (
+    request: DiscordScheduledReportDeliveryRequest,
+  ): Promise<DiscordScheduledReportDeliveryResponse> =>
+    postJson<
+      DiscordScheduledReportDeliveryRequest,
+      DiscordScheduledReportDeliveryResponse
+    >(
+      "/api/discord/scheduled-report",
+      request,
+      DiscordScheduledReportDeliveryRequestSchema,
+      DiscordScheduledReportDeliveryResponseSchema,
     ),
   sendDiscordTradePlanAlert: (): Promise<DiscordTradePlanAlertDeliveryResponse> =>
     postJson<

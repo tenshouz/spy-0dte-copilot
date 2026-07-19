@@ -1,6 +1,9 @@
 "use client";
 
-import type { DiscordAutomaticTradePlanAlertCadenceMilliseconds } from "@spy-copilot/shared";
+import type {
+  DiscordAutomaticTradePlanAlertCadenceMilliseconds,
+  DiscordScheduledReportDeliveryRequest,
+} from "@spy-copilot/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 
@@ -22,6 +25,13 @@ export function useDiscordWebhookStatus() {
 export function useDiscordWebhookTest() {
   return useMutation({
     mutationFn: apiClient.sendDiscordWebhookTest,
+  });
+}
+
+export function useDiscordScheduledReportDelivery() {
+  return useMutation({
+    mutationFn: (request: DiscordScheduledReportDeliveryRequest) =>
+      apiClient.sendDiscordScheduledReport(request),
   });
 }
 

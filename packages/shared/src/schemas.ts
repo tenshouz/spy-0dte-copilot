@@ -6438,3 +6438,139 @@ export const SpyZeroDteDeterministicScheduledReportResponseSchema = z
 export type SpyZeroDteDeterministicScheduledReportResponse = z.infer<
   typeof SpyZeroDteDeterministicScheduledReportResponseSchema
 >;
+
+/** Explicit Discord delivery for one deterministic scheduled report snapshot. */
+export const DiscordScheduledReportDeliveryRequestSchema = z
+  .object({
+    reportType: DeterministicScheduledReportTypeSchema,
+  })
+  .strict();
+export type DiscordScheduledReportDeliveryRequest = z.infer<
+  typeof DiscordScheduledReportDeliveryRequestSchema
+>;
+
+export const DiscordScheduledReportDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NOT_DELIVERED",
+]);
+export type DiscordScheduledReportDeliveryState = z.infer<
+  typeof DiscordScheduledReportDeliveryStateSchema
+>;
+
+export const DiscordScheduledReportDeliveryPrimaryReasonCodeSchema = z.enum([
+  "REPORT_DELIVERED",
+  "WEBHOOK_NOT_CONFIGURED",
+  "WEBHOOK_CONFIG_INVALID",
+  "REPORT_UNAVAILABLE",
+  "REPORT_GENERATION_FAILURE",
+  "WEBHOOK_REQUEST_TIMEOUT",
+  "WEBHOOK_NETWORK_FAILURE",
+  "WEBHOOK_RATE_LIMITED",
+  "WEBHOOK_REJECTED",
+  "WEBHOOK_PROVIDER_FAILURE",
+]);
+export type DiscordScheduledReportDeliveryPrimaryReasonCode = z.infer<
+  typeof DiscordScheduledReportDeliveryPrimaryReasonCodeSchema
+>;
+
+export const DiscordScheduledReportSummarySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULED_REPORT"),
+    methodologyVersion: DeterministicScheduledReportMethodologyVersionSchema,
+    reportType: DeterministicScheduledReportTypeSchema,
+    scheduleReferenceEasternTime: z.enum(["09:25", "09:35", "09:45", "10:00"]),
+    currentMarketDate: MarketDateSchema,
+    generatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    reportState: DeterministicScheduledReportStateSchema,
+    primaryReasonCode: DeterministicScheduledReportPrimaryReasonCodeSchema,
+    title: z.string().min(1),
+    headline: z.string().min(1),
+    direction: AssembledTradePlanDirectionSchema,
+    checklistItemCount: z.number().int().nonnegative(),
+    warningCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DiscordScheduledReportSummary = z.infer<
+  typeof DiscordScheduledReportSummarySchema
+>;
+
+export const DiscordScheduledReportDeliveryResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_DETERMINISTIC_SCHEDULED_REPORT_DELIVERY"),
+    methodologyVersion: z.literal("DISCORD_SCHEDULED_REPORT_DELIVERY_V1"),
+    deliveryState: DiscordScheduledReportDeliveryStateSchema,
+    primaryReasonCode: DiscordScheduledReportDeliveryPrimaryReasonCodeSchema,
+    reportType: DeterministicScheduledReportTypeSchema,
+    attemptedAt: z.string().datetime(),
+    deliveredAt: z.string().datetime().nullable(),
+    providerStatusCode: z.number().int().min(100).max(599).nullable(),
+    providerRequestAttempted: z.boolean(),
+    report: DiscordScheduledReportSummarySchema.nullable(),
+    disclosures: z
+      .object({
+        webhookUrlReturned: z.literal(false),
+        webhookTokenReturned: z.literal(false),
+        providerBodyReturned: z.literal(false),
+        explicitDeliveryOnly: z.literal(true),
+        noAutomaticSchedule: z.literal(true),
+        noDatabasePersistence: z.literal(true),
+        deterministicSourceOnly: z.literal(true),
+        noLlmGeneration: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+        mentionsDisabled: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceProduct: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULED_REPORT"),
+        sourceMethodology: z.literal("SCHEDULED_REPORT_V1"),
+        deliveryTrigger: z.literal("EXPLICIT_POST_ONLY"),
+        providerConfirmationMethod: z.literal("DISCORD_WAIT_TRUE_HTTP_SUCCESS"),
+        persistenceMethod: z.literal("NONE"),
+        schedulerMethod: z.literal("NONE"),
+        languageModelMethod: z.literal("NONE"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.deliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "REPORT_DELIVERED" ||
+        value.deliveredAt === null ||
+        value.providerStatusCode === null ||
+        value.providerStatusCode < 200 ||
+        value.providerStatusCode >= 300 ||
+        !value.providerRequestAttempted ||
+        value.report === null
+      ) {
+        issue("DELIVERED scheduled report requires provider confirmation and report provenance");
+      }
+    } else if (
+      value.primaryReasonCode === "REPORT_DELIVERED" ||
+      value.deliveredAt !== null
+    ) {
+      issue("NOT_DELIVERED cannot expose successful scheduled-report delivery fields");
+    }
+
+    if (value.report !== null && value.report.reportType !== value.reportType) {
+      issue("Scheduled-report delivery type must match report provenance");
+    }
+
+    if (
+      ["WEBHOOK_NOT_CONFIGURED", "WEBHOOK_CONFIG_INVALID", "REPORT_GENERATION_FAILURE"].includes(
+        value.primaryReasonCode,
+      ) &&
+      value.report !== null
+    ) {
+      issue("Pre-report failures cannot expose report provenance");
+    }
+  });
+export type DiscordScheduledReportDeliveryResponse = z.infer<
+  typeof DiscordScheduledReportDeliveryResponseSchema
+>;

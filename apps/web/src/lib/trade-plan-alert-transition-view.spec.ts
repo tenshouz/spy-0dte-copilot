@@ -199,7 +199,8 @@ test("automatic delivery exposes bounded backend retry and shared deduplication 
 
   assert.equal(monitor.includes("at most two attempts"), true);
   assert.equal(monitor.includes("three-second backoff"), true);
-  assert.equal(monitor.includes("shared Discord process-memory"), true);
+  assert.equal(monitor.includes("shared Discord"), true);
+  assert.equal(monitor.includes("process-memory duplicate state"), true);
   assert.equal(
     client.includes("/api/discord/trade-plan-alert/automatic"),
     true,
@@ -335,6 +336,51 @@ test("Alerts page replaces the mock-alert hook with the transition monitor", () 
   assert.equal(page.includes("useAlerts"), false);
   assert.equal(page.includes("AlertCard"), false);
   assert.equal(page.includes("Mirrors what's sent to Discord"), false);
+});
+
+
+test("explicit scheduled-report delivery is caller-selected and never automatic", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("Scheduled Report Delivery"), true);
+  assert.equal(monitor.includes("Generate & send report"), true);
+  assert.equal(monitor.includes("PREMARKET_0925"), true);
+  assert.equal(monitor.includes("OPENING_0935"), true);
+  assert.equal(monitor.includes("OPENING_0945"), true);
+  assert.equal(monitor.includes("UPDATE_1000"), true);
+  assert.equal(monitor.includes("not a scheduler"), true);
+  assert.equal(hook.includes("useDiscordScheduledReportDelivery"), true);
+  assert.equal(hook.includes("apiClient.sendDiscordScheduledReport"), true);
+});
+
+test("scheduled-report UI has no browser persistence automatic timer or order control", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  for (const forbidden of [
+    "localStorage",
+    "sessionStorage",
+    "node-cron",
+    "Schedule report automatically",
+    "Place Order",
+    "Submit Order",
+  ]) {
+    assert.equal(monitor.includes(forbidden), false, `${forbidden} must not appear`);
+  }
 });
 
 console.log(`\nTrade Plan alert-monitor view tests: ${passed} passed, ${failed} failed`);
