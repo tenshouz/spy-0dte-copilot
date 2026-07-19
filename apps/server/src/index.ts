@@ -26,6 +26,7 @@ import { sessionLevelsRouter } from "./routes/session-levels.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 import { tradePlanRouter } from "./routes/trade-plan.routes";
 import { tradePlanAssemblyRouter } from "./routes/trade-plan-assembly.routes";
+import { tradePlanAlertRouter } from "./routes/trade-plan-alert.routes";
 import { tradeContractRouter } from "./routes/trade-contract.routes";
 import { tradeRiskRouter } from "./routes/trade-risk.routes";
 import {
@@ -56,6 +57,7 @@ app.use("/api/market-bias", marketBiasRouter);
 app.use("/api/market-state", marketStateRouter);
 app.use("/api/trade-plan", tradePlanRouter);
 app.use("/api/trade-plan-assembly", tradePlanAssemblyRouter);
+app.use("/api/trade-plan-alert", tradePlanAlertRouter);
 app.use("/api/trade-contract", tradeContractRouter);
 app.use("/api/trade-risk", tradeRiskRouter);
 app.use("/api/trade-sizing", schwabAssistedTradeSizingRouter);

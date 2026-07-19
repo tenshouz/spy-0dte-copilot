@@ -23,6 +23,7 @@ import {
   SpyZeroDteObjectiveRiskResponseSchema,
   SpyZeroDteContractSelectionResponseSchema,
   SpyZeroDteTradePlanAssemblyResponseSchema,
+  SpyZeroDteTradePlanAlertCandidateResponseSchema,
   SpyZeroDtePositionSizingRequestSchema,
   SpyZeroDtePositionSizingResponseSchema,
   SpyZeroDteSchwabAssistedPositionSizingRequestSchema,
@@ -52,6 +53,7 @@ import {
   type SpyZeroDteObjectiveRiskResponse,
   type SpyZeroDteContractSelectionResponse,
   type SpyZeroDteTradePlanAssemblyResponse,
+  type SpyZeroDteTradePlanAlertCandidateResponse,
   type SpyZeroDtePositionSizingRequest,
   type SpyZeroDtePositionSizingResponse,
   type SpyZeroDteSchwabAssistedPositionSizingRequest,
@@ -158,6 +160,11 @@ export const apiClient = {
     getJson("/api/trade-contract/spy", SpyZeroDteContractSelectionResponseSchema),
   getSpyZeroDteTradePlanAssembly: (): Promise<SpyZeroDteTradePlanAssemblyResponse> =>
     getJson("/api/trade-plan-assembly/spy", SpyZeroDteTradePlanAssemblyResponseSchema),
+  getSpyZeroDteTradePlanAlertCandidate: (): Promise<SpyZeroDteTradePlanAlertCandidateResponse> =>
+    getJson(
+      "/api/trade-plan-alert/spy",
+      SpyZeroDteTradePlanAlertCandidateResponseSchema,
+    ),
   calculateSpyZeroDtePositionSizing: (
     request: SpyZeroDtePositionSizingRequest,
   ): Promise<SpyZeroDtePositionSizingResponse> =>

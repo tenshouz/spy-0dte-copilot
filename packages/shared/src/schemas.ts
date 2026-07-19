@@ -5175,3 +5175,216 @@ export const SchwabAssistedPositionSizingOriginErrorResponseSchema = z
 export type SchwabAssistedPositionSizingOriginErrorResponse = z.infer<
   typeof SchwabAssistedPositionSizingOriginErrorResponseSchema
 >;
+
+/** Deterministic current-snapshot alert-candidate evaluation derived only from ASSEMBLY_V1. */
+export const TradePlanAlertCandidateMethodologyVersionSchema = z.literal(
+  "TRADE_PLAN_ALERT_CANDIDATE_V1",
+);
+export type TradePlanAlertCandidateMethodologyVersion = z.infer<
+  typeof TradePlanAlertCandidateMethodologyVersionSchema
+>;
+
+export const TradePlanAlertCandidateStateSchema = z.enum([
+  "CANDIDATE",
+  "SUPPRESSED",
+  "UNAVAILABLE",
+]);
+export type TradePlanAlertCandidateState = z.infer<
+  typeof TradePlanAlertCandidateStateSchema
+>;
+
+export const TradePlanAlertCategorySchema = z.enum([
+  "PLAN_READY",
+  "WAITING_FOR_TRIGGER",
+  "NO_QUALIFIED_CONTRACT",
+  "SETUP_NOT_QUALIFIED",
+]);
+export type TradePlanAlertCategory = z.infer<typeof TradePlanAlertCategorySchema>;
+
+export const TradePlanAlertSeveritySchema = z.enum([
+  "OPPORTUNITY",
+  "INFO",
+  "WARNING",
+]);
+export type TradePlanAlertSeverity = z.infer<typeof TradePlanAlertSeveritySchema>;
+
+export const TradePlanAlertCandidatePrimaryReasonCodeSchema = z.enum([
+  "PLAN_READY_CANDIDATE",
+  "WAITING_FOR_TRIGGER_CANDIDATE",
+  "NO_QUALIFIED_CONTRACT_CANDIDATE",
+  "NOT_QUALIFIED_CANDIDATE",
+  "NO_SETUP_SUPPRESSED",
+  "NOT_APPLICABLE_SUPPRESSED",
+  "SOURCE_ASSEMBLY_UNAVAILABLE",
+  "SOURCE_ASSEMBLY_INCONSISTENT",
+]);
+export type TradePlanAlertCandidatePrimaryReasonCode = z.infer<
+  typeof TradePlanAlertCandidatePrimaryReasonCodeSchema
+>;
+
+export const TradePlanAlertCandidateSchema = z
+  .object({
+    deduplicationKey: z.string().min(1),
+    category: TradePlanAlertCategorySchema,
+    severity: TradePlanAlertSeveritySchema,
+    title: z.string().min(1),
+    message: z.string().min(1),
+    direction: z.enum(["CALLS", "PUTS"]),
+    currentPrice: z.number().finite().positive().nullable(),
+    planningReferenceType: PlanningReferenceTypeSchema,
+    planningReferencePrice: z.number().finite().positive().nullable(),
+    triggerLevel: z.number().finite().positive().nullable(),
+    triggerComparison: TradeTriggerComparisonSchema.nullable(),
+    selectedContractSymbol: z.string().min(1).nullable(),
+    selectedContractAsk: z.number().finite().positive().nullable(),
+    selectedContractQuoteAt: z.string().datetime().nullable(),
+    structuralInvalidationLevel: z.number().finite().positive().nullable(),
+    primaryObjectiveLevel: z.number().finite().positive().nullable(),
+    rewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  })
+  .strict();
+export type TradePlanAlertCandidate = z.infer<typeof TradePlanAlertCandidateSchema>;
+
+export const TradePlanAlertSourceAssemblySummarySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY"),
+    methodologyVersion: TradePlanAssemblyMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+  })
+  .strict();
+export type TradePlanAlertSourceAssemblySummary = z.infer<
+  typeof TradePlanAlertSourceAssemblySummarySchema
+>;
+
+export const SpyZeroDteTradePlanAlertCandidateResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE"),
+    methodologyVersion: TradePlanAlertCandidateMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    alertState: TradePlanAlertCandidateStateSchema,
+    primaryReasonCode: TradePlanAlertCandidatePrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    sourceAssembly: TradePlanAlertSourceAssemblySummarySchema,
+    candidate: TradePlanAlertCandidateSchema.nullable(),
+    disclosures: z
+      .object({
+        currentSnapshotOnly: z.literal(true),
+        candidateOnly: z.literal(true),
+        noTransitionDetection: z.literal(true),
+        noDeduplicationState: z.literal(true),
+        noPersistence: z.literal(true),
+        noNotificationDelivery: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceProduct: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY"),
+        sourceMethodology: TradePlanAssemblyMethodologyVersionSchema,
+        evaluationScope: z.literal("CURRENT_ASSEMBLY_SNAPSHOT"),
+        candidateStates: z.tuple([
+          z.literal("READY"),
+          z.literal("WAITING_FOR_TRIGGER"),
+          z.literal("NO_QUALIFIED_CONTRACT"),
+          z.literal("NOT_QUALIFIED"),
+        ]),
+        suppressedStates: z.tuple([
+          z.literal("NO_SETUP"),
+          z.literal("NOT_APPLICABLE"),
+        ]),
+        unavailableState: z.literal("UNAVAILABLE"),
+        transitionDetectionMethod: z.literal("NONE"),
+        deliveryMethod: z.literal("NONE"),
+        deduplicationMethod: z.literal("STABLE_CANDIDATE_KEY_ONLY"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.currentMarketDate !== value.sourceAssembly.currentMarketDate) {
+      issue("Alert candidate market date must match source Assembly");
+    }
+    if (value.warningCode !== value.sourceAssembly.warningCode) {
+      issue("Alert candidate warning must mirror source Assembly warning");
+    }
+
+    if (value.alertState === "CANDIDATE") {
+      if (value.engineState === "UNAVAILABLE" || value.candidate === null) {
+        issue("CANDIDATE requires an available candidate payload");
+        return;
+      }
+
+      const expectedByPlanState: Partial<
+        Record<DeterministicTradePlanState, TradePlanAlertCategory>
+      > = {
+        READY: "PLAN_READY",
+        WAITING_FOR_TRIGGER: "WAITING_FOR_TRIGGER",
+        NO_QUALIFIED_CONTRACT: "NO_QUALIFIED_CONTRACT",
+        NOT_QUALIFIED: "SETUP_NOT_QUALIFIED",
+      };
+      if (expectedByPlanState[value.sourceAssembly.planState] !== value.candidate.category) {
+        issue("Alert candidate category is inconsistent with source Plan State");
+      }
+      if (value.candidate.direction !== value.sourceAssembly.direction) {
+        issue("Alert candidate direction must match source Assembly");
+      }
+
+      if (value.candidate.category === "PLAN_READY") {
+        if (
+          value.candidate.selectedContractSymbol === null ||
+          value.candidate.selectedContractAsk === null ||
+          value.candidate.selectedContractQuoteAt === null ||
+          value.candidate.structuralInvalidationLevel === null ||
+          value.candidate.primaryObjectiveLevel === null ||
+          value.candidate.rewardRiskRatio === null
+        ) {
+          issue("PLAN_READY candidate requires contract and structural risk references");
+        }
+      } else if (
+        value.candidate.selectedContractSymbol !== null ||
+        value.candidate.selectedContractAsk !== null ||
+        value.candidate.selectedContractQuoteAt !== null
+      ) {
+        issue("Non-ready alert candidates cannot expose a selected contract");
+      }
+    } else if (value.candidate !== null) {
+      issue("Non-candidate states cannot expose a candidate payload");
+    }
+
+    if (value.alertState === "SUPPRESSED") {
+      if (
+        value.engineState === "UNAVAILABLE" ||
+        !["NO_SETUP", "NOT_APPLICABLE"].includes(value.sourceAssembly.planState)
+      ) {
+        issue("SUPPRESSED is reserved for non-meaningful valid Plan States");
+      }
+    }
+
+    if (value.alertState === "UNAVAILABLE") {
+      if (
+        value.engineState !== "UNAVAILABLE" ||
+        ![
+          "SOURCE_ASSEMBLY_UNAVAILABLE",
+          "SOURCE_ASSEMBLY_INCONSISTENT",
+        ].includes(value.primaryReasonCode)
+      ) {
+        issue("UNAVAILABLE requires an unavailable engine and source failure reason");
+      }
+    }
+  });
+export type SpyZeroDteTradePlanAlertCandidateResponse = z.infer<
+  typeof SpyZeroDteTradePlanAlertCandidateResponseSchema
+>;
