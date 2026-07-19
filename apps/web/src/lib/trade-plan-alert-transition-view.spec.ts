@@ -145,10 +145,47 @@ test("Discord delivery is explicit-only and never coupled to monitor polling", (
   );
 
   assert.equal(monitor.includes("Evaluate & send to Discord"), true);
-  assert.equal(monitor.includes("onClick={() => discordDelivery.mutate()}"), true);
+  assert.equal(monitor.includes("onClick={requestDiscordDelivery}"), true);
+  assert.equal(monitor.includes("discordDelivery.mutate(undefined"), true);
   assert.equal(monitor.includes('discordStatus.data?.state !== "READY"'), true);
   assert.equal(hook.includes("useDiscordTradePlanAlertDelivery"), true);
   assert.equal(hook.includes("mutationFn: apiClient.sendDiscordTradePlanAlert"), true);
+});
+
+
+test("Discord delivery attempts are session-only bounded and clearable", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("MAX_DISCORD_DELIVERY_ATTEMPTS = 25"), true);
+  assert.equal(monitor.includes("Discord Delivery Attempts"), true);
+  assert.equal(monitor.includes("Clear delivery history"), true);
+  assert.equal(
+    monitor.includes(".slice(0, MAX_DISCORD_DELIVERY_ATTEMPTS)"),
+    true,
+  );
+  assert.equal(monitor.includes("setDiscordDeliveryAttempts"), true);
+});
+
+test("retry control is shown only for retry-eligible delivery results", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("Retry delivery"), true);
+  assert.equal(monitor.includes("result.state.retryEligible ?"), true);
+  assert.equal(monitor.includes("onRetry={requestDiscordDelivery}"), true);
+  assert.equal(monitor.includes("transitionStateCommitted"), true);
+  assert.equal(monitor.includes("providerStatusCode"), true);
 });
 
 test("alert monitor and Discord delivery use no browser persistence or browser notifications", () => {

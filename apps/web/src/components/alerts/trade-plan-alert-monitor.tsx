@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type {
   SpyZeroDteTradePlanAlertTransitionResponse,
   DiscordTradePlanAlertDeliveryPrimaryReasonCode,
+  DiscordTradePlanAlertDeliveryResponse,
   TradePlanAlertTransitionEvent,
 } from "@spy-copilot/shared";
 import {
@@ -40,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const MAX_SESSION_EVENTS = 50;
+const MAX_DISCORD_DELIVERY_ATTEMPTS = 25;
 
 interface SessionAlertEvent {
   event: TradePlanAlertTransitionEvent;
@@ -56,13 +58,21 @@ function badgeVariant(
 export function TradePlanAlertMonitor() {
   const [monitoring, setMonitoring] = useState(false);
   const [sessionEvents, setSessionEvents] = useState<SessionAlertEvent[]>([]);
+  const [discordDeliveryAttempts, setDiscordDeliveryAttempts] = useState<
+    DiscordTradePlanAlertDeliveryResponse[]
+  >([]);
   const query = useSpyTradePlanAlertTransition(monitoring);
   const discordStatus = useDiscordWebhookStatus();
   const discordDelivery = useDiscordTradePlanAlertDelivery();
   const result = query.data ?? null;
 
   useEffect(() => {
-    if (!monitoring || !result || result.transitionState !== "EMIT" || !result.event) {
+    if (
+      !monitoring ||
+      !result ||
+      result.transitionState !== "EMIT" ||
+      !result.event
+    ) {
       return;
     }
 
@@ -87,6 +97,16 @@ export function TradePlanAlertMonitor() {
     });
   }, [monitoring, result]);
 
+  const requestDiscordDelivery = () => {
+    discordDelivery.mutate(undefined, {
+      onSuccess: (deliveryResult) => {
+        setDiscordDeliveryAttempts((current) =>
+          [deliveryResult, ...current].slice(0, MAX_DISCORD_DELIVERY_ATTEMPTS),
+        );
+      },
+    });
+  };
+
   const stateView = result
     ? getAlertMonitorStateView(result.transitionState)
     : null;
@@ -106,12 +126,14 @@ export function TradePlanAlertMonitor() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-3xl space-y-1">
               <p className="text-sm leading-relaxed text-foreground">
-                Evaluate deterministic Trade Plan alert transitions in this browser session.
+                Evaluate deterministic Trade Plan alert transitions in this
+                browser session.
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Monitoring is opt-in. Events are session-only and are not persisted. Discord delivery
-                occurs only when you explicitly select Evaluate & send to Discord, using a separate
-                backend process-memory delivery state.
+                Monitoring is opt-in. Events are session-only and are not
+                persisted. Discord delivery occurs only when you explicitly
+                select Evaluate & send to Discord, using a separate backend
+                process-memory delivery state.
               </p>
             </div>
 
@@ -144,7 +166,9 @@ export function TradePlanAlertMonitor() {
                 disabled={!monitoring || query.isFetching}
                 onClick={() => void query.refetch()}
               >
-                <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} />
+                <RefreshCw
+                  className={cn("h-4 w-4", query.isFetching && "animate-spin")}
+                />
                 Evaluate now
               </Button>
 
@@ -156,7 +180,7 @@ export function TradePlanAlertMonitor() {
                   discordStatus.data?.state !== "READY" ||
                   discordDelivery.isPending
                 }
-                onClick={() => discordDelivery.mutate()}
+                onClick={requestDiscordDelivery}
               >
                 <Send
                   className={cn(
@@ -200,30 +224,37 @@ export function TradePlanAlertMonitor() {
           {query.isError ? (
             <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              The transition route could not be evaluated. No event was added, and monitoring will not retry automatically until the next scheduled evaluation or manual refresh.
+              The transition route could not be evaluated. No event was added,
+              and monitoring will not retry automatically until the next
+              scheduled evaluation or manual refresh.
             </div>
           ) : null}
 
           {discordDelivery.data ? (
-            <DiscordDeliveryNotice result={discordDelivery.data} />
+            <DiscordDeliveryNotice
+              result={discordDelivery.data}
+              retrying={discordDelivery.isPending}
+              onRetry={requestDiscordDelivery}
+            />
           ) : discordDelivery.isError ? (
             <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              The explicit Discord delivery request failed before a validated result was returned.
-              No automatic retry was attempted.
+              The explicit Discord delivery request failed before a validated
+              result was returned. No automatic retry was attempted.
             </div>
           ) : discordStatus.data?.state !== "READY" ? (
             <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              Configure and test the backend Discord webhook in Settings to enable explicit Trade
-              Plan alert delivery.
+              Configure and test the backend Discord webhook in Settings to
+              enable explicit Trade Plan alert delivery.
             </div>
           ) : null}
 
           {!monitoring && !result ? (
             <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              No transition request has been made. Select Start monitor to begin explicit session monitoring.
+              No transition request has been made. Select Start monitor to begin
+              explicit session monitoring.
             </div>
           ) : null}
 
@@ -265,6 +296,34 @@ export function TradePlanAlertMonitor() {
           ))}
         </div>
       </Panel>
+
+      <Panel
+        title={`Discord Delivery Attempts (${discordDeliveryAttempts.length})`}
+        className="min-w-0 lg:col-span-3"
+        action={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={discordDeliveryAttempts.length === 0}
+            onClick={() => setDiscordDeliveryAttempts([])}
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear delivery history
+          </Button>
+        }
+        isEmpty={discordDeliveryAttempts.length === 0}
+        emptyMessage="No explicit Discord delivery attempts have been made in this browser session."
+      >
+        <div className="space-y-2">
+          {discordDeliveryAttempts.map((attempt, index) => (
+            <DiscordDeliveryAttemptCard
+              key={`${attempt.attemptedAt}-${index}`}
+              result={attempt}
+            />
+          ))}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -273,22 +332,34 @@ const DISCORD_DELIVERY_COPY: Record<
   DiscordTradePlanAlertDeliveryPrimaryReasonCode,
   string
 > = {
-  ALERT_DELIVERED: "Discord confirmed delivery of the emitted Trade Plan alert transition.",
+  ALERT_DELIVERED:
+    "Discord confirmed delivery of the emitted Trade Plan alert transition.",
   WEBHOOK_NOT_CONFIGURED: "No Discord webhook is configured on the backend.",
   WEBHOOK_CONFIG_INVALID: "The configured Discord webhook is invalid.",
-  NO_EMITTED_TRANSITION: "No new Trade Plan alert transition was eligible for Discord delivery.",
-  TRANSITION_UNAVAILABLE: "The Trade Plan alert transition was unavailable. You may retry explicitly.",
-  WEBHOOK_REQUEST_TIMEOUT: "The Discord request timed out. The emitted transition was not committed and may be retried.",
-  WEBHOOK_NETWORK_FAILURE: "The backend could not reach Discord. The emitted transition was not committed and may be retried.",
-  WEBHOOK_RATE_LIMITED: "Discord rate-limited the request. The emitted transition was not committed and may be retried later.",
-  WEBHOOK_REJECTED: "Discord rejected the webhook request. Verify the webhook configuration before retrying.",
-  WEBHOOK_PROVIDER_FAILURE: "Discord returned an unexpected error. The emitted transition was not committed and may be retried.",
+  NO_EMITTED_TRANSITION:
+    "No new Trade Plan alert transition was eligible for Discord delivery.",
+  TRANSITION_UNAVAILABLE:
+    "The Trade Plan alert transition was unavailable. You may retry explicitly.",
+  WEBHOOK_REQUEST_TIMEOUT:
+    "The Discord request timed out. The emitted transition was not committed and may be retried.",
+  WEBHOOK_NETWORK_FAILURE:
+    "The backend could not reach Discord. The emitted transition was not committed and may be retried.",
+  WEBHOOK_RATE_LIMITED:
+    "Discord rate-limited the request. The emitted transition was not committed and may be retried later.",
+  WEBHOOK_REJECTED:
+    "Discord rejected the webhook request. Verify the webhook configuration before retrying.",
+  WEBHOOK_PROVIDER_FAILURE:
+    "Discord returned an unexpected error. The emitted transition was not committed and may be retried.",
 };
 
 function DiscordDeliveryNotice({
   result,
+  retrying,
+  onRetry,
 }: {
-  result: import("@spy-copilot/shared").DiscordTradePlanAlertDeliveryResponse;
+  result: DiscordTradePlanAlertDeliveryResponse;
+  retrying: boolean;
+  onRetry: () => void;
 }) {
   const delivered = result.deliveryState === "DELIVERED";
 
@@ -309,11 +380,87 @@ function DiscordDeliveryNotice({
       ) : (
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
       )}
-      <div className="space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         <p>{DISCORD_DELIVERY_COPY[result.primaryReasonCode]}</p>
         <p className="font-mono text-[11px] opacity-80">
-          Explicit delivery only · {formatAlertMonitorTimestamp(result.attemptedAt)}
+          Explicit delivery only ·{" "}
+          {formatAlertMonitorTimestamp(result.attemptedAt)}
         </p>
+      </div>
+      {result.state.retryEligible ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={retrying}
+          onClick={onRetry}
+        >
+          <RefreshCw className={cn("h-4 w-4", retrying && "animate-spin")} />
+          {retrying ? "Retrying…" : "Retry delivery"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function DiscordDeliveryAttemptCard({
+  result,
+}: {
+  result: DiscordTradePlanAlertDeliveryResponse;
+}) {
+  const delivered = result.deliveryState === "DELIVERED";
+  const statusCode =
+    result.providerStatusCode === null
+      ? "Not requested"
+      : String(result.providerStatusCode);
+
+  return (
+    <div className="rounded-md border border-panel-border bg-background/40 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            {DISCORD_DELIVERY_COPY[result.primaryReasonCode]}
+          </p>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {formatAlertMonitorTimestamp(result.attemptedAt)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Badge
+            variant={
+              delivered
+                ? "bull"
+                : result.state.retryEligible
+                  ? "wait"
+                  : "default"
+            }
+          >
+            {result.deliveryState.replaceAll("_", " ")}
+          </Badge>
+          {result.state.retryEligible ? (
+            <Badge variant="wait">Retry eligible</Badge>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <CompactValue
+          label="Reason"
+          value={result.primaryReasonCode.replaceAll("_", " ")}
+        />
+        <CompactValue label="Provider Status" value={statusCode} />
+        <CompactValue
+          label="Transition State"
+          value={result.transition?.transitionState ?? "Not evaluated"}
+        />
+        <CompactValue
+          label="State Commit"
+          value={
+            result.state.transitionStateCommitted
+              ? "Committed"
+              : "Not committed"
+          }
+        />
       </div>
     </div>
   );
@@ -356,12 +503,11 @@ function CurrentEvaluation({
         />
         <CompactValue
           label="Cooldown Remaining"
-          value={formatAlertMonitorDuration(result.cooldown.remainingMilliseconds)}
+          value={formatAlertMonitorDuration(
+            result.cooldown.remainingMilliseconds,
+          )}
         />
-        <CompactValue
-          label="Storage"
-          value="Process memory only"
-        />
+        <CompactValue label="Storage" value="Process memory only" />
       </div>
     </div>
   );
@@ -391,7 +537,8 @@ function SessionEventCard({ entry }: { entry: SessionAlertEvent }) {
               {entry.event.message}
             </p>
             <p className="font-mono text-[11px] text-muted-foreground">
-              {formatAlertMonitorTimestamp(entry.evaluatedAt)} · {entry.currentMarketDate}
+              {formatAlertMonitorTimestamp(entry.evaluatedAt)} ·{" "}
+              {entry.currentMarketDate}
             </p>
           </div>
         </div>
@@ -407,11 +554,17 @@ function SessionEventCard({ entry }: { entry: SessionAlertEvent }) {
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <CompactValue
           label="Previous Candidate"
-          value={entry.event.previousCandidate?.category.replaceAll("_", " ") ?? "None"}
+          value={
+            entry.event.previousCandidate?.category.replaceAll("_", " ") ??
+            "None"
+          }
         />
         <CompactValue
           label="Current Candidate"
-          value={entry.event.currentCandidate?.category.replaceAll("_", " ") ?? "None"}
+          value={
+            entry.event.currentCandidate?.category.replaceAll("_", " ") ??
+            "None"
+          }
         />
       </div>
     </div>
