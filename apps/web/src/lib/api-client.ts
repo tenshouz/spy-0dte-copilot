@@ -5,6 +5,7 @@ import {
   MarketSnapshotSchema,
   ReportSchema,
   SchwabConnectionStatusSchema,
+  SchwabReadOnlyAccountRiskSnapshotResponseSchema,
   SpyCandleResponseSchema,
   SpyOpeningRangeResponseSchema,
   SpyZeroDteExpectedMoveResponseSchema,
@@ -31,6 +32,7 @@ import {
   type MarketSnapshot,
   type Report,
   type SchwabConnectionStatus,
+  type SchwabReadOnlyAccountRiskSnapshotResponse,
   type SpyCandleResponse,
   type SpyOpeningRangeResponse,
   type SpyZeroDteExpectedMoveResponse,
@@ -74,6 +76,17 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
   return schema.parse(data);
 }
 
+async function getPrivateNoStoreJson<T>(
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
+  return schema.parse(await res.json());
+}
+
 async function postJson<TRequest, TResponse>(
   path: string,
   body: TRequest,
@@ -104,6 +117,11 @@ export const apiClient = {
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getSchwabStatus: (): Promise<SchwabConnectionStatus> =>
     getJson("/api/auth/schwab/status", SchwabConnectionStatusSchema),
+  getSchwabReadOnlyAccountRiskSnapshot: (): Promise<SchwabReadOnlyAccountRiskSnapshotResponse> =>
+    getPrivateNoStoreJson(
+      "/api/account-risk/schwab",
+      SchwabReadOnlyAccountRiskSnapshotResponseSchema,
+    ),
   getSpyOpeningRange: (): Promise<SpyOpeningRangeResponse> =>
     getJson("/api/opening-range/spy", SpyOpeningRangeResponseSchema),
   getSpyZeroDteOptionsChain: (): Promise<SpyZeroDteOptionsChainResponse> =>

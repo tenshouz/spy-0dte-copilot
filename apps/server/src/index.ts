@@ -2,6 +2,7 @@ import "./bootstrap-env";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
+import { accountRiskRouter } from "./routes/account-risk.routes";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
@@ -40,6 +41,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", dataSources: "mixed", quoteSourceField: "sourceState" });
 });
 
+app.use("/api/account-risk", accountRiskRouter);
 app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);

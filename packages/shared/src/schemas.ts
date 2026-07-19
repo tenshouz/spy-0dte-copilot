@@ -4447,3 +4447,385 @@ export const SpyZeroDtePositionSizingResponseSchema = z
 export type SpyZeroDtePositionSizingResponse = z.infer<
   typeof SpyZeroDtePositionSizingResponseSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Schwab read-only account-risk snapshot foundation (ACCOUNT_RISK_SNAPSHOT_V1)
+// ---------------------------------------------------------------------------
+
+export const AccountRiskSnapshotMethodologyVersionSchema = z.literal(
+  "ACCOUNT_RISK_SNAPSHOT_V1",
+);
+export type AccountRiskSnapshotMethodologyVersion = z.infer<
+  typeof AccountRiskSnapshotMethodologyVersionSchema
+>;
+
+export const AccountRiskSnapshotEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type AccountRiskSnapshotEngineState = z.infer<
+  typeof AccountRiskSnapshotEngineStateSchema
+>;
+
+export const AccountRiskSnapshotStateSchema = z.enum([
+  "READY",
+  "PARTIAL",
+  "NO_ACCOUNT",
+  "ACCOUNT_SELECTION_REQUIRED",
+  "UNSUPPORTED_ACCOUNT",
+  "UNAUTHORIZED",
+  "UNAVAILABLE",
+]);
+export type AccountRiskSnapshotState = z.infer<
+  typeof AccountRiskSnapshotStateSchema
+>;
+
+export const AccountRiskSnapshotPrimaryReasonCodeSchema = z.enum([
+  "ACCOUNT_RISK_SNAPSHOT_READY",
+  "ACCOUNT_RISK_SNAPSHOT_PARTIAL",
+  "NO_LINKED_ACCOUNT",
+  "MULTIPLE_LINKED_ACCOUNTS_REQUIRE_SELECTION",
+  "SELECTED_ACCOUNT_TYPE_UNSUPPORTED",
+  "SCHWAB_ACCOUNT_ACCESS_UNAUTHORIZED",
+  "SCHWAB_ACCOUNT_DISCOVERY_TIMEOUT",
+  "SCHWAB_ACCOUNT_DISCOVERY_NETWORK_ERROR",
+  "SCHWAB_ACCOUNT_DISCOVERY_RATE_LIMITED",
+  "SCHWAB_ACCOUNT_DISCOVERY_UNAVAILABLE",
+  "SCHWAB_ACCOUNT_BALANCES_TIMEOUT",
+  "SCHWAB_ACCOUNT_BALANCES_NETWORK_ERROR",
+  "SCHWAB_ACCOUNT_BALANCES_RATE_LIMITED",
+  "SCHWAB_ACCOUNT_BALANCES_UNAVAILABLE",
+  "ACCOUNT_EQUITY_FIELD_UNAVAILABLE",
+  "AVAILABLE_CASH_FIELD_UNAVAILABLE",
+  "ACCOUNT_DISCOVERY_RESPONSE_INVALID",
+  "ACCOUNT_BALANCE_RESPONSE_INVALID",
+  "ACCOUNT_NORMALIZATION_UNAVAILABLE",
+]);
+export type AccountRiskSnapshotPrimaryReasonCode = z.infer<
+  typeof AccountRiskSnapshotPrimaryReasonCodeSchema
+>;
+
+export const AccountRiskSnapshotWarningCodeSchema = z.enum([
+  "ACCOUNT_EQUITY_UNAVAILABLE",
+  "AVAILABLE_CASH_UNAVAILABLE",
+  "ACCOUNT_SNAPSHOT_PARTIAL",
+  "NEGATIVE_BROKER_BALANCE_REPORTED",
+  "ACCOUNT_SOURCE_TIMESTAMP_UNAVAILABLE",
+  "ACCOUNT_NORMALIZATION_VALIDATION_FAILED",
+]);
+export type AccountRiskSnapshotWarningCode = z.infer<
+  typeof AccountRiskSnapshotWarningCodeSchema
+>;
+
+export const AccountRiskSelectionStateSchema = z.enum([
+  "SELECTED",
+  "NO_ACCOUNT",
+  "ACCOUNT_SELECTION_REQUIRED",
+  "UNAVAILABLE",
+]);
+export type AccountRiskSelectionState = z.infer<
+  typeof AccountRiskSelectionStateSchema
+>;
+
+export const AccountRiskAccountTypeSchema = z
+  .enum(["CASH", "MARGIN", "UNSUPPORTED", "UNAVAILABLE"])
+  .nullable();
+export type AccountRiskAccountType = z.infer<typeof AccountRiskAccountTypeSchema>;
+
+export const AccountRiskAccountSelectionSchema = z
+  .object({
+    linkedAccountCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    selectionState: AccountRiskSelectionStateSchema,
+    accountType: AccountRiskAccountTypeSchema,
+  })
+  .strict();
+export type AccountRiskAccountSelection = z.infer<
+  typeof AccountRiskAccountSelectionSchema
+>;
+
+export const AccountRiskBalancesSchema = z
+  .object({
+    accountEquityDollars: z.number().finite().nullable(),
+    availableCashDollars: z.number().finite().nullable(),
+    currency: z.literal("USD"),
+    equitySourceField: z
+      .literal("securitiesAccount.currentBalances.equity")
+      .nullable(),
+    availableCashSourceField: z
+      .literal("securitiesAccount.currentBalances.cashAvailableForTrading")
+      .nullable(),
+  })
+  .strict();
+export type AccountRiskBalances = z.infer<typeof AccountRiskBalancesSchema>;
+
+export const AccountRiskSourceSchema = z
+  .object({
+    provider: z.literal("SCHWAB_TRADER_API"),
+    accountDiscoveryFetchedAt: z.string().datetime().nullable(),
+    accountBalancesFetchedAt: z.string().datetime().nullable(),
+    timestampSource: z.literal("APPLICATION_RECEIPT_TIME"),
+    retainedStaleDataUsed: z.literal(false),
+    positionsRequested: z.literal(false),
+    ordersRequested: z.literal(false),
+    transactionsRequested: z.literal(false),
+  })
+  .strict();
+export type AccountRiskSource = z.infer<typeof AccountRiskSourceSchema>;
+
+export const AccountRiskDisclosuresSchema = z
+  .object({
+    readOnlyBrokerSnapshot: z.literal(true),
+    brokerReportedValues: z.literal(true),
+    accountIdentifiersRedacted: z.literal(true),
+    availableCashIsNotBuyingPower: z.literal(true),
+    marginCapacityExcluded: z.literal(true),
+    snapshotMayBePartial: z.literal(true),
+    noPositionRiskCalculation: z.literal(true),
+    noDailyLossCalculation: z.literal(true),
+    noPortfolioRiskCalculation: z.literal(true),
+    noSizingCalculation: z.literal(true),
+    noOrderExecution: z.literal(true),
+    noPersistence: z.literal(true),
+  })
+  .strict();
+export type AccountRiskDisclosures = z.infer<
+  typeof AccountRiskDisclosuresSchema
+>;
+
+export const AccountRiskMethodologySchema = z
+  .object({
+    accountSelectionMethod: z.literal("EXACTLY_ONE_LINKED_ACCOUNT"),
+    cashAccountAvailableCashMethod: z.literal(
+      "securitiesAccount.currentBalances.cashAvailableForTrading",
+    ),
+    cashAccountEquityMethod: z.literal("UNAVAILABLE_IN_CURRENT_BALANCES"),
+    marginAccountEquityMethod: z.literal(
+      "securitiesAccount.currentBalances.equity",
+    ),
+    marginAccountAvailableCashMethod: z.literal(
+      "UNVERIFIED_IN_ACCOUNT_RISK_SNAPSHOT_V1",
+    ),
+    currency: z.literal("USD"),
+    retainedStaleFallback: z.literal(false),
+  })
+  .strict();
+export type AccountRiskMethodology = z.infer<
+  typeof AccountRiskMethodologySchema
+>;
+
+export const SchwabReadOnlyAccountRiskSnapshotResponseSchema = z
+  .object({
+    product: z.literal("SCHWAB_READ_ONLY_ACCOUNT_RISK_SNAPSHOT"),
+    methodologyVersion: AccountRiskSnapshotMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: AccountRiskSnapshotEngineStateSchema,
+    snapshotState: AccountRiskSnapshotStateSchema,
+    primaryReasonCode: AccountRiskSnapshotPrimaryReasonCodeSchema,
+    warningCode: AccountRiskSnapshotWarningCodeSchema.nullable(),
+    accountSelection: AccountRiskAccountSelectionSchema,
+    balances: AccountRiskBalancesSchema,
+    source: AccountRiskSourceSchema,
+    disclosures: AccountRiskDisclosuresSchema,
+    methodology: AccountRiskMethodologySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string): void => {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    };
+    const noBalances =
+      value.balances.accountEquityDollars === null &&
+      value.balances.availableCashDollars === null &&
+      value.balances.equitySourceField === null &&
+      value.balances.availableCashSourceField === null;
+
+    if (value.snapshotState === "READY") {
+      issue("ACCOUNT_RISK_SNAPSHOT_V1 must not produce READY");
+    }
+    if (value.snapshotState === "PARTIAL" && value.engineState !== "PARTIAL") {
+      issue("PARTIAL snapshot requires PARTIAL engine state");
+    }
+    if (
+      ["NO_ACCOUNT", "ACCOUNT_SELECTION_REQUIRED", "UNSUPPORTED_ACCOUNT"].includes(
+        value.snapshotState,
+      ) &&
+      value.engineState !== "AVAILABLE"
+    ) {
+      issue("Deterministic non-balance states require AVAILABLE engine state");
+    }
+    if (
+      ["UNAUTHORIZED", "UNAVAILABLE"].includes(value.snapshotState) &&
+      value.engineState !== "UNAVAILABLE"
+    ) {
+      issue("Unavailable account states require UNAVAILABLE engine state");
+    }
+
+    switch (value.snapshotState) {
+      case "PARTIAL": {
+        if (
+          value.accountSelection.linkedAccountCount !== 1 ||
+          value.accountSelection.selectionState !== "SELECTED" ||
+          !["CASH", "MARGIN"].includes(value.accountSelection.accountType ?? "") ||
+          value.primaryReasonCode !== "ACCOUNT_RISK_SNAPSHOT_PARTIAL" ||
+          value.source.accountDiscoveryFetchedAt === null ||
+          value.source.accountBalancesFetchedAt === null
+        ) {
+          issue("PARTIAL snapshot requires exactly one selected supported account");
+        }
+        if (value.accountSelection.accountType === "CASH") {
+          const cash = value.balances.availableCashDollars;
+          if (
+            cash === null ||
+            value.balances.accountEquityDollars !== null ||
+            value.balances.equitySourceField !== null ||
+            value.balances.availableCashSourceField !==
+              "securitiesAccount.currentBalances.cashAvailableForTrading"
+          ) {
+            issue("CASH PARTIAL snapshot has inconsistent approved balance fields");
+          }
+          const expectedWarning =
+            cash !== null && cash < 0
+              ? "NEGATIVE_BROKER_BALANCE_REPORTED"
+              : "ACCOUNT_EQUITY_UNAVAILABLE";
+          if (value.warningCode !== expectedWarning) {
+            issue("CASH PARTIAL warning precedence is inconsistent");
+          }
+        }
+        if (value.accountSelection.accountType === "MARGIN") {
+          const equity = value.balances.accountEquityDollars;
+          if (
+            equity === null ||
+            value.balances.availableCashDollars !== null ||
+            value.balances.equitySourceField !==
+              "securitiesAccount.currentBalances.equity" ||
+            value.balances.availableCashSourceField !== null
+          ) {
+            issue("MARGIN PARTIAL snapshot has inconsistent approved balance fields");
+          }
+          const expectedWarning =
+            equity !== null && equity < 0
+              ? "NEGATIVE_BROKER_BALANCE_REPORTED"
+              : "AVAILABLE_CASH_UNAVAILABLE";
+          if (value.warningCode !== expectedWarning) {
+            issue("MARGIN PARTIAL warning precedence is inconsistent");
+          }
+        }
+        break;
+      }
+      case "NO_ACCOUNT":
+        if (
+          value.accountSelection.linkedAccountCount !== 0 ||
+          value.accountSelection.selectionState !== "NO_ACCOUNT" ||
+          value.accountSelection.accountType !== null ||
+          value.primaryReasonCode !== "NO_LINKED_ACCOUNT" ||
+          value.warningCode !== null ||
+          !noBalances ||
+          value.source.accountDiscoveryFetchedAt === null ||
+          value.source.accountBalancesFetchedAt !== null
+        ) {
+          issue("NO_ACCOUNT snapshot is inconsistent");
+        }
+        break;
+      case "ACCOUNT_SELECTION_REQUIRED":
+        if (
+          value.accountSelection.linkedAccountCount === null ||
+          value.accountSelection.linkedAccountCount <= 1 ||
+          value.accountSelection.selectionState !== "ACCOUNT_SELECTION_REQUIRED" ||
+          value.accountSelection.accountType !== null ||
+          value.primaryReasonCode !== "MULTIPLE_LINKED_ACCOUNTS_REQUIRE_SELECTION" ||
+          value.warningCode !== null ||
+          !noBalances ||
+          value.source.accountDiscoveryFetchedAt === null ||
+          value.source.accountBalancesFetchedAt !== null
+        ) {
+          issue("ACCOUNT_SELECTION_REQUIRED snapshot is inconsistent");
+        }
+        break;
+      case "UNSUPPORTED_ACCOUNT":
+        if (
+          value.accountSelection.linkedAccountCount !== 1 ||
+          value.accountSelection.selectionState !== "SELECTED" ||
+          value.accountSelection.accountType !== "UNSUPPORTED" ||
+          value.primaryReasonCode !== "SELECTED_ACCOUNT_TYPE_UNSUPPORTED" ||
+          value.warningCode !== null ||
+          !noBalances ||
+          value.source.accountDiscoveryFetchedAt === null ||
+          value.source.accountBalancesFetchedAt === null
+        ) {
+          issue("UNSUPPORTED_ACCOUNT snapshot is inconsistent");
+        }
+        break;
+      case "UNAUTHORIZED":
+        if (
+          value.primaryReasonCode !== "SCHWAB_ACCOUNT_ACCESS_UNAUTHORIZED" ||
+          value.warningCode !== null ||
+          !noBalances ||
+          value.accountSelection.accountType !== "UNAVAILABLE"
+        ) {
+          issue("UNAUTHORIZED snapshot is inconsistent");
+        }
+        break;
+      case "UNAVAILABLE":
+        if (!noBalances) {
+          issue("UNAVAILABLE snapshot must not retain normalized balances");
+        }
+        if (
+          value.accountSelection.selectionState === "SELECTED" &&
+          value.accountSelection.linkedAccountCount !== 1
+        ) {
+          issue("Selected unavailable snapshot requires exactly one linked account");
+        }
+        if (
+          value.accountSelection.selectionState === "UNAVAILABLE" &&
+          value.accountSelection.linkedAccountCount !== null
+        ) {
+          issue("Unavailable selection requires unknown linked-account count");
+        }
+        if (
+          value.accountSelection.accountType === "CASH" &&
+          value.primaryReasonCode !== "AVAILABLE_CASH_FIELD_UNAVAILABLE"
+        ) {
+          issue("CASH field failure requires available-cash reason code");
+        }
+        if (
+          value.accountSelection.accountType === "MARGIN" &&
+          value.primaryReasonCode !== "ACCOUNT_EQUITY_FIELD_UNAVAILABLE"
+        ) {
+          issue("MARGIN field failure requires account-equity reason code");
+        }
+        break;
+      case "READY":
+        break;
+    }
+  });
+export type SchwabReadOnlyAccountRiskSnapshotResponse = z.infer<
+  typeof SchwabReadOnlyAccountRiskSnapshotResponseSchema
+>;
+
+export const AccountRiskSnapshotRequestErrorResponseSchema = z
+  .object({
+    error: z.literal("INVALID_ACCOUNT_RISK_SNAPSHOT_REQUEST"),
+    issues: z
+      .tuple([
+        z
+          .object({
+            path: z.literal("query"),
+            code: z.literal("QUERY_PARAMETERS_NOT_SUPPORTED"),
+          })
+          .strict(),
+      ]),
+  })
+  .strict();
+export type AccountRiskSnapshotRequestErrorResponse = z.infer<
+  typeof AccountRiskSnapshotRequestErrorResponseSchema
+>;
+
+export const AccountRiskSnapshotOriginErrorResponseSchema = z
+  .object({
+    error: z.literal("ACCOUNT_RISK_SNAPSHOT_ORIGIN_FORBIDDEN"),
+  })
+  .strict();
+export type AccountRiskSnapshotOriginErrorResponse = z.infer<
+  typeof AccountRiskSnapshotOriginErrorResponseSchema
+>;
