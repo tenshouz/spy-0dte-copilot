@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type {
+  DiscordAutomaticTradePlanAlertCadenceMilliseconds,
+  DiscordAutomaticTradePlanAlertDeliveryResponse,
   SpyZeroDteTradePlanAlertTransitionResponse,
   DiscordTradePlanAlertDeliveryPrimaryReasonCode,
   DiscordTradePlanAlertDeliveryResponse,
@@ -22,6 +24,8 @@ import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_CADENCE_OPTIONS,
+  useDiscordAutomaticTradePlanAlertDelivery,
   useDiscordTradePlanAlertDelivery,
   useDiscordWebhookStatus,
 } from "@/hooks/use-discord-webhook";
@@ -57,6 +61,10 @@ function badgeVariant(
 
 export function TradePlanAlertMonitor() {
   const [monitoring, setMonitoring] = useState(false);
+  const [automaticDiscordEnabled, setAutomaticDiscordEnabled] =
+    useState(false);
+  const [automaticDiscordCadence, setAutomaticDiscordCadence] =
+    useState<DiscordAutomaticTradePlanAlertCadenceMilliseconds>(30_000);
   const [sessionEvents, setSessionEvents] = useState<SessionAlertEvent[]>([]);
   const [discordDeliveryAttempts, setDiscordDeliveryAttempts] = useState<
     DiscordTradePlanAlertDeliveryResponse[]
@@ -64,7 +72,13 @@ export function TradePlanAlertMonitor() {
   const query = useSpyTradePlanAlertTransition(monitoring);
   const discordStatus = useDiscordWebhookStatus();
   const discordDelivery = useDiscordTradePlanAlertDelivery();
+  const automaticDiscordDelivery =
+    useDiscordAutomaticTradePlanAlertDelivery(
+      automaticDiscordEnabled && discordStatus.data?.state === "READY",
+      automaticDiscordCadence,
+    );
   const result = query.data ?? null;
+  const automaticDiscordResult = automaticDiscordDelivery.data ?? null;
 
   useEffect(() => {
     if (
@@ -96,6 +110,16 @@ export function TradePlanAlertMonitor() {
       return [nextEvent, ...current].slice(0, MAX_SESSION_EVENTS);
     });
   }, [monitoring, result]);
+
+  useEffect(() => {
+    if (
+      automaticDiscordEnabled &&
+      discordStatus.data !== undefined &&
+      discordStatus.data.state !== "READY"
+    ) {
+      setAutomaticDiscordEnabled(false);
+    }
+  }, [automaticDiscordEnabled, discordStatus.data]);
 
   const requestDiscordDelivery = () => {
     discordDelivery.mutate(undefined, {
@@ -131,9 +155,9 @@ export function TradePlanAlertMonitor() {
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Monitoring is opt-in. Events are session-only and are not
-                persisted. Discord delivery occurs only when you explicitly
-                select Evaluate & send to Discord, using a separate backend
-                process-memory delivery state.
+                persisted. Discord delivery may be requested explicitly or by
+                the separate opt-in foreground automatic-delivery session. Both
+                use the same backend process-memory duplicate-suppression state.
               </p>
             </div>
 
@@ -270,6 +294,138 @@ export function TradePlanAlertMonitor() {
       </Panel>
 
       <Panel
+        title="Automatic Discord Delivery"
+        className="min-w-0 lg:col-span-3"
+        action={
+          <Badge variant={automaticDiscordEnabled ? "bull" : "default"}>
+            {automaticDiscordEnabled ? "Running" : "Stopped"}
+          </Badge>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-3xl space-y-1">
+              <p className="text-sm leading-relaxed text-foreground">
+                Automatically evaluate and deliver new deterministic Trade Plan
+                alert transitions while this Alerts page remains open.
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                This is an explicit opt-in browser session, not a background
+                scheduler. Each evaluation uses the shared Discord process-memory
+                duplicate state and performs at most two attempts with one fixed
+                three-second backoff for unambiguous retry cases. Timeout or
+                network ambiguity stops for explicit review instead of risking a
+                duplicate message.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Cadence
+                <select
+                  aria-label="Automatic Discord delivery cadence"
+                  value={automaticDiscordCadence}
+                  disabled={automaticDiscordEnabled}
+                  onChange={(event) =>
+                    setAutomaticDiscordCadence(
+                      Number(event.target.value) as DiscordAutomaticTradePlanAlertCadenceMilliseconds,
+                    )
+                  }
+                  className="block h-9 rounded-md border border-panel-border bg-background px-3 font-mono text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_CADENCE_OPTIONS.map(
+                    (cadence) => (
+                      <option key={cadence} value={cadence}>
+                        {formatAlertMonitorDuration(cadence)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              {automaticDiscordEnabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAutomaticDiscordEnabled(false)}
+                >
+                  <CirclePause className="h-4 w-4" />
+                  Stop automatic delivery
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={discordStatus.data?.state !== "READY"}
+                  onClick={() => setAutomaticDiscordEnabled(true)}
+                >
+                  <CirclePlay className="h-4 w-4" />
+                  Start automatic delivery
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Automatic Delivery"
+              value={automaticDiscordEnabled ? "Running" : "Stopped"}
+              tone={automaticDiscordEnabled ? "bull" : "default"}
+              sublabel="Explicit foreground browser session"
+            />
+            <MetricCard
+              label="Evaluation Cadence"
+              value={formatAlertMonitorDuration(automaticDiscordCadence)}
+              sublabel="No background-tab polling"
+            />
+            <MetricCard
+              label="Latest Outcome"
+              value={automaticDiscordResult?.automaticDeliveryState ?? "—"}
+              sublabel={
+                automaticDiscordResult
+                  ? formatAlertMonitorTimestamp(automaticDiscordResult.evaluatedAt)
+                  : "No automatic evaluation yet"
+              }
+            />
+            <MetricCard
+              label="Retry Policy"
+              value="2 attempts"
+              sublabel="3 sec fixed backoff"
+            />
+          </div>
+
+          {discordStatus.data?.state !== "READY" ? (
+            <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Configure and test the backend Discord webhook in Settings before
+              starting automatic delivery.
+            </div>
+          ) : automaticDiscordDelivery.isError ? (
+            <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              The automatic delivery endpoint failed before returning a validated
+              result. The next foreground evaluation will occur at the selected
+              cadence while this session remains enabled.
+            </div>
+          ) : automaticDiscordResult ? (
+            <AutomaticDiscordDeliveryNotice result={automaticDiscordResult} />
+          ) : automaticDiscordEnabled && automaticDiscordDelivery.isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Running the first automatic Discord evaluation…
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Automatic Discord delivery is off. Starting it does not persist
+              across refreshes and stops when this page session ends.
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      <Panel
         title={`Session Alert Events (${sessionEvents.length})`}
         className="min-w-0 lg:col-span-3"
         action={
@@ -351,6 +507,58 @@ const DISCORD_DELIVERY_COPY: Record<
   WEBHOOK_PROVIDER_FAILURE:
     "Discord returned an unexpected error. The emitted transition was not committed and may be retried.",
 };
+
+function AutomaticDiscordDeliveryNotice({
+  result,
+}: {
+  result: DiscordAutomaticTradePlanAlertDeliveryResponse;
+}) {
+  const delivered = result.automaticDeliveryState === "DELIVERED";
+  const failed = result.automaticDeliveryState === "FAILED";
+
+  return (
+    <div
+      role="status"
+      className={cn(
+        "rounded-md border p-3 text-xs",
+        delivered
+          ? "border-bull/30 bg-bull/5 text-bull"
+          : failed
+            ? "border-bear/30 bg-bear/5 text-bear"
+            : "border-panel-border bg-background/40 text-muted-foreground",
+      )}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2">
+          {delivered ? (
+            <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : failed ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <div className="min-w-0 space-y-1">
+            <p>{DISCORD_DELIVERY_COPY[result.primaryReasonCode]}</p>
+            <p className="font-mono text-[11px] opacity-80">
+              Automatic foreground evaluation ·{" "}
+              {formatAlertMonitorTimestamp(result.evaluatedAt)}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Badge
+            variant={delivered ? "bull" : failed ? "bear" : "default"}
+          >
+            {result.automaticDeliveryState.replaceAll("_", " ")}
+          </Badge>
+          <Badge variant="default">
+            {result.attemptCount}/{result.maximumAttempts} attempts
+          </Badge>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DiscordDeliveryNotice({
   result,

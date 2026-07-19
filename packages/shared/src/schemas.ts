@@ -5984,3 +5984,234 @@ export const DiscordTradePlanAlertDeliveryResponseSchema = z
 export type DiscordTradePlanAlertDeliveryResponse = z.infer<
   typeof DiscordTradePlanAlertDeliveryResponseSchema
 >;
+
+/** Opt-in, foreground-browser automatic evaluation of Discord Trade Plan alert delivery. */
+export const DiscordAutomaticTradePlanAlertCadenceMillisecondsSchema = z.union([
+  z.literal(15_000),
+  z.literal(30_000),
+  z.literal(60_000),
+]);
+export type DiscordAutomaticTradePlanAlertCadenceMilliseconds = z.infer<
+  typeof DiscordAutomaticTradePlanAlertCadenceMillisecondsSchema
+>;
+
+export const DiscordAutomaticTradePlanAlertDeliveryRequestSchema = z
+  .object({
+    clientMode: z.literal("FOREGROUND_BROWSER_SESSION"),
+    cadenceMilliseconds:
+      DiscordAutomaticTradePlanAlertCadenceMillisecondsSchema,
+  })
+  .strict();
+export type DiscordAutomaticTradePlanAlertDeliveryRequest = z.infer<
+  typeof DiscordAutomaticTradePlanAlertDeliveryRequestSchema
+>;
+
+export const DiscordAutomaticTradePlanAlertDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NO_DELIVERY",
+  "FAILED",
+]);
+export type DiscordAutomaticTradePlanAlertDeliveryState = z.infer<
+  typeof DiscordAutomaticTradePlanAlertDeliveryStateSchema
+>;
+
+export const DiscordAutomaticTradePlanAlertAttemptSummarySchema = z
+  .object({
+    attemptNumber: z.number().int().min(1).max(2),
+    deliveryState: DiscordTradePlanAlertDeliveryStateSchema,
+    primaryReasonCode: DiscordTradePlanAlertDeliveryPrimaryReasonCodeSchema,
+    attemptedAt: z.string().datetime(),
+    deliveredAt: z.string().datetime().nullable(),
+    providerStatusCode: z.number().int().min(100).max(599).nullable(),
+    providerRequestAttempted: z.boolean(),
+    transitionState: TradePlanAlertTransitionStateSchema.nullable(),
+    transitionReasonCode:
+      TradePlanAlertTransitionPrimaryReasonCodeSchema.nullable(),
+    transitionStateCommitted: z.boolean(),
+    retryEligible: z.boolean(),
+    automaticRetryEligible: z.boolean(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.deliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "ALERT_DELIVERED" ||
+        value.deliveredAt === null ||
+        !value.providerRequestAttempted ||
+        value.providerStatusCode === null ||
+        value.providerStatusCode < 200 ||
+        value.providerStatusCode >= 300 ||
+        value.transitionState !== "EMIT" ||
+        !value.transitionStateCommitted ||
+        value.retryEligible
+      ) {
+        issue("Delivered automatic attempt requires confirmed committed delivery");
+      }
+    } else if (
+      value.primaryReasonCode === "ALERT_DELIVERED" ||
+      value.deliveredAt !== null
+    ) {
+      issue("Non-delivered automatic attempt cannot expose delivery success");
+    }
+
+    const automaticRetryReasons = [
+      "TRANSITION_UNAVAILABLE",
+      "WEBHOOK_RATE_LIMITED",
+      "WEBHOOK_PROVIDER_FAILURE",
+    ];
+    if (
+      value.automaticRetryEligible !==
+      automaticRetryReasons.includes(value.primaryReasonCode)
+    ) {
+      issue("automaticRetryEligible must follow the fixed retry allowlist");
+    }
+    if (value.automaticRetryEligible && !value.retryEligible) {
+      issue("Automatic retry eligibility requires source retry eligibility");
+    }
+  });
+export type DiscordAutomaticTradePlanAlertAttemptSummary = z.infer<
+  typeof DiscordAutomaticTradePlanAlertAttemptSummarySchema
+>;
+
+export const DiscordAutomaticTradePlanAlertDeliveryResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_DELIVERY"),
+    methodologyVersion: z.literal(
+      "DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_DELIVERY_V1",
+    ),
+    automaticDeliveryState:
+      DiscordAutomaticTradePlanAlertDeliveryStateSchema,
+    primaryReasonCode: DiscordTradePlanAlertDeliveryPrimaryReasonCodeSchema,
+    evaluatedAt: z.string().datetime(),
+    clientMode: z.literal("FOREGROUND_BROWSER_SESSION"),
+    cadenceMilliseconds:
+      DiscordAutomaticTradePlanAlertCadenceMillisecondsSchema,
+    attemptCount: z.number().int().min(1).max(2),
+    maximumAttempts: z.literal(2),
+    retryDelayMilliseconds: z.literal(3_000),
+    attempts: z
+      .array(DiscordAutomaticTradePlanAlertAttemptSummarySchema)
+      .min(1)
+      .max(2),
+    finalAttempt: DiscordAutomaticTradePlanAlertAttemptSummarySchema,
+    disclosures: z
+      .object({
+        userOptInRequired: z.literal(true),
+        foregroundBrowserSessionOnly: z.literal(true),
+        noBackgroundScheduler: z.literal(true),
+        processMemoryDeduplication: z.literal(true),
+        sharedWithExplicitDeliveryState: z.literal(true),
+        ambiguousProviderOutcomeNotAutomaticallyRetried: z.literal(true),
+        noDatabasePersistence: z.literal(true),
+        webhookUrlReturned: z.literal(false),
+        webhookTokenReturned: z.literal(false),
+        providerBodyReturned: z.literal(false),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+        mentionsDisabled: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceDeliveryProduct: z.literal(
+          "DISCORD_TRADE_PLAN_ALERT_DELIVERY",
+        ),
+        sourceDeliveryMethodology: z.literal(
+          "DISCORD_TRADE_PLAN_ALERT_DELIVERY_V1",
+        ),
+        deliveryTrigger: z.literal("OPT_IN_FOREGROUND_BROWSER_POLL"),
+        cadenceSource: z.literal("CALLER_SELECTED_ALLOWED_VALUE"),
+        retryMethod: z.literal(
+          "MAX_TWO_ATTEMPTS_FIXED_BACKOFF_FOR_RETRY_ELIGIBLE_RESULTS",
+        ),
+        retryableResultMethod: z.literal(
+          "UNAMBIGUOUS_AUTOMATIC_RETRY_ALLOWLIST",
+        ),
+        duplicateSuppressionMethod: z.literal(
+          "SHARED_DISCORD_PROCESS_MEMORY_STATE",
+        ),
+        transitionCooldownMethod: z.literal(
+          "TRADE_PLAN_ALERT_TRANSITION_V1_REAPPEARANCE_COOLDOWN",
+        ),
+        persistenceMethod: z.literal("NONE"),
+        schedulerMethod: z.literal("FOREGROUND_BROWSER_TIMER_ONLY"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.attemptCount !== value.attempts.length) {
+      issue("attemptCount must equal the attempts array length");
+    }
+
+    const final = value.attempts.at(-1);
+    if (
+      final === undefined ||
+      final.attemptNumber !== value.finalAttempt.attemptNumber ||
+      final.primaryReasonCode !== value.finalAttempt.primaryReasonCode ||
+      final.attemptedAt !== value.finalAttempt.attemptedAt
+    ) {
+      issue("finalAttempt must match the final attempts entry");
+    }
+
+    value.attempts.forEach((attempt, index) => {
+      if (attempt.attemptNumber !== index + 1) {
+        issue("Automatic attempt numbers must be sequential");
+      }
+    });
+
+    if (
+      value.attemptCount === 2 &&
+      !value.attempts[0]?.automaticRetryEligible
+    ) {
+      issue(
+        "A second automatic attempt requires an automatically retry-eligible first attempt",
+      );
+    }
+
+    const noDeliveryReasons = [
+      "NO_EMITTED_TRANSITION",
+      "WEBHOOK_NOT_CONFIGURED",
+    ];
+
+    if (value.automaticDeliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "ALERT_DELIVERED" ||
+        value.finalAttempt.deliveryState !== "DELIVERED"
+      ) {
+        issue("DELIVERED automatic response requires a delivered final attempt");
+      }
+    } else if (value.automaticDeliveryState === "FAILED") {
+      if (
+        value.finalAttempt.deliveryState === "DELIVERED" ||
+        noDeliveryReasons.includes(value.finalAttempt.primaryReasonCode)
+      ) {
+        issue("FAILED automatic response requires an operational failure");
+      }
+      if (
+        value.finalAttempt.automaticRetryEligible &&
+        value.attemptCount !== value.maximumAttempts
+      ) {
+        issue("Automatically retryable failures must exhaust the bounded policy");
+      }
+    } else if (
+      value.finalAttempt.deliveryState === "DELIVERED" ||
+      !noDeliveryReasons.includes(value.finalAttempt.primaryReasonCode) ||
+      value.finalAttempt.automaticRetryEligible
+    ) {
+      issue("NO_DELIVERY requires a non-actionable final result");
+    }
+
+    if (value.primaryReasonCode !== value.finalAttempt.primaryReasonCode) {
+      issue("Automatic primary reason must match the final attempt");
+    }
+  });
+export type DiscordAutomaticTradePlanAlertDeliveryResponse = z.infer<
+  typeof DiscordAutomaticTradePlanAlertDeliveryResponseSchema
+>;

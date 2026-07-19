@@ -8,7 +8,7 @@ export default function AlertsPage() {
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Alerts"
-        description="Opt-in, session-only monitoring of deterministic Trade Plan alert transitions. No Discord delivery, database persistence, private account data, or order execution."
+        description="Opt-in monitoring and Discord delivery for deterministic Trade Plan alert transitions. Foreground browser sessions only; no database persistence, private account data, or order execution."
       />
 
       <TradePlanAlertMonitor />

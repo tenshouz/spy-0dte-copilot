@@ -131,7 +131,7 @@ test("session event collection deduplicates and remains bounded", () => {
   assert.equal(monitor.includes("Clear session"), true);
 });
 
-test("Discord delivery is explicit-only and never coupled to monitor polling", () => {
+test("explicit Discord delivery remains a separate user action", () => {
   const monitor = readFileSync(
     resolve(
       process.cwd(),
@@ -152,6 +152,100 @@ test("Discord delivery is explicit-only and never coupled to monitor polling", (
   assert.equal(hook.includes("mutationFn: apiClient.sendDiscordTradePlanAlert"), true);
 });
 
+
+
+test("automatic Discord delivery is opt-in foreground-only with approved cadences", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("Start automatic delivery"), true);
+  assert.equal(monitor.includes("Stop automatic delivery"), true);
+  assert.equal(monitor.includes("useState(false)"), true);
+  assert.equal(
+    monitor.includes("useDiscordAutomaticTradePlanAlertDelivery"),
+    true,
+  );
+  assert.equal(monitor.includes("automaticDiscordCadence"), true);
+  assert.equal(hook.includes("15_000"), true);
+  assert.equal(hook.includes("30_000"), true);
+  assert.equal(hook.includes("60_000"), true);
+  assert.equal(hook.includes("refetchIntervalInBackground: false"), true);
+  assert.equal(hook.includes("refetchOnWindowFocus: false"), true);
+  assert.equal(hook.includes("refetchOnReconnect: false"), true);
+  assert.equal(hook.includes("retry: false"), true);
+});
+
+test("automatic delivery exposes bounded backend retry and shared deduplication copy", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const client = readFileSync(
+    resolve(process.cwd(), "apps/web/src/lib/api-client.ts"),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("at most two attempts"), true);
+  assert.equal(monitor.includes("three-second backoff"), true);
+  assert.equal(monitor.includes("shared Discord process-memory"), true);
+  assert.equal(
+    client.includes("/api/discord/trade-plan-alert/automatic"),
+    true,
+  );
+});
+
+test("automatic delivery is session-only and has no background scheduler", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+  for (const forbidden of [
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "setInterval",
+    "Notification.requestPermission",
+  ]) {
+    assert.equal(monitor.includes(forbidden), false, `${forbidden} must not appear`);
+    assert.equal(hook.includes(forbidden), false, `${forbidden} must not appear`);
+  }
+  assert.equal(monitor.includes("not a background"), true);
+  assert.equal(monitor.includes("does not persist"), true);
+});
+
+test("Settings and Alerts copy accurately describe automatic foreground delivery", () => {
+  const settings = readFileSync(
+    resolve(process.cwd(), "apps/web/src/app/settings/page.tsx"),
+    "utf8",
+  );
+  const page = readFileSync(
+    resolve(process.cwd(), "apps/web/src/app/alerts/page.tsx"),
+    "utf8",
+  );
+  assert.equal(settings.includes("can be started from the Alerts page"), true);
+  assert.equal(settings.includes("browser session remains open"), true);
+  assert.equal(page.includes("No Discord delivery"), false);
+  assert.equal(page.includes("Foreground browser sessions only"), true);
+});
 
 test("Discord delivery attempts are session-only bounded and clearable", () => {
   const monitor = readFileSync(

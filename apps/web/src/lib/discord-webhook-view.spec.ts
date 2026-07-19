@@ -61,9 +61,10 @@ test("status polling does not send a test", () => {
   assert.equal(hook.includes("mutationFn: apiClient.sendDiscordWebhookTest"), true);
 });
 
-test("UI states automatic delivery is not enabled", () => {
-  assert.equal(settings.includes("Automatic Trade"), true);
-  assert.equal(settings.includes("alert delivery is not enabled"), true);
+test("UI directs opt-in automatic delivery to the Alerts page", () => {
+  assert.equal(settings.includes("Opt-in automatic"), true);
+  assert.equal(settings.includes("started from the Alerts page"), true);
+  assert.equal(settings.includes("browser session remains open"), true);
 });
 
 test("Settings contains no order action", () => {

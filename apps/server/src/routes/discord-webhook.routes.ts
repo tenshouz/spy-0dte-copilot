@@ -1,12 +1,16 @@
 import {
+  DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
   DiscordWebhookTestRequestSchema,
+  type DiscordAutomaticTradePlanAlertDeliveryRequest,
+  type DiscordAutomaticTradePlanAlertDeliveryResponse,
   type DiscordTradePlanAlertDeliveryResponse,
   type DiscordWebhookStatusResponse,
   type DiscordWebhookTestDeliveryResponse,
 } from "@spy-copilot/shared";
 import { Router, type Response } from "express";
 import { isAllowedAccountRiskOrigin } from "./account-risk.routes";
+import { runDiscordAutomaticTradePlanAlertDelivery } from "../services/discord-automatic-trade-plan-alert.service";
 import { sendDiscordTradePlanAlert } from "../services/discord-trade-plan-alert.service";
 import {
   getDiscordWebhookStatus,
@@ -17,6 +21,9 @@ export interface DiscordWebhookRouterDependencies {
   getStatus: () => DiscordWebhookStatusResponse;
   sendTest: () => Promise<DiscordWebhookTestDeliveryResponse>;
   sendTradePlanAlert: () => Promise<DiscordTradePlanAlertDeliveryResponse>;
+  sendAutomaticTradePlanAlert: (
+    request: DiscordAutomaticTradePlanAlertDeliveryRequest,
+  ) => Promise<DiscordAutomaticTradePlanAlertDeliveryResponse>;
   frontendUrl: () => string | undefined;
   log: (category: string) => void;
 }
@@ -25,6 +32,7 @@ const DEFAULT_DEPENDENCIES: DiscordWebhookRouterDependencies = {
   getStatus: getDiscordWebhookStatus,
   sendTest: sendDiscordWebhookTest,
   sendTradePlanAlert: sendDiscordTradePlanAlert,
+  sendAutomaticTradePlanAlert: runDiscordAutomaticTradePlanAlertDelivery,
   frontendUrl: () => process.env.FRONTEND_URL,
   log: (category) => {
     // Fixed category only. Never log the webhook URL, token, payload, or provider body.
@@ -87,6 +95,50 @@ export function createDiscordWebhookRouter(
     } catch {
       deps.log("route-level unexpected failure");
       res.status(500).json({ error: "DISCORD_WEBHOOK_TEST_UNEXPECTED_FAILURE" });
+    }
+  });
+
+  router.post("/trade-plan-alert/automatic", async (req, res) => {
+    setDiscordWebhookHeaders(res);
+
+    const requestOrigin = req.get("Origin");
+    if (!isAllowedAccountRiskOrigin(requestOrigin, deps.frontendUrl())) {
+      res.removeHeader("Access-Control-Allow-Origin");
+      res.status(403).json({
+        error: "DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_ORIGIN_FORBIDDEN",
+      });
+      return;
+    }
+    if (requestOrigin !== undefined) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Vary", "Origin");
+    } else {
+      res.removeHeader("Access-Control-Allow-Origin");
+    }
+
+    if (Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: "QUERY_PARAMETERS_NOT_SUPPORTED" });
+      return;
+    }
+
+    const parsedBody =
+      DiscordAutomaticTradePlanAlertDeliveryRequestSchema.safeParse(
+        req.body ?? {},
+      );
+    if (!parsedBody.success) {
+      res.status(400).json({
+        error: "INVALID_DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_REQUEST",
+      });
+      return;
+    }
+
+    try {
+      res.json(await deps.sendAutomaticTradePlanAlert(parsedBody.data));
+    } catch {
+      deps.log("automatic trade-plan alert route-level unexpected failure");
+      res.status(500).json({
+        error: "DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_UNEXPECTED_FAILURE",
+      });
     }
   });
 

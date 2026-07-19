@@ -179,8 +179,9 @@ export default function SettingsPage() {
                 token are never returned to this page.
               </p>
               <p className="text-xs text-muted-foreground">
-                This test is explicit and sends one fixed connection message. Automatic Trade
-                Plan alert delivery is not enabled in this milestone.
+                This test is explicit and sends one fixed connection message. Opt-in automatic
+                Trade Plan alert delivery can be started from the Alerts page and runs only while
+                that browser session remains open in the foreground.
               </p>
               <Button
                 disabled={!discordStatus?.canSendTest || discordTest.isPending}
