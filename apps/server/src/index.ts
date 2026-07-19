@@ -11,6 +11,7 @@ import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
 import { expectedMoveRouter } from "./routes/expected-move.routes";
 import { dexRouter } from "./routes/dex.routes";
+import { discordWebhookRouter, setDiscordWebhookHeaders } from "./routes/discord-webhook.routes";
 import { gapRouter } from "./routes/gap.routes";
 import { gexRouter } from "./routes/gex.routes";
 import { journalRouter } from "./routes/journal.routes";
@@ -68,6 +69,7 @@ app.use("/api/quote", quoteRouter);
 app.use("/api/candles", candlesRouter);
 app.use("/api/expected-move", expectedMoveRouter);
 app.use("/api/dex", dexRouter);
+app.use("/api/discord", discordWebhookRouter);
 app.use("/api/gap", gapRouter);
 app.use("/api/gex", gexRouter);
 app.use("/api/session-data", sessionDataRouter);
@@ -81,6 +83,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: unknown }).status
       : null;
+  if (
+    req.originalUrl.startsWith("/api/discord/test") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setDiscordWebhookHeaders(res);
+    res.status(400).json({ error: "INVALID_DISCORD_WEBHOOK_TEST_REQUEST" });
+    return;
+  }
   if (
     req.originalUrl.startsWith("/api/trade-sizing/") &&
     error instanceof SyntaxError &&

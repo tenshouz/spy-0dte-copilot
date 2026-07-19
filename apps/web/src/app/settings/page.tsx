@@ -1,6 +1,10 @@
 "use client";
 
-import type { SchwabConnectionState } from "@spy-copilot/shared";
+import type {
+  DiscordWebhookConnectionState,
+  DiscordWebhookTestDeliveryPrimaryReasonCode,
+  SchwabConnectionState,
+} from "@spy-copilot/shared";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Panel } from "@/components/panels/panel";
@@ -8,6 +12,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDiscordWebhookStatus, useDiscordWebhookTest } from "@/hooks/use-discord-webhook";
 import { useSchwabStatus } from "@/hooks/use-schwab-status";
 import { schwabLoginUrl } from "@/lib/api-client";
 
@@ -70,6 +75,12 @@ const NOTICE_TONE_CLASSES = {
 
 export default function SettingsPage() {
   const { data: schwabStatus, isLoading: schwabLoading, isError: schwabError } = useSchwabStatus();
+  const {
+    data: discordStatus,
+    isLoading: discordLoading,
+    isError: discordError,
+  } = useDiscordWebhookStatus();
+  const discordTest = useDiscordWebhookTest();
   const callbackNotice = useSchwabCallbackNotice();
   const blockedState =
     schwabStatus?.state === "database_not_configured" ||
@@ -80,7 +91,7 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Settings"
-        description="Schwab connection is live (OAuth only — no market data yet). Everything else is still a placeholder."
+        description="Manage broker connectivity and explicit notification-channel configuration."
       />
 
       {callbackNotice && (
@@ -141,10 +152,62 @@ export default function SettingsPage() {
 
           <div className="h-3" />
 
-          <Panel title="Discord Webhook">
+          <Panel
+            title="Discord Webhook"
+            isLoading={discordLoading}
+            isError={discordError}
+          >
             <div className="space-y-3">
-              <Field label="Webhook URL" placeholder="https://discord.com/api/webhooks/…" />
-              <Button disabled>Save webhook</Button>
+              <DiscordWebhookStatusBadge state={discordStatus?.state} />
+              {discordStatus?.detail && (
+                <p
+                  className={`text-xs ${
+                    discordStatus.state === "CONFIG_INVALID"
+                      ? "text-bear"
+                      : discordStatus.state === "NOT_CONFIGURED"
+                        ? "text-wait"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {discordStatus.detail}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Keep the webhook secret only in <code>apps/server/.env</code> as{
+                " "
+                }<code>DISCORD_WEBHOOK_URL</code>, then restart the backend. The URL and
+                token are never returned to this page.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This test is explicit and sends one fixed connection message. Automatic Trade
+                Plan alert delivery is not enabled in this milestone.
+              </p>
+              <Button
+                disabled={!discordStatus?.canSendTest || discordTest.isPending}
+                onClick={() => discordTest.mutate()}
+              >
+                {discordTest.isPending ? "Sending test…" : "Send test message"}
+              </Button>
+              {discordTest.data && (
+                <div
+                  role="status"
+                  className={`rounded-md border px-3 py-2 text-xs ${
+                    discordTest.data.deliveryState === "DELIVERED"
+                      ? NOTICE_TONE_CLASSES.bull
+                      : NOTICE_TONE_CLASSES.bear
+                  }`}
+                >
+                  {DISCORD_TEST_RESULT_COPY[discordTest.data.primaryReasonCode]}
+                </div>
+              )}
+              {discordTest.isError && (
+                <div
+                  role="status"
+                  className={`rounded-md border px-3 py-2 text-xs ${NOTICE_TONE_CLASSES.bear}`}
+                >
+                  The dashboard could not complete the test request. Check the backend terminal.
+                </div>
+              )}
             </div>
           </Panel>
         </TabsContent>
@@ -220,24 +283,36 @@ function SchwabStatusBadge({
   );
 }
 
-function Field({
-  label,
-  placeholder,
-  type = "text",
+
+const DISCORD_STATE_CONFIG: Record<
+  DiscordWebhookConnectionState,
+  { label: string; variant: BadgeProps["variant"] }
+> = {
+  NOT_CONFIGURED: { label: "Not configured", variant: "wait" },
+  CONFIG_INVALID: { label: "Configuration invalid", variant: "bear" },
+  READY: { label: "Ready for explicit test", variant: "bull" },
+};
+
+const DISCORD_TEST_RESULT_COPY: Record<
+  DiscordWebhookTestDeliveryPrimaryReasonCode,
+  string
+> = {
+  TEST_MESSAGE_DELIVERED: "Discord confirmed the test message was delivered.",
+  WEBHOOK_NOT_CONFIGURED: "No Discord webhook is configured on the backend.",
+  WEBHOOK_CONFIG_INVALID: "The configured Discord webhook URL is invalid.",
+  WEBHOOK_REQUEST_TIMEOUT: "The Discord test request timed out.",
+  WEBHOOK_NETWORK_FAILURE: "The backend could not reach Discord.",
+  WEBHOOK_RATE_LIMITED: "Discord rate-limited the test request. Try again later.",
+  WEBHOOK_REJECTED: "Discord rejected the webhook. Verify or replace it in apps/server/.env.",
+  WEBHOOK_PROVIDER_FAILURE: "Discord returned an unexpected provider error.",
+};
+
+function DiscordWebhookStatusBadge({
+  state,
 }: {
-  label: string;
-  placeholder: string;
-  type?: string;
+  state?: DiscordWebhookConnectionState;
 }) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <input
-        disabled
-        type={type}
-        placeholder={placeholder}
-        className="w-full rounded-md border border-panel-border bg-background/40 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
-      />
-    </label>
-  );
+  if (!state) return null;
+  const config = DISCORD_STATE_CONFIG[state];
+  return <Badge variant={config.variant}>{config.label}</Badge>;
 }

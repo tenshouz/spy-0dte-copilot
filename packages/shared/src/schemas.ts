@@ -5665,3 +5665,129 @@ export const SpyZeroDteTradePlanAlertTransitionResponseSchema = z
 export type SpyZeroDteTradePlanAlertTransitionResponse = z.infer<
   typeof SpyZeroDteTradePlanAlertTransitionResponseSchema
 >;
+
+/** Optional backend-only Discord webhook connection and explicit test delivery. */
+export const DiscordWebhookConnectionStateSchema = z.enum([
+  "NOT_CONFIGURED",
+  "CONFIG_INVALID",
+  "READY",
+]);
+export type DiscordWebhookConnectionState = z.infer<
+  typeof DiscordWebhookConnectionStateSchema
+>;
+
+export const DiscordWebhookStatusPrimaryReasonCodeSchema = z.enum([
+  "WEBHOOK_URL_MISSING",
+  "WEBHOOK_URL_INVALID",
+  "WEBHOOK_READY",
+]);
+export type DiscordWebhookStatusPrimaryReasonCode = z.infer<
+  typeof DiscordWebhookStatusPrimaryReasonCodeSchema
+>;
+
+const DiscordWebhookSafetyDisclosuresSchema = z
+  .object({
+    webhookUrlReturned: z.literal(false),
+    webhookTokenReturned: z.literal(false),
+    noAutomaticDelivery: z.literal(true),
+    noPersistence: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noOrderExecution: z.literal(true),
+  })
+  .strict();
+
+export const DiscordWebhookStatusResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_WEBHOOK_CONNECTION_STATUS"),
+    methodologyVersion: z.literal("DISCORD_WEBHOOK_CONNECTION_V1"),
+    state: DiscordWebhookConnectionStateSchema,
+    primaryReasonCode: DiscordWebhookStatusPrimaryReasonCodeSchema,
+    configured: z.boolean(),
+    canSendTest: z.boolean(),
+    detail: z.string().min(1).nullable(),
+    disclosures: DiscordWebhookSafetyDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.state === "READY") {
+      if (
+        value.primaryReasonCode !== "WEBHOOK_READY" ||
+        !value.configured ||
+        !value.canSendTest
+      ) {
+        issue("READY requires configured test-capable webhook state");
+      }
+    } else if (value.configured || value.canSendTest) {
+      issue("Non-ready Discord state cannot be configured or test-capable");
+    }
+  });
+export type DiscordWebhookStatusResponse = z.infer<
+  typeof DiscordWebhookStatusResponseSchema
+>;
+
+export const DiscordWebhookTestRequestSchema = z.object({}).strict();
+export type DiscordWebhookTestRequest = z.infer<
+  typeof DiscordWebhookTestRequestSchema
+>;
+
+export const DiscordWebhookTestDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NOT_DELIVERED",
+]);
+export type DiscordWebhookTestDeliveryState = z.infer<
+  typeof DiscordWebhookTestDeliveryStateSchema
+>;
+
+export const DiscordWebhookTestDeliveryPrimaryReasonCodeSchema = z.enum([
+  "TEST_MESSAGE_DELIVERED",
+  "WEBHOOK_NOT_CONFIGURED",
+  "WEBHOOK_CONFIG_INVALID",
+  "WEBHOOK_REQUEST_TIMEOUT",
+  "WEBHOOK_NETWORK_FAILURE",
+  "WEBHOOK_RATE_LIMITED",
+  "WEBHOOK_REJECTED",
+  "WEBHOOK_PROVIDER_FAILURE",
+]);
+export type DiscordWebhookTestDeliveryPrimaryReasonCode = z.infer<
+  typeof DiscordWebhookTestDeliveryPrimaryReasonCodeSchema
+>;
+
+export const DiscordWebhookTestDeliveryResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_WEBHOOK_TEST_DELIVERY"),
+    methodologyVersion: z.literal("DISCORD_WEBHOOK_TEST_V1"),
+    deliveryState: DiscordWebhookTestDeliveryStateSchema,
+    primaryReasonCode: DiscordWebhookTestDeliveryPrimaryReasonCodeSchema,
+    attemptedAt: z.string().datetime(),
+    deliveredAt: z.string().datetime().nullable(),
+    providerStatusCode: z.number().int().min(100).max(599).nullable(),
+    disclosures: DiscordWebhookSafetyDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.deliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "TEST_MESSAGE_DELIVERED" ||
+        value.deliveredAt === null ||
+        value.providerStatusCode === null ||
+        value.providerStatusCode < 200 ||
+        value.providerStatusCode >= 300
+      ) {
+        issue("DELIVERED requires successful provider confirmation");
+      }
+    } else if (
+      value.primaryReasonCode === "TEST_MESSAGE_DELIVERED" ||
+      value.deliveredAt !== null
+    ) {
+      issue("NOT_DELIVERED cannot expose successful delivery fields");
+    }
+  });
+export type DiscordWebhookTestDeliveryResponse = z.infer<
+  typeof DiscordWebhookTestDeliveryResponseSchema
+>;

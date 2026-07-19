@@ -2,6 +2,9 @@ import {
   AlertSchema,
   CandleSchema,
   JournalEntrySchema,
+  DiscordWebhookStatusResponseSchema,
+  DiscordWebhookTestDeliveryResponseSchema,
+  DiscordWebhookTestRequestSchema,
   MarketSnapshotSchema,
   ReportSchema,
   SchwabConnectionStatusSchema,
@@ -33,6 +36,9 @@ import {
   type Alert,
   type Candle,
   type JournalEntry,
+  type DiscordWebhookStatusResponse,
+  type DiscordWebhookTestDeliveryResponse,
+  type DiscordWebhookTestRequest,
   type MarketSnapshot,
   type Report,
   type SchwabConnectionStatus,
@@ -125,6 +131,18 @@ export const apiClient = {
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getSchwabStatus: (): Promise<SchwabConnectionStatus> =>
     getJson("/api/auth/schwab/status", SchwabConnectionStatusSchema),
+  getDiscordWebhookStatus: (): Promise<DiscordWebhookStatusResponse> =>
+    getPrivateNoStoreJson(
+      "/api/discord/status",
+      DiscordWebhookStatusResponseSchema,
+    ),
+  sendDiscordWebhookTest: (): Promise<DiscordWebhookTestDeliveryResponse> =>
+    postJson<DiscordWebhookTestRequest, DiscordWebhookTestDeliveryResponse>(
+      "/api/discord/test",
+      {},
+      DiscordWebhookTestRequestSchema,
+      DiscordWebhookTestDeliveryResponseSchema,
+    ),
   getSchwabReadOnlyAccountRiskSnapshot: (): Promise<SchwabReadOnlyAccountRiskSnapshotResponse> =>
     getPrivateNoStoreJson(
       "/api/account-risk/schwab",
