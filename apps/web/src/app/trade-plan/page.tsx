@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
+import { SchwabAssistedSizingPanel } from "@/components/trade-plan/schwab-assisted-sizing-panel";
 import { useSpyZeroDteTradePlanAssembly } from "@/hooks/use-spy-trade-plan-assembly";
 import {
   formatNullableNumber,
@@ -36,7 +37,7 @@ export default function TradePlanPage() {
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Trade Plan"
-        description="Deterministic SPY 0DTE structure and contract selection. References only — no order, quantity, or guaranteed fill."
+        description="Deterministic SPY 0DTE structure, contract selection, and read-only sizing references. No order or guaranteed fill."
         action={
           plan && view ? (
             <Badge variant={badgeVariant(view.tone)}>{plan.planState.replaceAll("_", " ")}</Badge>
@@ -210,6 +211,8 @@ export default function TradePlanPage() {
             </Panel>
           ) : null}
 
+          <SchwabAssistedSizingPanel planState={plan.planState} />
+
           <Panel title="Plan Explanation" className="min-w-0 lg:col-span-2">
             <div className="space-y-3 text-sm leading-relaxed">
               <p>{view.description}</p>
@@ -224,7 +227,7 @@ export default function TradePlanPage() {
                 </p>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                This page displays deterministic state and references. It does not generate an order, position size, premium target, or premium stop.
+                This page displays deterministic state and references. Position sizing requires explicit caller inputs and remains reference-only; no order, premium target, or premium stop is generated.
               </p>
             </div>
           </Panel>
@@ -236,7 +239,8 @@ export default function TradePlanPage() {
               <Disclosure text="Underlying objective reference only" />
               <Disclosure text="Midpoint reference only" />
               <Disclosure text="No order is generated" />
-              <Disclosure text="No position size is calculated" />
+              <Disclosure text="Sizing quantity is reference only" />
+              <Disclosure text="Schwab access is read-only and explicit" />
               <Disclosure text="No fill is guaranteed" />
               <Disclosure text="SPY reward-to-risk is not option-premium reward-to-risk" />
             </ul>
