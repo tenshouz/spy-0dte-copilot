@@ -84,6 +84,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
       ? (error as { status?: unknown }).status
       : null;
   if (
+    req.originalUrl.startsWith("/api/discord/trade-plan-alert") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setDiscordWebhookHeaders(res);
+    res.status(400).json({ error: "INVALID_DISCORD_TRADE_PLAN_ALERT_REQUEST" });
+    return;
+  }
+  if (
     req.originalUrl.startsWith("/api/discord/test") &&
     error instanceof SyntaxError &&
     status === 400

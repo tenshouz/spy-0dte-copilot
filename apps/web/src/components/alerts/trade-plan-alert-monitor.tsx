@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type {
   SpyZeroDteTradePlanAlertTransitionResponse,
+  DiscordTradePlanAlertDeliveryPrimaryReasonCode,
   TradePlanAlertTransitionEvent,
 } from "@spy-copilot/shared";
 import {
@@ -12,12 +13,17 @@ import {
   CirclePlay,
   Info,
   RefreshCw,
+  Send,
   Trash2,
 } from "lucide-react";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  useDiscordTradePlanAlertDelivery,
+  useDiscordWebhookStatus,
+} from "@/hooks/use-discord-webhook";
 import {
   SPY_TRADE_PLAN_ALERT_MONITOR_POLL_INTERVAL_MS,
   useSpyTradePlanAlertTransition,
@@ -51,6 +57,8 @@ export function TradePlanAlertMonitor() {
   const [monitoring, setMonitoring] = useState(false);
   const [sessionEvents, setSessionEvents] = useState<SessionAlertEvent[]>([]);
   const query = useSpyTradePlanAlertTransition(monitoring);
+  const discordStatus = useDiscordWebhookStatus();
+  const discordDelivery = useDiscordTradePlanAlertDelivery();
   const result = query.data ?? null;
 
   useEffect(() => {
@@ -101,8 +109,9 @@ export function TradePlanAlertMonitor() {
                 Evaluate deterministic Trade Plan alert transitions in this browser session.
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Monitoring is opt-in. Events are session-only and are not persisted or delivered to Discord.
-                Starting the monitor initializes backend process-memory duplicate suppression.
+                Monitoring is opt-in. Events are session-only and are not persisted. Discord delivery
+                occurs only when you explicitly select Evaluate & send to Discord, using a separate
+                backend process-memory delivery state.
               </p>
             </div>
 
@@ -138,6 +147,27 @@ export function TradePlanAlertMonitor() {
                 <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} />
                 Evaluate now
               </Button>
+
+              <Button
+                type="button"
+                variant="subtle"
+                size="sm"
+                disabled={
+                  discordStatus.data?.state !== "READY" ||
+                  discordDelivery.isPending
+                }
+                onClick={() => discordDelivery.mutate()}
+              >
+                <Send
+                  className={cn(
+                    "h-4 w-4",
+                    discordDelivery.isPending && "animate-pulse",
+                  )}
+                />
+                {discordDelivery.isPending
+                  ? "Sending…"
+                  : "Evaluate & send to Discord"}
+              </Button>
             </div>
           </div>
 
@@ -171,6 +201,22 @@ export function TradePlanAlertMonitor() {
             <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               The transition route could not be evaluated. No event was added, and monitoring will not retry automatically until the next scheduled evaluation or manual refresh.
+            </div>
+          ) : null}
+
+          {discordDelivery.data ? (
+            <DiscordDeliveryNotice result={discordDelivery.data} />
+          ) : discordDelivery.isError ? (
+            <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              The explicit Discord delivery request failed before a validated result was returned.
+              No automatic retry was attempted.
+            </div>
+          ) : discordStatus.data?.state !== "READY" ? (
+            <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Configure and test the backend Discord webhook in Settings to enable explicit Trade
+              Plan alert delivery.
             </div>
           ) : null}
 
@@ -219,6 +265,56 @@ export function TradePlanAlertMonitor() {
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+const DISCORD_DELIVERY_COPY: Record<
+  DiscordTradePlanAlertDeliveryPrimaryReasonCode,
+  string
+> = {
+  ALERT_DELIVERED: "Discord confirmed delivery of the emitted Trade Plan alert transition.",
+  WEBHOOK_NOT_CONFIGURED: "No Discord webhook is configured on the backend.",
+  WEBHOOK_CONFIG_INVALID: "The configured Discord webhook is invalid.",
+  NO_EMITTED_TRANSITION: "No new Trade Plan alert transition was eligible for Discord delivery.",
+  TRANSITION_UNAVAILABLE: "The Trade Plan alert transition was unavailable. You may retry explicitly.",
+  WEBHOOK_REQUEST_TIMEOUT: "The Discord request timed out. The emitted transition was not committed and may be retried.",
+  WEBHOOK_NETWORK_FAILURE: "The backend could not reach Discord. The emitted transition was not committed and may be retried.",
+  WEBHOOK_RATE_LIMITED: "Discord rate-limited the request. The emitted transition was not committed and may be retried later.",
+  WEBHOOK_REJECTED: "Discord rejected the webhook request. Verify the webhook configuration before retrying.",
+  WEBHOOK_PROVIDER_FAILURE: "Discord returned an unexpected error. The emitted transition was not committed and may be retried.",
+};
+
+function DiscordDeliveryNotice({
+  result,
+}: {
+  result: import("@spy-copilot/shared").DiscordTradePlanAlertDeliveryResponse;
+}) {
+  const delivered = result.deliveryState === "DELIVERED";
+
+  return (
+    <div
+      role="status"
+      className={cn(
+        "flex items-start gap-2 rounded-md border p-3 text-xs",
+        delivered
+          ? "border-bull/30 bg-bull/5 text-bull"
+          : result.state.retryEligible
+            ? "border-wait/30 bg-wait/5 text-wait"
+            : "border-panel-border bg-background/40 text-muted-foreground",
+      )}
+    >
+      {delivered ? (
+        <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
+      ) : (
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+      )}
+      <div className="space-y-1">
+        <p>{DISCORD_DELIVERY_COPY[result.primaryReasonCode]}</p>
+        <p className="font-mono text-[11px] opacity-80">
+          Explicit delivery only · {formatAlertMonitorTimestamp(result.attemptedAt)}
+        </p>
+      </div>
     </div>
   );
 }

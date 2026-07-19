@@ -1,10 +1,13 @@
 import {
+  DiscordTradePlanAlertDeliveryRequestSchema,
   DiscordWebhookTestRequestSchema,
+  type DiscordTradePlanAlertDeliveryResponse,
   type DiscordWebhookStatusResponse,
   type DiscordWebhookTestDeliveryResponse,
 } from "@spy-copilot/shared";
 import { Router, type Response } from "express";
 import { isAllowedAccountRiskOrigin } from "./account-risk.routes";
+import { sendDiscordTradePlanAlert } from "../services/discord-trade-plan-alert.service";
 import {
   getDiscordWebhookStatus,
   sendDiscordWebhookTest,
@@ -13,6 +16,7 @@ import {
 export interface DiscordWebhookRouterDependencies {
   getStatus: () => DiscordWebhookStatusResponse;
   sendTest: () => Promise<DiscordWebhookTestDeliveryResponse>;
+  sendTradePlanAlert: () => Promise<DiscordTradePlanAlertDeliveryResponse>;
   frontendUrl: () => string | undefined;
   log: (category: string) => void;
 }
@@ -20,6 +24,7 @@ export interface DiscordWebhookRouterDependencies {
 const DEFAULT_DEPENDENCIES: DiscordWebhookRouterDependencies = {
   getStatus: getDiscordWebhookStatus,
   sendTest: sendDiscordWebhookTest,
+  sendTradePlanAlert: sendDiscordTradePlanAlert,
   frontendUrl: () => process.env.FRONTEND_URL,
   log: (category) => {
     // Fixed category only. Never log the webhook URL, token, payload, or provider body.
@@ -82,6 +87,45 @@ export function createDiscordWebhookRouter(
     } catch {
       deps.log("route-level unexpected failure");
       res.status(500).json({ error: "DISCORD_WEBHOOK_TEST_UNEXPECTED_FAILURE" });
+    }
+  });
+
+  router.post("/trade-plan-alert", async (req, res) => {
+    setDiscordWebhookHeaders(res);
+
+    const requestOrigin = req.get("Origin");
+    if (!isAllowedAccountRiskOrigin(requestOrigin, deps.frontendUrl())) {
+      res.removeHeader("Access-Control-Allow-Origin");
+      res.status(403).json({ error: "DISCORD_TRADE_PLAN_ALERT_ORIGIN_FORBIDDEN" });
+      return;
+    }
+    if (requestOrigin !== undefined) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Vary", "Origin");
+    } else {
+      res.removeHeader("Access-Control-Allow-Origin");
+    }
+
+    if (Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: "QUERY_PARAMETERS_NOT_SUPPORTED" });
+      return;
+    }
+
+    const parsedBody = DiscordTradePlanAlertDeliveryRequestSchema.safeParse(
+      req.body ?? {},
+    );
+    if (!parsedBody.success) {
+      res.status(400).json({ error: "INVALID_DISCORD_TRADE_PLAN_ALERT_REQUEST" });
+      return;
+    }
+
+    try {
+      res.json(await deps.sendTradePlanAlert());
+    } catch {
+      deps.log("trade-plan alert route-level unexpected failure");
+      res.status(500).json({
+        error: "DISCORD_TRADE_PLAN_ALERT_UNEXPECTED_FAILURE",
+      });
     }
   });
 

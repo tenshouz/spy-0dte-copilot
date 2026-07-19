@@ -17,3 +17,9 @@ export function useDiscordWebhookTest() {
     mutationFn: apiClient.sendDiscordWebhookTest,
   });
 }
+
+export function useDiscordTradePlanAlertDelivery() {
+  return useMutation({
+    mutationFn: apiClient.sendDiscordTradePlanAlert,
+  });
+}

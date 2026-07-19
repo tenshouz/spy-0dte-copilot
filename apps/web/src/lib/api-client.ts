@@ -2,6 +2,8 @@ import {
   AlertSchema,
   CandleSchema,
   JournalEntrySchema,
+  DiscordTradePlanAlertDeliveryRequestSchema,
+  DiscordTradePlanAlertDeliveryResponseSchema,
   DiscordWebhookStatusResponseSchema,
   DiscordWebhookTestDeliveryResponseSchema,
   DiscordWebhookTestRequestSchema,
@@ -36,6 +38,8 @@ import {
   type Alert,
   type Candle,
   type JournalEntry,
+  type DiscordTradePlanAlertDeliveryRequest,
+  type DiscordTradePlanAlertDeliveryResponse,
   type DiscordWebhookStatusResponse,
   type DiscordWebhookTestDeliveryResponse,
   type DiscordWebhookTestRequest,
@@ -142,6 +146,16 @@ export const apiClient = {
       {},
       DiscordWebhookTestRequestSchema,
       DiscordWebhookTestDeliveryResponseSchema,
+    ),
+  sendDiscordTradePlanAlert: (): Promise<DiscordTradePlanAlertDeliveryResponse> =>
+    postJson<
+      DiscordTradePlanAlertDeliveryRequest,
+      DiscordTradePlanAlertDeliveryResponse
+    >(
+      "/api/discord/trade-plan-alert",
+      {},
+      DiscordTradePlanAlertDeliveryRequestSchema,
+      DiscordTradePlanAlertDeliveryResponseSchema,
     ),
   getSchwabReadOnlyAccountRiskSnapshot: (): Promise<SchwabReadOnlyAccountRiskSnapshotResponse> =>
     getPrivateNoStoreJson(

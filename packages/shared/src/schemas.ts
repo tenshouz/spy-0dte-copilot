@@ -5791,3 +5791,196 @@ export const DiscordWebhookTestDeliveryResponseSchema = z
 export type DiscordWebhookTestDeliveryResponse = z.infer<
   typeof DiscordWebhookTestDeliveryResponseSchema
 >;
+
+/** Explicit, backend-only Discord delivery for one deterministic Trade Plan alert transition. */
+export const DiscordTradePlanAlertDeliveryRequestSchema = z.object({}).strict();
+export type DiscordTradePlanAlertDeliveryRequest = z.infer<
+  typeof DiscordTradePlanAlertDeliveryRequestSchema
+>;
+
+export const DiscordTradePlanAlertDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NOT_DELIVERED",
+]);
+export type DiscordTradePlanAlertDeliveryState = z.infer<
+  typeof DiscordTradePlanAlertDeliveryStateSchema
+>;
+
+export const DiscordTradePlanAlertDeliveryPrimaryReasonCodeSchema = z.enum([
+  "ALERT_DELIVERED",
+  "WEBHOOK_NOT_CONFIGURED",
+  "WEBHOOK_CONFIG_INVALID",
+  "NO_EMITTED_TRANSITION",
+  "TRANSITION_UNAVAILABLE",
+  "WEBHOOK_REQUEST_TIMEOUT",
+  "WEBHOOK_NETWORK_FAILURE",
+  "WEBHOOK_RATE_LIMITED",
+  "WEBHOOK_REJECTED",
+  "WEBHOOK_PROVIDER_FAILURE",
+]);
+export type DiscordTradePlanAlertDeliveryPrimaryReasonCode = z.infer<
+  typeof DiscordTradePlanAlertDeliveryPrimaryReasonCodeSchema
+>;
+
+export const DiscordTradePlanAlertTransitionSummarySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_TRANSITION"),
+    methodologyVersion: TradePlanAlertTransitionMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    evaluatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    transitionState: TradePlanAlertTransitionStateSchema,
+    primaryReasonCode: TradePlanAlertTransitionPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    event: TradePlanAlertTransitionEventSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.transitionState === "EMIT" && value.event === null) {
+      issue("EMIT transition summary requires an event");
+    }
+    if (value.transitionState !== "EMIT" && value.event !== null) {
+      issue("Only an EMIT transition summary may expose an event");
+    }
+  });
+export type DiscordTradePlanAlertTransitionSummary = z.infer<
+  typeof DiscordTradePlanAlertTransitionSummarySchema
+>;
+
+export const DiscordTradePlanAlertDeliveryResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_TRADE_PLAN_ALERT_DELIVERY"),
+    methodologyVersion: z.literal("DISCORD_TRADE_PLAN_ALERT_DELIVERY_V1"),
+    deliveryState: DiscordTradePlanAlertDeliveryStateSchema,
+    primaryReasonCode: DiscordTradePlanAlertDeliveryPrimaryReasonCodeSchema,
+    attemptedAt: z.string().datetime(),
+    deliveredAt: z.string().datetime().nullable(),
+    providerStatusCode: z.number().int().min(100).max(599).nullable(),
+    providerRequestAttempted: z.boolean(),
+    transition: DiscordTradePlanAlertTransitionSummarySchema.nullable(),
+    state: z
+      .object({
+        storageMethod: z.literal("PROCESS_MEMORY_ONLY"),
+        transitionStateCommitted: z.boolean(),
+        retryEligible: z.boolean(),
+      })
+      .strict(),
+    disclosures: z
+      .object({
+        webhookUrlReturned: z.literal(false),
+        webhookTokenReturned: z.literal(false),
+        providerBodyReturned: z.literal(false),
+        explicitDeliveryOnly: z.literal(true),
+        noAutomaticDelivery: z.literal(true),
+        noDatabasePersistence: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+        mentionsDisabled: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE",
+        ),
+        sourceMethodology: TradePlanAlertCandidateMethodologyVersionSchema,
+        transitionMethodology: TradePlanAlertTransitionMethodologyVersionSchema,
+        deliveryTrigger: z.literal("EXPLICIT_POST_ONLY"),
+        deliveryStateIsolation: z.literal("DEDICATED_PROCESS_MEMORY"),
+        successfulDeliveryCommit: z.literal(
+          "COMMIT_TRANSITION_STATE_AFTER_PROVIDER_CONFIRMATION",
+        ),
+        failedDeliveryCommit: z.literal("DO_NOT_COMMIT_EMITTED_TRANSITION"),
+        duplicateSuppressionMethod: z.literal("TRADE_PLAN_ALERT_TRANSITION_V1"),
+        providerConfirmationMethod: z.literal("DISCORD_WAIT_TRUE_HTTP_SUCCESS"),
+        retryMethod: z.literal("EXPLICIT_USER_RETRY_ONLY"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.deliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "ALERT_DELIVERED" ||
+        value.deliveredAt === null ||
+        value.providerStatusCode === null ||
+        value.providerStatusCode < 200 ||
+        value.providerStatusCode >= 300 ||
+        !value.providerRequestAttempted ||
+        value.transition?.transitionState !== "EMIT" ||
+        value.transition.event === null ||
+        !value.state.transitionStateCommitted ||
+        value.state.retryEligible
+      ) {
+        issue("DELIVERED requires confirmed provider delivery and committed transition state");
+      }
+      return;
+    }
+
+    if (value.primaryReasonCode === "ALERT_DELIVERED" || value.deliveredAt !== null) {
+      issue("NOT_DELIVERED cannot expose successful delivery fields");
+    }
+
+    const providerFailureReasons = [
+      "WEBHOOK_REQUEST_TIMEOUT",
+      "WEBHOOK_NETWORK_FAILURE",
+      "WEBHOOK_RATE_LIMITED",
+      "WEBHOOK_REJECTED",
+      "WEBHOOK_PROVIDER_FAILURE",
+    ];
+
+    if (providerFailureReasons.includes(value.primaryReasonCode)) {
+      if (
+        !value.providerRequestAttempted ||
+        value.transition?.transitionState !== "EMIT" ||
+        value.transition.event === null ||
+        value.state.transitionStateCommitted ||
+        !value.state.retryEligible
+      ) {
+        issue("Provider failures require an uncommitted retryable emitted transition");
+      }
+    }
+
+    if (
+      ["WEBHOOK_NOT_CONFIGURED", "WEBHOOK_CONFIG_INVALID"].includes(
+        value.primaryReasonCode,
+      ) &&
+      (value.providerRequestAttempted ||
+        value.transition !== null ||
+        value.state.transitionStateCommitted)
+    ) {
+      issue("Webhook configuration failures must short-circuit before transition evaluation");
+    }
+
+    if (value.primaryReasonCode === "NO_EMITTED_TRANSITION") {
+      if (
+        value.providerRequestAttempted ||
+        value.transition?.transitionState !== "SUPPRESSED" ||
+        value.transition.event !== null ||
+        value.state.retryEligible
+      ) {
+        issue("NO_EMITTED_TRANSITION requires a suppressed transition and no provider request");
+      }
+    }
+
+    if (value.primaryReasonCode === "TRANSITION_UNAVAILABLE") {
+      if (
+        value.providerRequestAttempted ||
+        value.transition?.transitionState !== "UNAVAILABLE" ||
+        value.transition.event !== null ||
+        value.state.transitionStateCommitted ||
+        !value.state.retryEligible
+      ) {
+        issue("TRANSITION_UNAVAILABLE requires a retryable unavailable transition");
+      }
+    }
+  });
+export type DiscordTradePlanAlertDeliveryResponse = z.infer<
+  typeof DiscordTradePlanAlertDeliveryResponseSchema
+>;

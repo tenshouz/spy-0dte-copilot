@@ -131,7 +131,7 @@ test("session event collection deduplicates and remains bounded", () => {
   assert.equal(monitor.includes("Clear session"), true);
 });
 
-test("monitor has no persistence or notification-delivery integration", () => {
+test("Discord delivery is explicit-only and never coupled to monitor polling", () => {
   const monitor = readFileSync(
     resolve(
       process.cwd(),
@@ -139,15 +139,39 @@ test("monitor has no persistence or notification-delivery integration", () => {
     ),
     "utf8",
   );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("Evaluate & send to Discord"), true);
+  assert.equal(monitor.includes("onClick={() => discordDelivery.mutate()}"), true);
+  assert.equal(monitor.includes('discordStatus.data?.state !== "READY"'), true);
+  assert.equal(hook.includes("useDiscordTradePlanAlertDelivery"), true);
+  assert.equal(hook.includes("mutationFn: apiClient.sendDiscordTradePlanAlert"), true);
+});
+
+test("alert monitor and Discord delivery use no browser persistence or browser notifications", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
   for (const forbidden of [
     "localStorage",
     "sessionStorage",
     "indexedDB",
-    "Discord webhook",
     "sendNotification",
     "Notification.requestPermission",
   ]) {
     assert.equal(monitor.includes(forbidden), false, `${forbidden} must not appear`);
+    assert.equal(hook.includes(forbidden), false, `${forbidden} must not appear`);
   }
 });
 
