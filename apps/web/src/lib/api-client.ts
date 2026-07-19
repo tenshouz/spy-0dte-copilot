@@ -8,6 +8,7 @@ import {
   DiscordScheduledReportDeliveryResponseSchema,
   DeterministicScheduledReportRequestSchema,
   SpyZeroDteDeterministicScheduledReportResponseSchema,
+  SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
   DiscordTradePlanAlertDeliveryResponseSchema,
   DiscordWebhookStatusResponseSchema,
@@ -49,6 +50,7 @@ import {
   type DiscordScheduledReportDeliveryResponse,
   type DeterministicScheduledReportRequest,
   type SpyZeroDteDeterministicScheduledReportResponse,
+  type SpyZeroDteScheduledReportScheduleEvaluationResponse,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
   type DiscordTradePlanAlertDeliveryRequest,
   type DiscordTradePlanAlertDeliveryResponse,
@@ -145,6 +147,11 @@ export const apiClient = {
   getReportHistory: (): Promise<Report[]> => getJson("/api/reports", z.array(ReportSchema)),
   getJournalEntries: (): Promise<JournalEntry[]> => getJson("/api/journal", z.array(JournalEntrySchema)),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
+  getSpyScheduledReportScheduleEvaluation: (): Promise<SpyZeroDteScheduledReportScheduleEvaluationResponse> =>
+    getPrivateNoStoreJson(
+      "/api/reports/spy/schedule-evaluation",
+      SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
+    ),
   generateSpyDeterministicScheduledReport: (
     request: DeterministicScheduledReportRequest,
   ): Promise<SpyZeroDteDeterministicScheduledReportResponse> =>

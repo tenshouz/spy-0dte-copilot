@@ -6574,3 +6574,164 @@ export const DiscordScheduledReportDeliveryResponseSchema = z
 export type DiscordScheduledReportDeliveryResponse = z.infer<
   typeof DiscordScheduledReportDeliveryResponseSchema
 >;
+
+/** Deterministic Eastern-time evaluation of the fixed scheduled-report windows. */
+export const ScheduledReportScheduleStateSchema = z.enum([
+  "DUE",
+  "WAITING",
+  "COMPLETE",
+  "NON_TRADING_DAY",
+]);
+export type ScheduledReportScheduleState = z.infer<
+  typeof ScheduledReportScheduleStateSchema
+>;
+
+export const ScheduledReportSchedulePrimaryReasonCodeSchema = z.enum([
+  "REPORT_WINDOW_ACTIVE",
+  "BEFORE_FIRST_REPORT",
+  "BETWEEN_REPORT_WINDOWS",
+  "AFTER_FINAL_REPORT",
+  "WEEKEND_SUPPRESSED",
+]);
+export type ScheduledReportSchedulePrimaryReasonCode = z.infer<
+  typeof ScheduledReportSchedulePrimaryReasonCodeSchema
+>;
+
+export const ScheduledReportEasternWeekdaySchema = z.enum([
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+]);
+export type ScheduledReportEasternWeekday = z.infer<
+  typeof ScheduledReportEasternWeekdaySchema
+>;
+
+export const ScheduledReportScheduleEntrySchema = z
+  .object({
+    reportType: DeterministicScheduledReportTypeSchema,
+    scheduleReferenceEasternTime: z.enum(["09:25", "09:35", "09:45", "10:00"]),
+    dueWindowStartEasternTime: z.enum(["09:25", "09:35", "09:45", "10:00"]),
+    dueWindowEndEasternTime: z.enum(["09:30", "09:40", "09:50", "10:05"]),
+  })
+  .strict();
+export type ScheduledReportScheduleEntry = z.infer<
+  typeof ScheduledReportScheduleEntrySchema
+>;
+
+export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULE_EVALUATION"),
+    methodologyVersion: z.literal("SCHEDULE_EVALUATION_V1"),
+    evaluatedAt: z.string().datetime(),
+    easternDate: MarketDateSchema,
+    easternTime: z.string().regex(/^\d{2}:\d{2}:\d{2}$/),
+    easternWeekday: ScheduledReportEasternWeekdaySchema,
+    scheduleState: ScheduledReportScheduleStateSchema,
+    primaryReasonCode: ScheduledReportSchedulePrimaryReasonCodeSchema,
+    dueReportType: DeterministicScheduledReportTypeSchema.nullable(),
+    dueScheduleReferenceEasternTime: z
+      .enum(["09:25", "09:35", "09:45", "10:00"])
+      .nullable(),
+    dueWindowStartEasternTime: z
+      .enum(["09:25", "09:35", "09:45", "10:00"])
+      .nullable(),
+    dueWindowEndEasternTime: z
+      .enum(["09:30", "09:40", "09:50", "10:05"])
+      .nullable(),
+    nextReportType: DeterministicScheduledReportTypeSchema.nullable(),
+    nextScheduleReferenceEasternTime: z
+      .enum(["09:25", "09:35", "09:45", "10:00"])
+      .nullable(),
+    schedule: z.array(ScheduledReportScheduleEntrySchema).length(4),
+    disclosures: z
+      .object({
+        currentClockOnly: z.literal(true),
+        easternTimeZoneOnly: z.literal(true),
+        weekdayFilterOnly: z.literal(true),
+        noExchangeHolidayCalendar: z.literal(true),
+        noPersistence: z.literal(true),
+        noNotificationDelivery: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        timeZone: z.literal("America/New_York"),
+        dueWindowMinutes: z.literal(5),
+        dueWindowMethod: z.literal("START_INCLUSIVE_END_EXCLUSIVE"),
+        tradingDayMethod: z.literal("MONDAY_THROUGH_FRIDAY_ONLY"),
+        holidayCalendarMethod: z.literal("NONE"),
+        scheduleSource: z.literal("FIXED_SCHEDULED_REPORT_TYPE_TABLE"),
+        persistenceMethod: z.literal("NONE"),
+        deliveryMethod: z.literal("NONE"),
+        schedulerMethod: z.literal("NONE"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    const dueFields = [
+      value.dueReportType,
+      value.dueScheduleReferenceEasternTime,
+      value.dueWindowStartEasternTime,
+      value.dueWindowEndEasternTime,
+    ];
+    if (value.scheduleState === "DUE") {
+      if (
+        value.primaryReasonCode !== "REPORT_WINDOW_ACTIVE" ||
+        dueFields.some((field) => field === null) ||
+        value.nextReportType !== value.dueReportType ||
+        value.nextScheduleReferenceEasternTime !==
+          value.dueScheduleReferenceEasternTime
+      ) {
+        issue("DUE schedule evaluation requires one complete active report window");
+      }
+    } else if (dueFields.some((field) => field !== null)) {
+      issue("Non-DUE schedule evaluation cannot expose active due-window fields");
+    }
+
+    if (value.scheduleState === "NON_TRADING_DAY") {
+      if (
+        value.primaryReasonCode !== "WEEKEND_SUPPRESSED" ||
+        !["SATURDAY", "SUNDAY"].includes(value.easternWeekday) ||
+        value.nextReportType !== null ||
+        value.nextScheduleReferenceEasternTime !== null
+      ) {
+        issue("NON_TRADING_DAY must be a weekend with no due or next report");
+      }
+    }
+
+    if (value.scheduleState === "COMPLETE") {
+      if (
+        value.primaryReasonCode !== "AFTER_FINAL_REPORT" ||
+        value.nextReportType !== null ||
+        value.nextScheduleReferenceEasternTime !== null
+      ) {
+        issue("COMPLETE schedule evaluation cannot expose a next report");
+      }
+    }
+
+    if (value.scheduleState === "WAITING") {
+      if (
+        !["BEFORE_FIRST_REPORT", "BETWEEN_REPORT_WINDOWS"].includes(
+          value.primaryReasonCode,
+        ) ||
+        value.nextReportType === null ||
+        value.nextScheduleReferenceEasternTime === null
+      ) {
+        issue("WAITING schedule evaluation requires one future report");
+      }
+    }
+  });
+export type SpyZeroDteScheduledReportScheduleEvaluationResponse = z.infer<
+  typeof SpyZeroDteScheduledReportScheduleEvaluationResponseSchema
+>;

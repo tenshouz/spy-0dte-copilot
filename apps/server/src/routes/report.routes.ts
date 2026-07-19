@@ -2,22 +2,26 @@ import {
   DeterministicScheduledReportRequestSchema,
   type DeterministicScheduledReportRequest,
   type SpyZeroDteDeterministicScheduledReportResponse,
+  type SpyZeroDteScheduledReportScheduleEvaluationResponse,
 } from "@spy-copilot/shared";
 import { Router, type Response } from "express";
 import { isAllowedAccountRiskOrigin } from "./account-risk.routes";
 import { getLatestReport, getReportHistory } from "../services/mock-data.service";
 import { getSpyZeroDteDeterministicScheduledReport } from "../services/deterministic-scheduled-report.service";
+import { getSpyZeroDteScheduledReportSchedule } from "../services/scheduled-report-schedule.service";
 
 export interface ReportRouterDependencies {
   getDeterministicReport: (
     request: DeterministicScheduledReportRequest,
   ) => Promise<SpyZeroDteDeterministicScheduledReportResponse>;
+  getScheduleEvaluation: () => SpyZeroDteScheduledReportScheduleEvaluationResponse;
   frontendUrl: () => string | undefined;
   log: (category: string) => void;
 }
 
 const DEFAULT_DEPENDENCIES: ReportRouterDependencies = {
   getDeterministicReport: getSpyZeroDteDeterministicScheduledReport,
+  getScheduleEvaluation: getSpyZeroDteScheduledReportSchedule,
   frontendUrl: () => process.env.FRONTEND_URL,
   log: (category) => {
     // Fixed category only. Never log request values or upstream provider data.
@@ -38,6 +42,24 @@ export function createReportRouter(
 ): Router {
   const deps = { ...DEFAULT_DEPENDENCIES, ...dependencies };
   const router = Router();
+
+  // GET /api/reports/spy/schedule-evaluation — deterministic current Eastern-time window only.
+  router.get("/spy/schedule-evaluation", (req, res) => {
+    setDeterministicReportHeaders(res);
+    if (Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: "QUERY_PARAMETERS_NOT_SUPPORTED" });
+      return;
+    }
+
+    try {
+      res.json(deps.getScheduleEvaluation());
+    } catch {
+      deps.log("schedule-evaluation route-level unexpected failure");
+      res.status(500).json({
+        error: "SCHEDULED_REPORT_SCHEDULE_EVALUATION_UNEXPECTED_FAILURE",
+      });
+    }
+  });
 
   // POST /api/reports/spy/deterministic — explicit current-snapshot report generation only.
   router.post("/spy/deterministic", async (req, res) => {
