@@ -24,6 +24,7 @@ import {
   SpyZeroDteContractSelectionResponseSchema,
   SpyZeroDteTradePlanAssemblyResponseSchema,
   SpyZeroDteTradePlanAlertCandidateResponseSchema,
+  SpyZeroDteTradePlanAlertTransitionResponseSchema,
   SpyZeroDtePositionSizingRequestSchema,
   SpyZeroDtePositionSizingResponseSchema,
   SpyZeroDteSchwabAssistedPositionSizingRequestSchema,
@@ -54,6 +55,7 @@ import {
   type SpyZeroDteContractSelectionResponse,
   type SpyZeroDteTradePlanAssemblyResponse,
   type SpyZeroDteTradePlanAlertCandidateResponse,
+  type SpyZeroDteTradePlanAlertTransitionResponse,
   type SpyZeroDtePositionSizingRequest,
   type SpyZeroDtePositionSizingResponse,
   type SpyZeroDteSchwabAssistedPositionSizingRequest,
@@ -164,6 +166,11 @@ export const apiClient = {
     getJson(
       "/api/trade-plan-alert/spy",
       SpyZeroDteTradePlanAlertCandidateResponseSchema,
+    ),
+  getSpyZeroDteTradePlanAlertTransition: (): Promise<SpyZeroDteTradePlanAlertTransitionResponse> =>
+    getPrivateNoStoreJson(
+      "/api/trade-plan-alert/spy/transition",
+      SpyZeroDteTradePlanAlertTransitionResponseSchema,
     ),
   calculateSpyZeroDtePositionSizing: (
     request: SpyZeroDtePositionSizingRequest,

@@ -5388,3 +5388,280 @@ export const SpyZeroDteTradePlanAlertCandidateResponseSchema = z
 export type SpyZeroDteTradePlanAlertCandidateResponse = z.infer<
   typeof SpyZeroDteTradePlanAlertCandidateResponseSchema
 >;
+
+/** Process-local transition and duplicate-suppression evaluation for TRADE_PLAN_ALERT_CANDIDATE_V1. */
+export const TradePlanAlertTransitionMethodologyVersionSchema = z.literal(
+  "TRADE_PLAN_ALERT_TRANSITION_V1",
+);
+export type TradePlanAlertTransitionMethodologyVersion = z.infer<
+  typeof TradePlanAlertTransitionMethodologyVersionSchema
+>;
+
+export const TradePlanAlertTransitionStateSchema = z.enum([
+  "EMIT",
+  "SUPPRESSED",
+  "UNAVAILABLE",
+]);
+export type TradePlanAlertTransitionState = z.infer<
+  typeof TradePlanAlertTransitionStateSchema
+>;
+
+export const TradePlanAlertTransitionTypeSchema = z.enum([
+  "INITIAL_CANDIDATE",
+  "CANDIDATE_CHANGED",
+  "CANDIDATE_CLEARED",
+  "CANDIDATE_REAPPEARED",
+]);
+export type TradePlanAlertTransitionType = z.infer<
+  typeof TradePlanAlertTransitionTypeSchema
+>;
+
+export const TradePlanAlertTransitionPrimaryReasonCodeSchema = z.enum([
+  "INITIAL_CANDIDATE_EMIT",
+  "CANDIDATE_CHANGED_EMIT",
+  "CANDIDATE_CLEARED_EMIT",
+  "CANDIDATE_REAPPEARED_EMIT",
+  "ACTIVE_DUPLICATE_SUPPRESSED",
+  "REAPPEARANCE_COOLDOWN_SUPPRESSED",
+  "NO_CANDIDATE_SUPPRESSED",
+  "MARKET_DATE_RESET_SUPPRESSED",
+  "SOURCE_CANDIDATE_UNAVAILABLE",
+  "SOURCE_CANDIDATE_INCONSISTENT",
+  "SOURCE_CANDIDATE_SERVICE_FAILURE",
+]);
+export type TradePlanAlertTransitionPrimaryReasonCode = z.infer<
+  typeof TradePlanAlertTransitionPrimaryReasonCodeSchema
+>;
+
+export const TradePlanAlertTransitionCandidateSummarySchema = z
+  .object({
+    deduplicationKey: z.string().min(1),
+    category: TradePlanAlertCategorySchema,
+    severity: TradePlanAlertSeveritySchema,
+    direction: z.enum(["CALLS", "PUTS"]),
+  })
+  .strict();
+export type TradePlanAlertTransitionCandidateSummary = z.infer<
+  typeof TradePlanAlertTransitionCandidateSummarySchema
+>;
+
+export const TradePlanAlertTransitionSourceSummarySchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE"),
+    methodologyVersion: TradePlanAlertCandidateMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    alertState: TradePlanAlertCandidateStateSchema,
+    primaryReasonCode: TradePlanAlertCandidatePrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    candidate: TradePlanAlertTransitionCandidateSummarySchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.alertState === "CANDIDATE" && value.candidate === null) {
+      issue("Candidate source summary requires candidate details");
+    }
+    if (value.alertState !== "CANDIDATE" && value.candidate !== null) {
+      issue("Non-candidate source summary cannot expose candidate details");
+    }
+  });
+export type TradePlanAlertTransitionSourceSummary = z.infer<
+  typeof TradePlanAlertTransitionSourceSummarySchema
+>;
+
+export const TradePlanAlertTransitionEventSchema = z
+  .object({
+    transitionFingerprint: z.string().min(1),
+    transitionType: TradePlanAlertTransitionTypeSchema,
+    severity: TradePlanAlertSeveritySchema,
+    title: z.string().min(1),
+    message: z.string().min(1),
+    previousCandidate: TradePlanAlertTransitionCandidateSummarySchema.nullable(),
+    currentCandidate: TradePlanAlertTransitionCandidateSummarySchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.transitionType === "INITIAL_CANDIDATE") {
+      if (value.previousCandidate !== null || value.currentCandidate === null) {
+        issue("INITIAL_CANDIDATE requires only a current candidate");
+      }
+    }
+    if (value.transitionType === "CANDIDATE_CHANGED") {
+      if (
+        value.previousCandidate === null ||
+        value.currentCandidate === null ||
+        value.previousCandidate.deduplicationKey ===
+          value.currentCandidate.deduplicationKey
+      ) {
+        issue("CANDIDATE_CHANGED requires two different candidates");
+      }
+    }
+    if (value.transitionType === "CANDIDATE_CLEARED") {
+      if (value.previousCandidate === null || value.currentCandidate !== null) {
+        issue("CANDIDATE_CLEARED requires only a previous candidate");
+      }
+    }
+    if (value.transitionType === "CANDIDATE_REAPPEARED") {
+      if (
+        value.previousCandidate === null ||
+        value.currentCandidate === null ||
+        value.previousCandidate.deduplicationKey !==
+          value.currentCandidate.deduplicationKey
+      ) {
+        issue("CANDIDATE_REAPPEARED requires the same previous and current key");
+      }
+    }
+  });
+export type TradePlanAlertTransitionEvent = z.infer<
+  typeof TradePlanAlertTransitionEventSchema
+>;
+
+export const SpyZeroDteTradePlanAlertTransitionResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_TRANSITION"),
+    methodologyVersion: TradePlanAlertTransitionMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    evaluatedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    transitionState: TradePlanAlertTransitionStateSchema,
+    primaryReasonCode: TradePlanAlertTransitionPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    sourceCandidate: TradePlanAlertTransitionSourceSummarySchema.nullable(),
+    event: TradePlanAlertTransitionEventSchema.nullable(),
+    cooldown: z
+      .object({
+        reappearanceCooldownMilliseconds: z.number().int().nonnegative(),
+        remainingMilliseconds: z.number().int().nonnegative(),
+      })
+      .strict(),
+    state: z
+      .object({
+        storageMethod: z.literal("PROCESS_MEMORY_ONLY"),
+        marketDateBefore: MarketDateSchema.nullable(),
+        marketDateAfter: MarketDateSchema.nullable(),
+        activeCandidateKeyBefore: z.string().min(1).nullable(),
+        activeCandidateKeyAfter: z.string().min(1).nullable(),
+        lastClearedCandidateKeyAfter: z.string().min(1).nullable(),
+        marketDateReset: z.boolean(),
+        mutationApplied: z.boolean(),
+      })
+      .strict(),
+    disclosures: z
+      .object({
+        processMemoryOnly: z.literal(true),
+        resetsOnProcessRestart: z.literal(true),
+        noDatabasePersistence: z.literal(true),
+        noAutomaticScheduler: z.literal(true),
+        noNotificationDelivery: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        sourceProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE",
+        ),
+        sourceMethodology: TradePlanAlertCandidateMethodologyVersionSchema,
+        evaluationScope: z.literal("CURRENT_CANDIDATE_VS_PROCESS_MEMORY"),
+        duplicateSuppressionMethod: z.literal("ACTIVE_CANDIDATE_KEY_EQUALITY"),
+        reappearanceMethod: z.literal("SAME_KEY_AFTER_CLEAR_AND_COOLDOWN"),
+        candidateChangeMethod: z.literal("DEDUPLICATION_KEY_CHANGE"),
+        marketDateBoundaryMethod: z.literal("RESET_WITHOUT_CARRYOVER"),
+        reappearanceCooldownMilliseconds: z.number().int().nonnegative(),
+        persistenceMethod: z.literal("NONE"),
+        schedulerMethod: z.literal("NONE"),
+        deliveryMethod: z.literal("NONE"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (
+      value.cooldown.reappearanceCooldownMilliseconds !==
+      value.methodology.reappearanceCooldownMilliseconds
+    ) {
+      issue("Cooldown value must match methodology");
+    }
+    if (
+      value.sourceCandidate !== null &&
+      value.currentMarketDate !== value.sourceCandidate.currentMarketDate
+    ) {
+      issue("Transition market date must match source candidate market date");
+    }
+
+    const emitReasons = [
+      "INITIAL_CANDIDATE_EMIT",
+      "CANDIDATE_CHANGED_EMIT",
+      "CANDIDATE_CLEARED_EMIT",
+      "CANDIDATE_REAPPEARED_EMIT",
+    ];
+    const suppressedReasons = [
+      "ACTIVE_DUPLICATE_SUPPRESSED",
+      "REAPPEARANCE_COOLDOWN_SUPPRESSED",
+      "NO_CANDIDATE_SUPPRESSED",
+      "MARKET_DATE_RESET_SUPPRESSED",
+    ];
+    const unavailableReasons = [
+      "SOURCE_CANDIDATE_UNAVAILABLE",
+      "SOURCE_CANDIDATE_INCONSISTENT",
+      "SOURCE_CANDIDATE_SERVICE_FAILURE",
+    ];
+
+    if (value.transitionState === "EMIT") {
+      if (
+        value.engineState === "UNAVAILABLE" ||
+        value.event === null ||
+        !emitReasons.includes(value.primaryReasonCode) ||
+        value.cooldown.remainingMilliseconds !== 0
+      ) {
+        issue("EMIT requires an available event and emit reason");
+      }
+    }
+    if (value.transitionState === "SUPPRESSED") {
+      if (
+        value.engineState === "UNAVAILABLE" ||
+        value.event !== null ||
+        !suppressedReasons.includes(value.primaryReasonCode)
+      ) {
+        issue("SUPPRESSED requires no event and a suppression reason");
+      }
+    }
+    if (value.transitionState === "UNAVAILABLE") {
+      if (
+        value.engineState !== "UNAVAILABLE" ||
+        value.event !== null ||
+        !unavailableReasons.includes(value.primaryReasonCode) ||
+        value.state.mutationApplied
+      ) {
+        issue("UNAVAILABLE requires no event, no mutation, and a source failure reason");
+      }
+    }
+
+    if (
+      value.primaryReasonCode === "REAPPEARANCE_COOLDOWN_SUPPRESSED" &&
+      value.cooldown.remainingMilliseconds <= 0
+    ) {
+      issue("Cooldown suppression requires positive remaining time");
+    }
+    if (
+      value.primaryReasonCode !== "REAPPEARANCE_COOLDOWN_SUPPRESSED" &&
+      value.cooldown.remainingMilliseconds !== 0
+    ) {
+      issue("Only cooldown suppression may expose remaining time");
+    }
+  });
+export type SpyZeroDteTradePlanAlertTransitionResponse = z.infer<
+  typeof SpyZeroDteTradePlanAlertTransitionResponseSchema
+>;
