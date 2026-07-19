@@ -6581,6 +6581,7 @@ export const ScheduledReportScheduleStateSchema = z.enum([
   "WAITING",
   "COMPLETE",
   "NON_TRADING_DAY",
+  "UNAVAILABLE",
 ]);
 export type ScheduledReportScheduleState = z.infer<
   typeof ScheduledReportScheduleStateSchema
@@ -6592,6 +6593,8 @@ export const ScheduledReportSchedulePrimaryReasonCodeSchema = z.enum([
   "BETWEEN_REPORT_WINDOWS",
   "AFTER_FINAL_REPORT",
   "WEEKEND_SUPPRESSED",
+  "EXCHANGE_HOLIDAY_SUPPRESSED",
+  "EXCHANGE_CALENDAR_UNSUPPORTED",
 ]);
 export type ScheduledReportSchedulePrimaryReasonCode = z.infer<
   typeof ScheduledReportSchedulePrimaryReasonCodeSchema
@@ -6610,6 +6613,39 @@ export type ScheduledReportEasternWeekday = z.infer<
   typeof ScheduledReportEasternWeekdaySchema
 >;
 
+export const ScheduledReportExchangeCalendarCoverageStateSchema = z.enum([
+  "SUPPORTED",
+  "UNSUPPORTED",
+]);
+export type ScheduledReportExchangeCalendarCoverageState = z.infer<
+  typeof ScheduledReportExchangeCalendarCoverageStateSchema
+>;
+
+export const ScheduledReportExchangeHolidayStateSchema = z.enum([
+  "HOLIDAY",
+  "NOT_HOLIDAY",
+  "UNKNOWN",
+]);
+export type ScheduledReportExchangeHolidayState = z.infer<
+  typeof ScheduledReportExchangeHolidayStateSchema
+>;
+
+export const ScheduledReportExchangeHolidayNameSchema = z.enum([
+  "NEW_YEARS_DAY",
+  "MARTIN_LUTHER_KING_JR_DAY",
+  "WASHINGTONS_BIRTHDAY",
+  "GOOD_FRIDAY",
+  "MEMORIAL_DAY",
+  "JUNETEENTH_NATIONAL_INDEPENDENCE_DAY",
+  "INDEPENDENCE_DAY",
+  "LABOR_DAY",
+  "THANKSGIVING_DAY",
+  "CHRISTMAS_DAY",
+]);
+export type ScheduledReportExchangeHolidayName = z.infer<
+  typeof ScheduledReportExchangeHolidayNameSchema
+>;
+
 export const ScheduledReportScheduleEntrySchema = z
   .object({
     reportType: DeterministicScheduledReportTypeSchema,
@@ -6626,11 +6662,18 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
   .object({
     symbol: z.literal("SPY"),
     product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULE_EVALUATION"),
-    methodologyVersion: z.literal("SCHEDULE_EVALUATION_V1"),
+    methodologyVersion: z.literal("SCHEDULE_EVALUATION_V2"),
     evaluatedAt: z.string().datetime(),
     easternDate: MarketDateSchema,
     easternTime: z.string().regex(/^\d{2}:\d{2}:\d{2}$/),
     easternWeekday: ScheduledReportEasternWeekdaySchema,
+    exchangeCalendarCoverageState:
+      ScheduledReportExchangeCalendarCoverageStateSchema,
+    exchangeHolidayState: ScheduledReportExchangeHolidayStateSchema,
+    exchangeHolidayName: ScheduledReportExchangeHolidayNameSchema.nullable(),
+    exchangeHolidayObserved: z.boolean().nullable(),
+    exchangeCalendarSupportedYearStart: z.literal(2026),
+    exchangeCalendarSupportedYearEnd: z.literal(2028),
     scheduleState: ScheduledReportScheduleStateSchema,
     primaryReasonCode: ScheduledReportSchedulePrimaryReasonCodeSchema,
     dueReportType: DeterministicScheduledReportTypeSchema.nullable(),
@@ -6652,8 +6695,10 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
       .object({
         currentClockOnly: z.literal(true),
         easternTimeZoneOnly: z.literal(true),
-        weekdayFilterOnly: z.literal(true),
-        noExchangeHolidayCalendar: z.literal(true),
+        weekdayFilterApplied: z.literal(true),
+        exchangeHolidayCalendarApplied: z.literal(true),
+        officialPublishedCalendarOnly: z.literal(true),
+        noUnscheduledClosureDetection: z.literal(true),
         noPersistence: z.literal(true),
         noNotificationDelivery: z.literal(true),
         noPrivateAccountData: z.literal(true),
@@ -6665,8 +6710,14 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
         timeZone: z.literal("America/New_York"),
         dueWindowMinutes: z.literal(5),
         dueWindowMethod: z.literal("START_INCLUSIVE_END_EXCLUSIVE"),
-        tradingDayMethod: z.literal("MONDAY_THROUGH_FRIDAY_ONLY"),
-        holidayCalendarMethod: z.literal("NONE"),
+        tradingDayMethod: z.literal(
+          "WEEKDAY_AND_NYSE_FULL_DAY_HOLIDAY_CALENDAR",
+        ),
+        holidayCalendarMethod: z.literal(
+          "NYSE_OFFICIAL_PUBLISHED_FULL_DAY_CLOSURES_2026_2028",
+        ),
+        unsupportedCalendarBehavior: z.literal("FAIL_CLOSED_UNAVAILABLE"),
+        unscheduledClosureMethod: z.literal("NONE"),
         scheduleSource: z.literal("FIXED_SCHEDULED_REPORT_TYPE_TABLE"),
         persistenceMethod: z.literal("NONE"),
         deliveryMethod: z.literal("NONE"),
@@ -6699,14 +6750,55 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
       issue("Non-DUE schedule evaluation cannot expose active due-window fields");
     }
 
-    if (value.scheduleState === "NON_TRADING_DAY") {
+    if (value.exchangeCalendarCoverageState === "SUPPORTED") {
+      if (value.exchangeHolidayState === "UNKNOWN") {
+        issue("Supported exchange calendar coverage cannot have unknown holiday state");
+      }
+    } else if (
+      value.exchangeHolidayState !== "UNKNOWN" ||
+      value.exchangeHolidayName !== null ||
+      value.exchangeHolidayObserved !== null
+    ) {
+      issue("Unsupported exchange calendar coverage must fail closed without holiday details");
+    }
+
+    if (value.exchangeHolidayState === "HOLIDAY") {
       if (
-        value.primaryReasonCode !== "WEEKEND_SUPPRESSED" ||
-        !["SATURDAY", "SUNDAY"].includes(value.easternWeekday) ||
+        value.exchangeHolidayName === null ||
+        value.exchangeHolidayObserved === null
+      ) {
+        issue("Exchange holiday state requires holiday name and observed flag");
+      }
+    } else if (
+      value.exchangeHolidayName !== null ||
+      value.exchangeHolidayObserved !== null
+    ) {
+      issue("Non-holiday exchange states cannot expose holiday details");
+    }
+
+    if (value.scheduleState === "NON_TRADING_DAY") {
+      const weekend = value.primaryReasonCode === "WEEKEND_SUPPRESSED";
+      const holiday =
+        value.primaryReasonCode === "EXCHANGE_HOLIDAY_SUPPRESSED";
+      if (
+        (!weekend && !holiday) ||
+        (weekend && !["SATURDAY", "SUNDAY"].includes(value.easternWeekday)) ||
+        (holiday && value.exchangeHolidayState !== "HOLIDAY") ||
         value.nextReportType !== null ||
         value.nextScheduleReferenceEasternTime !== null
       ) {
-        issue("NON_TRADING_DAY must be a weekend with no due or next report");
+        issue("NON_TRADING_DAY must be a weekend or supported exchange holiday");
+      }
+    }
+
+    if (value.scheduleState === "UNAVAILABLE") {
+      if (
+        value.primaryReasonCode !== "EXCHANGE_CALENDAR_UNSUPPORTED" ||
+        value.exchangeCalendarCoverageState !== "UNSUPPORTED" ||
+        value.nextReportType !== null ||
+        value.nextScheduleReferenceEasternTime !== null
+      ) {
+        issue("UNAVAILABLE schedule evaluation requires unsupported calendar coverage");
       }
     }
 
@@ -6729,6 +6821,16 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
         value.nextScheduleReferenceEasternTime === null
       ) {
         issue("WAITING schedule evaluation requires one future report");
+      }
+    }
+
+    if (["DUE", "WAITING", "COMPLETE"].includes(value.scheduleState)) {
+      if (
+        value.exchangeCalendarCoverageState !== "SUPPORTED" ||
+        value.exchangeHolidayState !== "NOT_HOLIDAY" ||
+        ["SATURDAY", "SUNDAY"].includes(value.easternWeekday)
+      ) {
+        issue("Active schedule states require a supported non-holiday weekday");
       }
     }
   });

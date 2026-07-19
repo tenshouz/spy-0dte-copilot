@@ -22,22 +22,25 @@ function at(iso: string) {
   return evaluateSpyZeroDteScheduledReportSchedule(Date.parse(iso));
 }
 
-test("methodology and fixed schedule validate", () => {
+test("V2 methodology and fixed schedule validate", () => {
   const result = at("2026-07-20T13:25:00.000Z");
   assert.equal(
     result.methodologyVersion,
     SCHEDULED_REPORT_SCHEDULE_EVALUATION_METHODOLOGY_VERSION,
   );
+  assert.equal(result.methodologyVersion, "SCHEDULE_EVALUATION_V2");
   assert.equal(result.methodology.dueWindowMinutes, SCHEDULED_REPORT_DUE_WINDOW_MINUTES);
   assert.equal(result.schedule.length, 4);
   SpyZeroDteScheduledReportScheduleEvaluationResponseSchema.parse(result);
 });
 
-test("9:25 ET activates the premarket window", () => {
+test("9:25 ET activates the premarket window on a supported trading date", () => {
   const result = at("2026-07-20T13:25:00.000Z");
   assert.equal(result.scheduleState, "DUE");
   assert.equal(result.dueReportType, "PREMARKET_0925");
   assert.equal(result.easternTime, "09:25:00");
+  assert.equal(result.exchangeCalendarCoverageState, "SUPPORTED");
+  assert.equal(result.exchangeHolidayState, "NOT_HOLIDAY");
 });
 
 test("9:29 ET remains inside the premarket window", () => {
@@ -91,16 +94,54 @@ test("Sunday is suppressed without a due report", () => {
   assert.equal(result.scheduleState, "NON_TRADING_DAY");
 });
 
+test("NYSE full-day holiday suppresses all report windows", () => {
+  const result = at("2026-07-03T13:25:00.000Z");
+  assert.equal(result.easternWeekday, "FRIDAY");
+  assert.equal(result.scheduleState, "NON_TRADING_DAY");
+  assert.equal(result.primaryReasonCode, "EXCHANGE_HOLIDAY_SUPPRESSED");
+  assert.equal(result.exchangeHolidayState, "HOLIDAY");
+  assert.equal(result.exchangeHolidayName, "INDEPENDENCE_DAY");
+  assert.equal(result.exchangeHolidayObserved, true);
+  assert.equal(result.dueReportType, null);
+  assert.equal(result.nextReportType, null);
+});
+
+test("Good Friday is suppressed from the official calendar", () => {
+  const result = at("2027-03-26T13:35:00.000Z");
+  assert.equal(result.primaryReasonCode, "EXCHANGE_HOLIDAY_SUPPRESSED");
+  assert.equal(result.exchangeHolidayName, "GOOD_FRIDAY");
+  assert.equal(result.exchangeHolidayObserved, false);
+});
+
+test("unsupported weekday year fails closed", () => {
+  const result = at("2029-01-02T14:25:00.000Z");
+  assert.equal(result.easternWeekday, "TUESDAY");
+  assert.equal(result.scheduleState, "UNAVAILABLE");
+  assert.equal(result.primaryReasonCode, "EXCHANGE_CALENDAR_UNSUPPORTED");
+  assert.equal(result.exchangeCalendarCoverageState, "UNSUPPORTED");
+  assert.equal(result.exchangeHolidayState, "UNKNOWN");
+  assert.equal(result.dueReportType, null);
+  assert.equal(result.nextReportType, null);
+});
+
 test("winter timestamps use Eastern Standard Time", () => {
   const result = at("2026-01-05T14:25:00.000Z");
   assert.equal(result.easternTime, "09:25:00");
   assert.equal(result.dueReportType, "PREMARKET_0925");
 });
 
-test("schedule evaluation exposes the holiday-calendar limitation", () => {
+test("schedule evaluation applies the official holiday calendar", () => {
   const result = at("2026-07-20T13:25:00.000Z");
-  assert.equal(result.disclosures.noExchangeHolidayCalendar, true);
-  assert.equal(result.methodology.holidayCalendarMethod, "NONE");
+  assert.equal(result.disclosures.exchangeHolidayCalendarApplied, true);
+  assert.equal(result.disclosures.officialPublishedCalendarOnly, true);
+  assert.equal(result.disclosures.noUnscheduledClosureDetection, true);
+  assert.equal(
+    result.methodology.holidayCalendarMethod,
+    "NYSE_OFFICIAL_PUBLISHED_FULL_DAY_CLOSURES_2026_2028",
+  );
+  assert.equal(result.methodology.unsupportedCalendarBehavior, "FAIL_CLOSED_UNAVAILABLE");
+  assert.equal(result.exchangeCalendarSupportedYearStart, 2026);
+  assert.equal(result.exchangeCalendarSupportedYearEnd, 2028);
 });
 
 test("response contains no delivery account or execution data", () => {

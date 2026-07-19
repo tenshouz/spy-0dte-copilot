@@ -1,14 +1,20 @@
 import {
   SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
-  type DeterministicScheduledReportType,
   type ScheduledReportScheduleEntry,
   type ScheduledReportSchedulePrimaryReasonCode,
   type ScheduledReportScheduleState,
   type SpyZeroDteScheduledReportScheduleEvaluationResponse,
 } from "@spy-copilot/shared";
+import {
+  NYSE_FULL_DAY_CALENDAR_METHOD,
+  NYSE_FULL_DAY_CALENDAR_SUPPORTED_YEAR_END,
+  NYSE_FULL_DAY_CALENDAR_SUPPORTED_YEAR_START,
+  evaluateNyseFullDayCalendar,
+  type NyseFullDayCalendarEvaluation,
+} from "./nyse-full-day-calendar.logic";
 
 export const SCHEDULED_REPORT_SCHEDULE_EVALUATION_METHODOLOGY_VERSION =
-  "SCHEDULE_EVALUATION_V1" as const;
+  "SCHEDULE_EVALUATION_V2" as const;
 export const SCHEDULED_REPORT_DUE_WINDOW_MINUTES = 5 as const;
 export const SCHEDULED_REPORT_TIME_ZONE = "America/New_York" as const;
 
@@ -39,7 +45,16 @@ const SCHEDULE: readonly ScheduledReportScheduleEntry[] = [
   },
 ] as const;
 
-const WEEKDAY_MAP: Record<string, "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY"> = {
+const WEEKDAY_MAP: Record<
+  string,
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY"
+> = {
   Mon: "MONDAY",
   Tue: "TUESDAY",
   Wed: "WEDNESDAY",
@@ -60,7 +75,14 @@ function parseTimeMinutes(value: string): number {
 function easternClock(epochMilliseconds: number): {
   date: string;
   time: string;
-  weekday: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+  weekday:
+    | "MONDAY"
+    | "TUESDAY"
+    | "WEDNESDAY"
+    | "THURSDAY"
+    | "FRIDAY"
+    | "SATURDAY"
+    | "SUNDAY";
   minuteOfDay: number;
 } {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -109,6 +131,7 @@ function easternClock(epochMilliseconds: number): {
 function scheduleState(args: {
   weekday: ReturnType<typeof easternClock>["weekday"];
   minuteOfDay: number;
+  calendar: NyseFullDayCalendarEvaluation;
 }): {
   state: ScheduledReportScheduleState;
   reason: ScheduledReportSchedulePrimaryReasonCode;
@@ -119,6 +142,24 @@ function scheduleState(args: {
     return {
       state: "NON_TRADING_DAY",
       reason: "WEEKEND_SUPPRESSED",
+      due: null,
+      next: null,
+    };
+  }
+
+  if (args.calendar.coverageState === "UNSUPPORTED") {
+    return {
+      state: "UNAVAILABLE",
+      reason: "EXCHANGE_CALENDAR_UNSUPPORTED",
+      due: null,
+      next: null,
+    };
+  }
+
+  if (args.calendar.holidayState === "HOLIDAY") {
+    return {
+      state: "NON_TRADING_DAY",
+      reason: "EXCHANGE_HOLIDAY_SUPPRESSED",
       due: null,
       next: null,
     };
@@ -165,7 +206,12 @@ export function evaluateSpyZeroDteScheduledReportSchedule(
   evaluatedAtMs: number,
 ): SpyZeroDteScheduledReportScheduleEvaluationResponse {
   const clock = easternClock(evaluatedAtMs);
-  const result = scheduleState(clock);
+  const calendar = evaluateNyseFullDayCalendar(clock.date);
+  const result = scheduleState({
+    weekday: clock.weekday,
+    minuteOfDay: clock.minuteOfDay,
+    calendar,
+  });
 
   return SpyZeroDteScheduledReportScheduleEvaluationResponseSchema.parse({
     symbol: "SPY",
@@ -176,6 +222,13 @@ export function evaluateSpyZeroDteScheduledReportSchedule(
     easternDate: clock.date,
     easternTime: clock.time,
     easternWeekday: clock.weekday,
+    exchangeCalendarCoverageState: calendar.coverageState,
+    exchangeHolidayState: calendar.holidayState,
+    exchangeHolidayName: calendar.holidayName,
+    exchangeHolidayObserved: calendar.holidayObserved,
+    exchangeCalendarSupportedYearStart:
+      NYSE_FULL_DAY_CALENDAR_SUPPORTED_YEAR_START,
+    exchangeCalendarSupportedYearEnd: NYSE_FULL_DAY_CALENDAR_SUPPORTED_YEAR_END,
     scheduleState: result.state,
     primaryReasonCode: result.reason,
     dueReportType: result.due?.reportType ?? null,
@@ -191,8 +244,10 @@ export function evaluateSpyZeroDteScheduledReportSchedule(
     disclosures: {
       currentClockOnly: true,
       easternTimeZoneOnly: true,
-      weekdayFilterOnly: true,
-      noExchangeHolidayCalendar: true,
+      weekdayFilterApplied: true,
+      exchangeHolidayCalendarApplied: true,
+      officialPublishedCalendarOnly: true,
+      noUnscheduledClosureDetection: true,
       noPersistence: true,
       noNotificationDelivery: true,
       noPrivateAccountData: true,
@@ -202,8 +257,10 @@ export function evaluateSpyZeroDteScheduledReportSchedule(
       timeZone: SCHEDULED_REPORT_TIME_ZONE,
       dueWindowMinutes: SCHEDULED_REPORT_DUE_WINDOW_MINUTES,
       dueWindowMethod: "START_INCLUSIVE_END_EXCLUSIVE",
-      tradingDayMethod: "MONDAY_THROUGH_FRIDAY_ONLY",
-      holidayCalendarMethod: "NONE",
+      tradingDayMethod: "WEEKDAY_AND_NYSE_FULL_DAY_HOLIDAY_CALENDAR",
+      holidayCalendarMethod: NYSE_FULL_DAY_CALENDAR_METHOD,
+      unsupportedCalendarBehavior: "FAIL_CLOSED_UNAVAILABLE",
+      unscheduledClosureMethod: "NONE",
       scheduleSource: "FIXED_SCHEDULED_REPORT_TYPE_TABLE",
       persistenceMethod: "NONE",
       deliveryMethod: "NONE",
