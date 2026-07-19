@@ -4829,3 +4829,349 @@ export const AccountRiskSnapshotOriginErrorResponseSchema = z
 export type AccountRiskSnapshotOriginErrorResponse = z.infer<
   typeof AccountRiskSnapshotOriginErrorResponseSchema
 >;
+
+/**
+ * Deterministic SPY 0DTE sizing that sources available cash from the private,
+ * read-only Schwab account snapshot while retaining explicit caller risk limits.
+ */
+export const SchwabAssistedPositionSizingMethodologyVersionSchema = z.literal(
+  "SCHWAB_ASSISTED_SIZING_V1",
+);
+export type SchwabAssistedPositionSizingMethodologyVersion = z.infer<
+  typeof SchwabAssistedPositionSizingMethodologyVersionSchema
+>;
+
+export const SchwabAssistedPositionSizingCallerRiskInputsSchema = z
+  .object({
+    accountEquityDollars: z.number().finite().positive(),
+    remainingDailyLossBudgetDollars: z.number().finite().nonnegative(),
+    remainingPortfolioRiskBudgetDollars: z.number().finite().nonnegative(),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingCallerRiskInputs = z.infer<
+  typeof SchwabAssistedPositionSizingCallerRiskInputsSchema
+>;
+
+export const SpyZeroDteSchwabAssistedPositionSizingRequestSchema = z
+  .object({
+    callerRiskInputs: SchwabAssistedPositionSizingCallerRiskInputsSchema,
+    riskPolicy: PositionSizingRiskPolicySchema,
+  })
+  .strict();
+export type SpyZeroDteSchwabAssistedPositionSizingRequest = z.infer<
+  typeof SpyZeroDteSchwabAssistedPositionSizingRequestSchema
+>;
+
+export const SchwabAssistedPositionSizingPrimaryReasonCodeSchema = z.union([
+  PositionSizingPrimaryReasonCodeSchema,
+  z.enum([
+    "BROKER_NO_LINKED_ACCOUNT",
+    "BROKER_ACCOUNT_SELECTION_REQUIRED",
+    "BROKER_ACCOUNT_TYPE_UNSUPPORTED",
+    "BROKER_ACCOUNT_ACCESS_UNAUTHORIZED",
+    "BROKER_ACCOUNT_SNAPSHOT_UNAVAILABLE",
+    "BROKER_AVAILABLE_CASH_UNAVAILABLE",
+    "BROKER_AVAILABLE_CASH_NEGATIVE",
+    "BROKER_ACCOUNT_SNAPSHOT_INVALID",
+  ]),
+]);
+export type SchwabAssistedPositionSizingPrimaryReasonCode = z.infer<
+  typeof SchwabAssistedPositionSizingPrimaryReasonCodeSchema
+>;
+
+export const SchwabAssistedPositionSizingWarningCodeSchema = z.union([
+  PositionSizingWarningCodeSchema,
+  z.enum([
+    "BROKER_ACCOUNT_NOT_FOUND",
+    "BROKER_ACCOUNT_SELECTION_REQUIRED",
+    "BROKER_ACCOUNT_UNSUPPORTED",
+    "BROKER_ACCOUNT_UNAUTHORIZED",
+    "BROKER_ACCOUNT_UNAVAILABLE",
+    "BROKER_AVAILABLE_CASH_UNAVAILABLE",
+    "BROKER_AVAILABLE_CASH_NEGATIVE",
+    "SCHWAB_ASSISTED_SIZING_VALIDATION_FAILED",
+  ]),
+]);
+export type SchwabAssistedPositionSizingWarningCode = z.infer<
+  typeof SchwabAssistedPositionSizingWarningCodeSchema
+>;
+
+export const SchwabAssistedPositionSizingBrokerSnapshotStateSchema = z.union([
+  AccountRiskSnapshotStateSchema,
+  z.literal("NOT_REQUESTED"),
+]);
+export type SchwabAssistedPositionSizingBrokerSnapshotState = z.infer<
+  typeof SchwabAssistedPositionSizingBrokerSnapshotStateSchema
+>;
+
+export const SchwabAssistedPositionSizingBrokerSnapshotSchema = z
+  .object({
+    requested: z.boolean(),
+    usedForSizing: z.boolean(),
+    product: z.literal("SCHWAB_READ_ONLY_ACCOUNT_RISK_SNAPSHOT").nullable(),
+    methodologyVersion: AccountRiskSnapshotMethodologyVersionSchema.nullable(),
+    calculatedAt: z.string().datetime().nullable(),
+    engineState: AccountRiskSnapshotEngineStateSchema.nullable(),
+    snapshotState: SchwabAssistedPositionSizingBrokerSnapshotStateSchema,
+    primaryReasonCode: AccountRiskSnapshotPrimaryReasonCodeSchema.nullable(),
+    warningCode: AccountRiskSnapshotWarningCodeSchema.nullable(),
+    linkedAccountCount: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable(),
+    accountType: AccountRiskAccountTypeSchema,
+    availableCashSourceField: z
+      .literal("securitiesAccount.currentBalances.cashAvailableForTrading")
+      .nullable(),
+    accountDiscoveryFetchedAt: z.string().datetime().nullable(),
+    accountBalancesFetchedAt: z.string().datetime().nullable(),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingBrokerSnapshot = z.infer<
+  typeof SchwabAssistedPositionSizingBrokerSnapshotSchema
+>;
+
+export const SchwabAssistedPositionSizingAccountContextSchema = z
+  .object({
+    accountEquityDollars: z.number().finite().positive(),
+    availableCashDollars: z.number().finite().nonnegative().nullable(),
+    remainingDailyLossBudgetDollars: z.number().finite().nonnegative(),
+    remainingPortfolioRiskBudgetDollars: z.number().finite().nonnegative(),
+    accountEquitySource: z.literal("CALLER_SUPPLIED"),
+    availableCashSource: z.enum([
+      "SCHWAB_CASH_AVAILABLE_FOR_TRADING",
+      "NOT_REQUESTED",
+      "UNAVAILABLE",
+    ]),
+    remainingDailyLossBudgetSource: z.literal("CALLER_SUPPLIED"),
+    remainingPortfolioRiskBudgetSource: z.literal("CALLER_SUPPLIED"),
+    brokerSnapshot: SchwabAssistedPositionSizingBrokerSnapshotSchema,
+    disclosureCode: z.literal(
+      "SCHWAB_AVAILABLE_CASH_WITH_CALLER_RISK_LIMITS",
+    ),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingAccountContext = z.infer<
+  typeof SchwabAssistedPositionSizingAccountContextSchema
+>;
+
+export const SchwabAssistedPositionSizingDisclosuresSchema = z
+  .object({
+    callerSuppliedAccountEquity: z.literal(true),
+    callerSuppliedDailyLossBudget: z.literal(true),
+    callerSuppliedPortfolioRiskBudget: z.literal(true),
+    brokerAvailableCashMayBeUsed: z.literal(true),
+    readOnlyBrokerAccess: z.literal(true),
+    currentAskIsNotGuaranteed: z.literal(true),
+    fullPremiumLossAssumption: z.literal(true),
+    quantityIsReferenceOnly: z.literal(true),
+    noOrderExecution: z.literal(true),
+    positionsRequested: z.literal(false),
+    ordersRequested: z.literal(false),
+    transactionsRequested: z.literal(false),
+    noPersistence: z.literal(true),
+    noPremiumStop: z.literal(true),
+    noPremiumTarget: z.literal(true),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingDisclosures = z.infer<
+  typeof SchwabAssistedPositionSizingDisclosuresSchema
+>;
+
+export const SchwabAssistedPositionSizingMethodologySchema = z
+  .object({
+    sourceSizingMethodology: z.literal("SIZING_V1"),
+    accountEquityMethod: z.literal("CALLER_SUPPLIED"),
+    availableCashMethod: z.literal(
+      "SCHWAB_CURRENT_BALANCES_CASH_AVAILABLE_FOR_TRADING",
+    ),
+    remainingDailyLossBudgetMethod: z.literal("CALLER_SUPPLIED"),
+    remainingPortfolioRiskBudgetMethod: z.literal("CALLER_SUPPLIED"),
+    assemblyFirstShortCircuit: z.literal(true),
+    sizingPremiumReference: z.literal("CURRENT_ASK"),
+    maximumLossMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    effectiveRiskBudgetMethod: z.literal(
+      "MINIMUM_OF_EXPLICIT_RISK_LIMITS",
+    ),
+    effectiveCapitalBudgetMethod: z.literal(
+      "MINIMUM_OF_SCHWAB_AVAILABLE_CASH_AND_ALLOCATION_LIMIT",
+    ),
+    quantityMethod: z.literal("FLOOR_THEN_MINIMUM_OF_ALL_CONTROLS"),
+    multiplierRequirement: z.literal(100),
+    positionType: z.literal("LONG_SINGLE_LEG_OPTION_ONLY"),
+    calculationCurrency: z.literal("USD"),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingMethodology = z.infer<
+  typeof SchwabAssistedPositionSizingMethodologySchema
+>;
+
+export const SpyZeroDteSchwabAssistedPositionSizingResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_SCHWAB_ASSISTED_POSITION_SIZING"),
+    methodologyVersion: SchwabAssistedPositionSizingMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: PositionSizingEngineStateSchema,
+    sizingState: PositionSizingStateSchema,
+    primaryReasonCode: SchwabAssistedPositionSizingPrimaryReasonCodeSchema,
+    warningCode: SchwabAssistedPositionSizingWarningCodeSchema.nullable(),
+    sourceAssembly: PositionSizingSourceAssemblySchema,
+    selectedContract: PositionSizingSelectedContractSchema,
+    accountContext: SchwabAssistedPositionSizingAccountContextSchema,
+    riskPolicy: PositionSizingRiskPolicySchema,
+    premiumRiskReference: PositionSizingPremiumRiskReferenceSchema,
+    budgets: PositionSizingBudgetsSchema,
+    quantityCalculation: PositionSizingQuantityCalculationSchema,
+    positionReferences: PositionSizingPositionReferencesSchema,
+    revalidation: PositionSizingRevalidationSchema,
+    disclosures: SchwabAssistedPositionSizingDisclosuresSchema,
+    methodology: SchwabAssistedPositionSizingMethodologySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string): void => {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    };
+    const broker = value.accountContext.brokerSnapshot;
+    const hasSizingOutputs = ["SIZED", "NO_CAPACITY", "BLOCKED"].includes(
+      value.sizingState,
+    );
+
+    if (!broker.requested) {
+      if (
+        broker.usedForSizing ||
+        broker.product !== null ||
+        broker.methodologyVersion !== null ||
+        broker.calculatedAt !== null ||
+        broker.engineState !== null ||
+        broker.snapshotState !== "NOT_REQUESTED" ||
+        broker.primaryReasonCode !== null ||
+        broker.warningCode !== null ||
+        broker.linkedAccountCount !== null ||
+        broker.accountType !== null ||
+        broker.availableCashSourceField !== null ||
+        broker.accountDiscoveryFetchedAt !== null ||
+        broker.accountBalancesFetchedAt !== null ||
+        value.accountContext.availableCashDollars !== null ||
+        value.accountContext.availableCashSource !== "NOT_REQUESTED"
+      ) {
+        issue("Unrequested broker snapshot must not retain broker data");
+      }
+    } else {
+      if (
+        broker.product !== "SCHWAB_READ_ONLY_ACCOUNT_RISK_SNAPSHOT" ||
+        broker.methodologyVersion !== "ACCOUNT_RISK_SNAPSHOT_V1" ||
+        broker.calculatedAt === null ||
+        broker.engineState === null ||
+        broker.snapshotState === "NOT_REQUESTED" ||
+        broker.primaryReasonCode === null
+      ) {
+        issue("Requested broker snapshot requires complete sanitized provenance");
+      }
+    }
+
+    if (broker.usedForSizing) {
+      if (
+        !broker.requested ||
+        broker.snapshotState !== "PARTIAL" ||
+        broker.accountType !== "CASH" ||
+        broker.linkedAccountCount !== 1 ||
+        broker.availableCashSourceField !==
+          "securitiesAccount.currentBalances.cashAvailableForTrading" ||
+        value.accountContext.availableCashDollars === null ||
+        value.accountContext.availableCashSource !==
+          "SCHWAB_CASH_AVAILABLE_FOR_TRADING"
+      ) {
+        issue("Broker cash used for sizing must be a valid CASH snapshot");
+      }
+    } else if (value.accountContext.availableCashDollars !== null) {
+      issue("Unused broker cash must not be exposed as a sizing input");
+    }
+
+    if (hasSizingOutputs) {
+      if (
+        value.engineState !== "AVAILABLE" ||
+        !broker.usedForSizing ||
+        value.accountContext.availableCashDollars === null
+      ) {
+        issue("Calculated sizing states require usable broker available cash");
+      }
+    }
+
+    if (value.sizingState === "NOT_APPLICABLE") {
+      if (
+        value.primaryReasonCode !== "SOURCE_ASSEMBLY_NOT_READY" ||
+        broker.requested ||
+        value.revalidation.required
+      ) {
+        issue("NOT_APPLICABLE must short-circuit before broker access");
+      }
+    }
+
+    const brokerFailureReasons: SchwabAssistedPositionSizingPrimaryReasonCode[] = [
+      "BROKER_NO_LINKED_ACCOUNT",
+      "BROKER_ACCOUNT_SELECTION_REQUIRED",
+      "BROKER_ACCOUNT_TYPE_UNSUPPORTED",
+      "BROKER_ACCOUNT_ACCESS_UNAUTHORIZED",
+      "BROKER_ACCOUNT_SNAPSHOT_UNAVAILABLE",
+      "BROKER_AVAILABLE_CASH_UNAVAILABLE",
+      "BROKER_AVAILABLE_CASH_NEGATIVE",
+      "BROKER_ACCOUNT_SNAPSHOT_INVALID",
+    ];
+    if (brokerFailureReasons.includes(value.primaryReasonCode)) {
+      if (
+        value.engineState !== "UNAVAILABLE" ||
+        value.sizingState !== "UNAVAILABLE" ||
+        !broker.requested ||
+        broker.usedForSizing ||
+        value.accountContext.availableCashDollars !== null ||
+        value.accountContext.availableCashSource !== "UNAVAILABLE" ||
+        value.revalidation.required
+      ) {
+        issue("Broker failure must produce sanitized unavailable sizing");
+      }
+    }
+  });
+export type SpyZeroDteSchwabAssistedPositionSizingResponse = z.infer<
+  typeof SpyZeroDteSchwabAssistedPositionSizingResponseSchema
+>;
+
+export const SchwabAssistedPositionSizingRequestIssueCodeSchema = z.union([
+  PositionSizingRequestIssueCodeSchema,
+  z.literal("QUERY_PARAMETERS_NOT_SUPPORTED"),
+]);
+export type SchwabAssistedPositionSizingRequestIssueCode = z.infer<
+  typeof SchwabAssistedPositionSizingRequestIssueCodeSchema
+>;
+
+export const SchwabAssistedPositionSizingRequestErrorResponseSchema = z
+  .object({
+    error: z.literal("INVALID_SCHWAB_ASSISTED_POSITION_SIZING_REQUEST"),
+    issues: z
+      .array(
+        z
+          .object({
+            path: z.string().min(1),
+            code: SchwabAssistedPositionSizingRequestIssueCodeSchema,
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingRequestErrorResponse = z.infer<
+  typeof SchwabAssistedPositionSizingRequestErrorResponseSchema
+>;
+
+export const SchwabAssistedPositionSizingOriginErrorResponseSchema = z
+  .object({
+    error: z.literal("SCHWAB_ASSISTED_POSITION_SIZING_ORIGIN_FORBIDDEN"),
+  })
+  .strict();
+export type SchwabAssistedPositionSizingOriginErrorResponse = z.infer<
+  typeof SchwabAssistedPositionSizingOriginErrorResponseSchema
+>;

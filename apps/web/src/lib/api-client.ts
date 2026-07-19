@@ -25,6 +25,8 @@ import {
   SpyZeroDteTradePlanAssemblyResponseSchema,
   SpyZeroDtePositionSizingRequestSchema,
   SpyZeroDtePositionSizingResponseSchema,
+  SpyZeroDteSchwabAssistedPositionSizingRequestSchema,
+  SpyZeroDteSchwabAssistedPositionSizingResponseSchema,
   StrikeExposureSchema,
   type Alert,
   type Candle,
@@ -52,6 +54,8 @@ import {
   type SpyZeroDteTradePlanAssemblyResponse,
   type SpyZeroDtePositionSizingRequest,
   type SpyZeroDtePositionSizingResponse,
+  type SpyZeroDteSchwabAssistedPositionSizingRequest,
+  type SpyZeroDteSchwabAssistedPositionSizingResponse,
   type StrikeExposure,
 } from "@spy-copilot/shared";
 import { z } from "zod";
@@ -162,6 +166,15 @@ export const apiClient = {
       request,
       SpyZeroDtePositionSizingRequestSchema,
       SpyZeroDtePositionSizingResponseSchema,
+    ),
+  calculateSpyZeroDteSchwabAssistedPositionSizing: (
+    request: SpyZeroDteSchwabAssistedPositionSizingRequest,
+  ): Promise<SpyZeroDteSchwabAssistedPositionSizingResponse> =>
+    postJson(
+      "/api/trade-sizing/spy/schwab",
+      request,
+      SpyZeroDteSchwabAssistedPositionSizingRequestSchema,
+      SpyZeroDteSchwabAssistedPositionSizingResponseSchema,
     ),
 };
 

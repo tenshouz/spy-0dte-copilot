@@ -2,7 +2,10 @@ import "./bootstrap-env";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
-import { accountRiskRouter } from "./routes/account-risk.routes";
+import {
+  accountRiskRouter,
+  setAccountRiskPrivateHeaders,
+} from "./routes/account-risk.routes";
 import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
@@ -25,6 +28,9 @@ import { tradePlanRouter } from "./routes/trade-plan.routes";
 import { tradePlanAssemblyRouter } from "./routes/trade-plan-assembly.routes";
 import { tradeContractRouter } from "./routes/trade-contract.routes";
 import { tradeRiskRouter } from "./routes/trade-risk.routes";
+import {
+  schwabAssistedTradeSizingRouter,
+} from "./routes/trade-sizing-schwab.routes";
 import { tradeSizingRouter } from "./routes/trade-sizing.routes";
 import { vwapRouter } from "./routes/vwap.routes";
 
@@ -52,6 +58,7 @@ app.use("/api/trade-plan", tradePlanRouter);
 app.use("/api/trade-plan-assembly", tradePlanAssemblyRouter);
 app.use("/api/trade-contract", tradeContractRouter);
 app.use("/api/trade-risk", tradeRiskRouter);
+app.use("/api/trade-sizing", schwabAssistedTradeSizingRouter);
 app.use("/api/trade-sizing", tradeSizingRouter);
 app.use("/api/opening-range", openingRangeRouter);
 app.use("/api/options-chain", optionsChainRouter);
@@ -77,6 +84,14 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     error instanceof SyntaxError &&
     status === 400
   ) {
+    if (req.originalUrl.startsWith("/api/trade-sizing/spy/schwab")) {
+      setAccountRiskPrivateHeaders(res);
+      res.status(400).json({
+        error: "INVALID_SCHWAB_ASSISTED_POSITION_SIZING_REQUEST",
+        issues: [{ path: "$", code: "INVALID_JSON" }],
+      });
+      return;
+    }
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Pragma", "no-cache");
     res.status(400).json({
