@@ -1,7 +1,6 @@
 import {
   AlertSchema,
   CandleSchema,
-  JournalEntrySchema,
   DiscordAutomaticScheduledReportDeliveryRequestSchema,
   DiscordAutomaticScheduledReportDeliveryResponseSchema,
   DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
@@ -9,6 +8,9 @@ import {
   DiscordScheduledReportDeliveryRequestSchema,
   DiscordScheduledReportDeliveryResponseSchema,
   DeterministicScheduledReportRequestSchema,
+  DeterministicJournalCaptureRequestSchema,
+  DeterministicJournalCaptureResponseSchema,
+  DeterministicJournalSnapshotListResponseSchema,
   SpyZeroDteDeterministicScheduledReportResponseSchema,
   SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
@@ -46,13 +48,15 @@ import {
   StrikeExposureSchema,
   type Alert,
   type Candle,
-  type JournalEntry,
   type DiscordAutomaticScheduledReportDeliveryRequest,
   type DiscordAutomaticScheduledReportDeliveryResponse,
   type DiscordAutomaticTradePlanAlertDeliveryRequest,
   type DiscordScheduledReportDeliveryRequest,
   type DiscordScheduledReportDeliveryResponse,
   type DeterministicScheduledReportRequest,
+  type DeterministicJournalCaptureRequest,
+  type DeterministicJournalCaptureResponse,
+  type DeterministicJournalSnapshotListResponse,
   type SpyZeroDteDeterministicScheduledReportResponse,
   type SpyZeroDteScheduledReportScheduleEvaluationResponse,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
@@ -149,7 +153,18 @@ export const apiClient = {
   getCandles: (): Promise<Candle[]> => getJson("/api/snapshot/candles", z.array(CandleSchema)),
   getLatestReport: (): Promise<Report> => getJson("/api/reports/latest", ReportSchema),
   getReportHistory: (): Promise<Report[]> => getJson("/api/reports", z.array(ReportSchema)),
-  getJournalEntries: (): Promise<JournalEntry[]> => getJson("/api/journal", z.array(JournalEntrySchema)),
+  getDeterministicJournalSnapshots: (): Promise<DeterministicJournalSnapshotListResponse> =>
+    getPrivateNoStoreJson(
+      "/api/journal/spy/snapshots",
+      DeterministicJournalSnapshotListResponseSchema,
+    ),
+  captureDeterministicJournalSnapshot: (): Promise<DeterministicJournalCaptureResponse> =>
+    postJson<DeterministicJournalCaptureRequest, DeterministicJournalCaptureResponse>(
+      "/api/journal/spy/snapshots",
+      {},
+      DeterministicJournalCaptureRequestSchema,
+      DeterministicJournalCaptureResponseSchema,
+    ),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getSpyScheduledReportScheduleEvaluation: (): Promise<SpyZeroDteScheduledReportScheduleEvaluationResponse> =>
     getPrivateNoStoreJson(

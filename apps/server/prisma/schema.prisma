@@ -16,6 +16,7 @@ model User {
   email        String       @unique
   schwabTokens SchwabToken?
   settings     Settings?
+  journalSnapshots DeterministicJournalSnapshot[]
   createdAt    DateTime     @default(now())
 }
 
@@ -97,6 +98,27 @@ model JournalEntry {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model DeterministicJournalSnapshot {
+  id                     String   @id
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentMarketDate      String
+  sourceCalculatedAt     DateTime
+  capturedAt             DateTime @default(now())
+  engineState            String
+  planState              String
+  direction              String
+  confidenceScore        Float?
+  primaryReasonCode      String
+  warningCode            String?
+  entryConditionState    String
+  selectedContractSymbol String?
+  sourceAssembly         Json
+
+  @@index([userId, capturedAt])
+  @@index([userId, currentMarketDate])
 }
 
 model DiscordLog {

@@ -7025,3 +7025,159 @@ export const DiscordAutomaticScheduledReportDeliveryResponseSchema = z
 export type DiscordAutomaticScheduledReportDeliveryResponse = z.infer<
   typeof DiscordAutomaticScheduledReportDeliveryResponseSchema
 >;
+
+/** Explicit, persistent capture of one current deterministic Trade Plan Assembly snapshot. */
+export const DeterministicJournalMethodologyVersionSchema = z.literal(
+  "JOURNAL_SNAPSHOT_V1",
+);
+export type DeterministicJournalMethodologyVersion = z.infer<
+  typeof DeterministicJournalMethodologyVersionSchema
+>;
+
+export const DeterministicJournalEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "UNAVAILABLE",
+]);
+export type DeterministicJournalEngineState = z.infer<
+  typeof DeterministicJournalEngineStateSchema
+>;
+
+export const DeterministicJournalPrimaryReasonCodeSchema = z.enum([
+  "JOURNAL_ENTRIES_AVAILABLE",
+  "JOURNAL_EMPTY",
+  "JOURNAL_SNAPSHOT_CAPTURED",
+  "SOURCE_ASSEMBLY_UNAVAILABLE",
+  "DATABASE_NOT_CONFIGURED",
+  "DATABASE_UNAVAILABLE",
+]);
+export type DeterministicJournalPrimaryReasonCode = z.infer<
+  typeof DeterministicJournalPrimaryReasonCodeSchema
+>;
+
+export const DeterministicJournalWarningCodeSchema = z.enum([
+  "SOURCE_ASSEMBLY_PARTIAL",
+  "SOURCE_ASSEMBLY_WARNING",
+]);
+export type DeterministicJournalWarningCode = z.infer<
+  typeof DeterministicJournalWarningCodeSchema
+>;
+
+export const DeterministicJournalSnapshotEntrySchema = z
+  .object({
+    id: z.string().min(1),
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_SNAPSHOT"),
+    methodologyVersion: DeterministicJournalMethodologyVersionSchema,
+    currentMarketDate: MarketDateSchema,
+    sourceCalculatedAt: z.string().datetime(),
+    capturedAt: z.string().datetime(),
+    engineState: TradePlanAssemblyEngineStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    structuralConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
+    entryConditionState: TradePlanAssemblyEntryConditionStateSchema,
+    selectedContractSymbol: z.string().min(1).nullable(),
+  })
+  .strict();
+export type DeterministicJournalSnapshotEntry = z.infer<
+  typeof DeterministicJournalSnapshotEntrySchema
+>;
+
+export const DeterministicJournalDisclosuresSchema = z
+  .object({
+    explicitCaptureOnly: z.literal(true),
+    currentSnapshotOnly: z.literal(true),
+    deterministicSourceOnly: z.literal(true),
+    databasePersistence: z.literal(true),
+    noAutomaticCapture: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  })
+  .strict();
+export type DeterministicJournalDisclosures = z.infer<
+  typeof DeterministicJournalDisclosuresSchema
+>;
+
+export const DeterministicJournalSnapshotListResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL"),
+    methodologyVersion: DeterministicJournalMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: DeterministicJournalEngineStateSchema,
+    primaryReasonCode: DeterministicJournalPrimaryReasonCodeSchema,
+    entries: z.array(DeterministicJournalSnapshotEntrySchema).max(200),
+    disclosures: DeterministicJournalDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.engineState === "AVAILABLE") {
+      if (
+        value.primaryReasonCode === "JOURNAL_ENTRIES_AVAILABLE" &&
+        value.entries.length === 0
+      ) {
+        issue("Available populated journal requires at least one entry");
+      }
+      if (
+        value.primaryReasonCode === "JOURNAL_EMPTY" &&
+        value.entries.length !== 0
+      ) {
+        issue("Empty journal must not contain entries");
+      }
+      if (
+        !["JOURNAL_ENTRIES_AVAILABLE", "JOURNAL_EMPTY"].includes(
+          value.primaryReasonCode,
+        )
+      ) {
+        issue("Available journal has an invalid reason code");
+      }
+    } else if (
+      value.entries.length !== 0 ||
+      !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(
+        value.primaryReasonCode,
+      )
+    ) {
+      issue("Unavailable journal must be empty and database-related");
+    }
+  });
+export type DeterministicJournalSnapshotListResponse = z.infer<
+  typeof DeterministicJournalSnapshotListResponseSchema
+>;
+
+export const DeterministicJournalCaptureRequestSchema = z.object({}).strict();
+export type DeterministicJournalCaptureRequest = z.infer<
+  typeof DeterministicJournalCaptureRequestSchema
+>;
+
+export const DeterministicJournalCaptureResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_CAPTURE"),
+    methodologyVersion: DeterministicJournalMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: DeterministicJournalEngineStateSchema,
+    primaryReasonCode: DeterministicJournalPrimaryReasonCodeSchema,
+    warningCode: DeterministicJournalWarningCodeSchema.nullable(),
+    entry: DeterministicJournalSnapshotEntrySchema.nullable(),
+    disclosures: DeterministicJournalDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.primaryReasonCode === "JOURNAL_SNAPSHOT_CAPTURED") {
+      if (value.engineState !== "AVAILABLE" || value.entry === null) {
+        issue("Captured journal response requires an available entry");
+      }
+    } else if (value.entry !== null || value.engineState !== "UNAVAILABLE") {
+      issue("Uncaptured journal response must be unavailable and entry-free");
+    }
+  });
+export type DeterministicJournalCaptureResponse = z.infer<
+  typeof DeterministicJournalCaptureResponseSchema
+>;

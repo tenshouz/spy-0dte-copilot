@@ -14,7 +14,7 @@ import { dexRouter } from "./routes/dex.routes";
 import { discordWebhookRouter, setDiscordWebhookHeaders } from "./routes/discord-webhook.routes";
 import { gapRouter } from "./routes/gap.routes";
 import { gexRouter } from "./routes/gex.routes";
-import { journalRouter } from "./routes/journal.routes";
+import { journalRouter, setDeterministicJournalHeaders } from "./routes/journal.routes";
 import { marketContextRouter } from "./routes/market-context.routes";
 import { marketBiasRouter } from "./routes/market-bias.routes";
 import { marketStateRouter } from "./routes/market-state.routes";
@@ -83,6 +83,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: unknown }).status
       : null;
+  if (
+    req.originalUrl.startsWith("/api/journal/spy/snapshots") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setDeterministicJournalHeaders(res);
+    res.status(400).json({ error: "INVALID_DETERMINISTIC_JOURNAL_REQUEST" });
+    return;
+  }
   if (
     req.originalUrl.startsWith("/api/reports/spy/deterministic") &&
     error instanceof SyntaxError &&
