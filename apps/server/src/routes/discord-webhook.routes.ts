@@ -1,8 +1,11 @@
 import {
+  DiscordAutomaticScheduledReportDeliveryRequestSchema,
   DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
   DiscordScheduledReportDeliveryRequestSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
   DiscordWebhookTestRequestSchema,
+  type DiscordAutomaticScheduledReportDeliveryRequest,
+  type DiscordAutomaticScheduledReportDeliveryResponse,
   type DiscordAutomaticTradePlanAlertDeliveryRequest,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
   type DiscordScheduledReportDeliveryRequest,
@@ -13,6 +16,7 @@ import {
 } from "@spy-copilot/shared";
 import { Router, type Response } from "express";
 import { isAllowedAccountRiskOrigin } from "./account-risk.routes";
+import { runDiscordAutomaticScheduledReportDelivery } from "../services/discord-automatic-scheduled-report.service";
 import { runDiscordAutomaticTradePlanAlertDelivery } from "../services/discord-automatic-trade-plan-alert.service";
 import { sendDiscordTradePlanAlert } from "../services/discord-trade-plan-alert.service";
 import { sendDiscordScheduledReport } from "../services/discord-scheduled-report.service";
@@ -25,6 +29,9 @@ export interface DiscordWebhookRouterDependencies {
   getStatus: () => DiscordWebhookStatusResponse;
   sendTest: () => Promise<DiscordWebhookTestDeliveryResponse>;
   sendTradePlanAlert: () => Promise<DiscordTradePlanAlertDeliveryResponse>;
+  sendAutomaticScheduledReport: (
+    request: DiscordAutomaticScheduledReportDeliveryRequest,
+  ) => Promise<DiscordAutomaticScheduledReportDeliveryResponse>;
   sendAutomaticTradePlanAlert: (
     request: DiscordAutomaticTradePlanAlertDeliveryRequest,
   ) => Promise<DiscordAutomaticTradePlanAlertDeliveryResponse>;
@@ -39,6 +46,7 @@ const DEFAULT_DEPENDENCIES: DiscordWebhookRouterDependencies = {
   getStatus: getDiscordWebhookStatus,
   sendTest: sendDiscordWebhookTest,
   sendTradePlanAlert: sendDiscordTradePlanAlert,
+  sendAutomaticScheduledReport: runDiscordAutomaticScheduledReportDelivery,
   sendAutomaticTradePlanAlert: runDiscordAutomaticTradePlanAlertDelivery,
   sendScheduledReport: sendDiscordScheduledReport,
   frontendUrl: () => process.env.FRONTEND_URL,
@@ -141,6 +149,50 @@ export function createDiscordWebhookRouter(
       deps.log("scheduled report route-level unexpected failure");
       res.status(500).json({
         error: "DISCORD_SCHEDULED_REPORT_UNEXPECTED_FAILURE",
+      });
+    }
+  });
+
+  router.post("/scheduled-report/automatic", async (req, res) => {
+    setDiscordWebhookHeaders(res);
+
+    const requestOrigin = req.get("Origin");
+    if (!isAllowedAccountRiskOrigin(requestOrigin, deps.frontendUrl())) {
+      res.removeHeader("Access-Control-Allow-Origin");
+      res.status(403).json({
+        error: "DISCORD_AUTOMATIC_SCHEDULED_REPORT_ORIGIN_FORBIDDEN",
+      });
+      return;
+    }
+    if (requestOrigin !== undefined) {
+      res.setHeader("Access-Control-Allow-Origin", requestOrigin);
+      res.setHeader("Vary", "Origin");
+    } else {
+      res.removeHeader("Access-Control-Allow-Origin");
+    }
+
+    if (Object.keys(req.query).length > 0) {
+      res.status(400).json({ error: "QUERY_PARAMETERS_NOT_SUPPORTED" });
+      return;
+    }
+
+    const parsedBody =
+      DiscordAutomaticScheduledReportDeliveryRequestSchema.safeParse(
+        req.body ?? {},
+      );
+    if (!parsedBody.success) {
+      res.status(400).json({
+        error: "INVALID_DISCORD_AUTOMATIC_SCHEDULED_REPORT_REQUEST",
+      });
+      return;
+    }
+
+    try {
+      res.json(await deps.sendAutomaticScheduledReport(parsedBody.data));
+    } catch {
+      deps.log("automatic scheduled-report route-level unexpected failure");
+      res.status(500).json({
+        error: "DISCORD_AUTOMATIC_SCHEDULED_REPORT_UNEXPECTED_FAILURE",
       });
     }
   });

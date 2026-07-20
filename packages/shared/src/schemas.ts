@@ -6837,3 +6837,191 @@ export const SpyZeroDteScheduledReportScheduleEvaluationResponseSchema = z
 export type SpyZeroDteScheduledReportScheduleEvaluationResponse = z.infer<
   typeof SpyZeroDteScheduledReportScheduleEvaluationResponseSchema
 >;
+
+
+/** Opt-in foreground-browser automatic delivery of due deterministic scheduled reports. */
+export const DiscordAutomaticScheduledReportCadenceMillisecondsSchema = z.union([
+  z.literal(30_000),
+  z.literal(60_000),
+  z.literal(120_000),
+]);
+export type DiscordAutomaticScheduledReportCadenceMilliseconds = z.infer<
+  typeof DiscordAutomaticScheduledReportCadenceMillisecondsSchema
+>;
+
+export const DiscordAutomaticScheduledReportDeliveryRequestSchema = z
+  .object({
+    clientMode: z.literal("FOREGROUND_BROWSER_SESSION"),
+    cadenceMilliseconds:
+      DiscordAutomaticScheduledReportCadenceMillisecondsSchema,
+  })
+  .strict();
+export type DiscordAutomaticScheduledReportDeliveryRequest = z.infer<
+  typeof DiscordAutomaticScheduledReportDeliveryRequestSchema
+>;
+
+export const DiscordAutomaticScheduledReportDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NO_DELIVERY",
+  "FAILED",
+  "UNAVAILABLE",
+]);
+export type DiscordAutomaticScheduledReportDeliveryState = z.infer<
+  typeof DiscordAutomaticScheduledReportDeliveryStateSchema
+>;
+
+export const DiscordAutomaticScheduledReportPrimaryReasonCodeSchema = z.enum([
+  "REPORT_DELIVERED",
+  "NO_REPORT_DUE",
+  "DUPLICATE_REPORT_SUPPRESSED",
+  "AMBIGUOUS_PROVIDER_OUTCOME_SUPPRESSED",
+  "SCHEDULE_UNAVAILABLE",
+  "WEBHOOK_NOT_CONFIGURED",
+  "WEBHOOK_CONFIG_INVALID",
+  "REPORT_UNAVAILABLE",
+  "REPORT_GENERATION_FAILURE",
+  "WEBHOOK_REQUEST_TIMEOUT",
+  "WEBHOOK_NETWORK_FAILURE",
+  "WEBHOOK_RATE_LIMITED",
+  "WEBHOOK_REJECTED",
+  "WEBHOOK_PROVIDER_FAILURE",
+]);
+export type DiscordAutomaticScheduledReportPrimaryReasonCode = z.infer<
+  typeof DiscordAutomaticScheduledReportPrimaryReasonCodeSchema
+>;
+
+export const DiscordAutomaticScheduledReportDeliveryResponseSchema = z
+  .object({
+    product: z.literal("DISCORD_AUTOMATIC_SCHEDULED_REPORT_DELIVERY"),
+    methodologyVersion: z.literal(
+      "DISCORD_AUTOMATIC_SCHEDULED_REPORT_DELIVERY_V1",
+    ),
+    automaticDeliveryState:
+      DiscordAutomaticScheduledReportDeliveryStateSchema,
+    primaryReasonCode:
+      DiscordAutomaticScheduledReportPrimaryReasonCodeSchema,
+    evaluatedAt: z.string().datetime(),
+    clientMode: z.literal("FOREGROUND_BROWSER_SESSION"),
+    cadenceMilliseconds:
+      DiscordAutomaticScheduledReportCadenceMillisecondsSchema,
+    deliveryKey: z.string().min(1).nullable(),
+    scheduleEvaluation:
+      SpyZeroDteScheduledReportScheduleEvaluationResponseSchema.nullable(),
+    delivery: DiscordScheduledReportDeliveryResponseSchema.nullable(),
+    state: z
+      .object({
+        storageMethod: z.literal("PROCESS_MEMORY_ONLY"),
+        marketDateBefore: MarketDateSchema.nullable(),
+        marketDateAfter: MarketDateSchema.nullable(),
+        marketDateReset: z.boolean(),
+        mutationApplied: z.boolean(),
+        deliveredKeyCommitted: z.boolean(),
+        ambiguousKeyCommitted: z.boolean(),
+      })
+      .strict(),
+    disclosures: z
+      .object({
+        userOptInRequired: z.literal(true),
+        foregroundBrowserSessionOnly: z.literal(true),
+        noBackgroundScheduler: z.literal(true),
+        processMemoryDeduplication: z.literal(true),
+        resetsOnProcessRestart: z.literal(true),
+        ambiguousProviderOutcomeSuppressed: z.literal(true),
+        noDatabasePersistence: z.literal(true),
+        webhookUrlReturned: z.literal(false),
+        webhookTokenReturned: z.literal(false),
+        providerBodyReturned: z.literal(false),
+        deterministicSourceOnly: z.literal(true),
+        noLlmGeneration: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noOrderExecution: z.literal(true),
+        mentionsDisabled: z.literal(true),
+      })
+      .strict(),
+    methodology: z
+      .object({
+        scheduleProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_SCHEDULE_EVALUATION",
+        ),
+        scheduleMethodology: z.literal("SCHEDULE_EVALUATION_V2"),
+        deliveryProduct: z.literal(
+          "DISCORD_DETERMINISTIC_SCHEDULED_REPORT_DELIVERY",
+        ),
+        deliveryMethodology: z.literal(
+          "DISCORD_SCHEDULED_REPORT_DELIVERY_V1",
+        ),
+        deliveryTrigger: z.literal(
+          "OPT_IN_FOREGROUND_BROWSER_POLL_DURING_DUE_WINDOW",
+        ),
+        cadenceSource: z.literal("CALLER_SELECTED_ALLOWED_VALUE"),
+        deduplicationKeyMethod: z.literal("EASTERN_DATE_AND_REPORT_TYPE"),
+        stateCommitMethod: z.literal(
+          "COMMIT_ONLY_AFTER_CONFIRMED_DELIVERY_OR_AMBIGUOUS_PROVIDER_OUTCOME",
+        ),
+        ambiguousOutcomeMethod: z.literal(
+          "SUPPRESS_REMAINDER_OF_PROCESS_SESSION_FOR_DELIVERY_KEY",
+        ),
+        persistenceMethod: z.literal("NONE"),
+        schedulerMethod: z.literal("FOREGROUND_BROWSER_TIMER_ONLY"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.automaticDeliveryState === "DELIVERED") {
+      if (
+        value.primaryReasonCode !== "REPORT_DELIVERED" ||
+        value.delivery === null ||
+        value.delivery.deliveryState !== "DELIVERED" ||
+        value.deliveryKey === null ||
+        !value.state.deliveredKeyCommitted ||
+        value.state.ambiguousKeyCommitted
+      ) {
+        issue("Delivered automatic scheduled report requires confirmed delivery and committed key");
+      }
+    }
+
+    if (value.primaryReasonCode === "NO_REPORT_DUE") {
+      if (
+        value.scheduleEvaluation === null ||
+        value.scheduleEvaluation.scheduleState === "DUE" ||
+        value.delivery !== null ||
+        value.deliveryKey !== null
+      ) {
+        issue("NO_REPORT_DUE requires a non-due schedule and no delivery");
+      }
+    }
+
+    if (
+      ["DUPLICATE_REPORT_SUPPRESSED", "AMBIGUOUS_PROVIDER_OUTCOME_SUPPRESSED"].includes(
+        value.primaryReasonCode,
+      ) &&
+      (value.deliveryKey === null || value.delivery !== null)
+    ) {
+      issue("Suppressed automatic report requires a key and no provider delivery");
+    }
+
+    if (value.primaryReasonCode === "SCHEDULE_UNAVAILABLE") {
+      if (
+        value.automaticDeliveryState !== "UNAVAILABLE" ||
+        value.delivery !== null ||
+        value.deliveryKey !== null
+      ) {
+        issue("Unavailable schedule cannot attempt delivery");
+      }
+    }
+
+    if (value.delivery !== null && value.scheduleEvaluation?.dueReportType !== value.delivery.reportType) {
+      issue("Automatic scheduled-report delivery must match the due report type");
+    }
+
+    if (value.state.deliveredKeyCommitted && value.state.ambiguousKeyCommitted) {
+      issue("A delivery key cannot be both delivered and ambiguous");
+    }
+  });
+export type DiscordAutomaticScheduledReportDeliveryResponse = z.infer<
+  typeof DiscordAutomaticScheduledReportDeliveryResponseSchema
+>;

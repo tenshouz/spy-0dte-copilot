@@ -1,12 +1,19 @@
 "use client";
 
 import type {
+  DiscordAutomaticScheduledReportCadenceMilliseconds,
   DiscordAutomaticTradePlanAlertCadenceMilliseconds,
   DiscordScheduledReportDeliveryRequest,
 } from "@spy-copilot/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 
+
+export const DISCORD_AUTOMATIC_SCHEDULED_REPORT_CADENCE_OPTIONS = [
+  30_000,
+  60_000,
+  120_000,
+] as const satisfies readonly DiscordAutomaticScheduledReportCadenceMilliseconds[];
 export const DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_CADENCE_OPTIONS = [
   15_000,
   30_000,
@@ -58,6 +65,37 @@ export function useDiscordAutomaticTradePlanAlertDelivery(
     ],
     queryFn: () =>
       apiClient.sendDiscordAutomaticTradePlanAlert({
+        clientMode: "FOREGROUND_BROWSER_SESSION",
+        cadenceMilliseconds,
+      }),
+    enabled,
+    refetchInterval: enabled ? cadenceMilliseconds : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+    staleTime: 0,
+  });
+}
+
+
+/**
+ * Scheduled-report delivery is explicitly opt-in and browser-session scoped.
+ * The backend evaluates the official Eastern-time schedule and applies
+ * process-memory duplicate suppression before any provider request.
+ */
+export function useDiscordAutomaticScheduledReportDelivery(
+  enabled: boolean,
+  cadenceMilliseconds: DiscordAutomaticScheduledReportCadenceMilliseconds,
+) {
+  return useQuery({
+    queryKey: [
+      "discord-automatic-scheduled-report-delivery",
+      "DISCORD_AUTOMATIC_SCHEDULED_REPORT_DELIVERY_V1",
+      cadenceMilliseconds,
+    ],
+    queryFn: () =>
+      apiClient.sendDiscordAutomaticScheduledReport({
         clientMode: "FOREGROUND_BROWSER_SESSION",
         cadenceMilliseconds,
       }),

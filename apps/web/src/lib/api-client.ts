@@ -2,6 +2,8 @@ import {
   AlertSchema,
   CandleSchema,
   JournalEntrySchema,
+  DiscordAutomaticScheduledReportDeliveryRequestSchema,
+  DiscordAutomaticScheduledReportDeliveryResponseSchema,
   DiscordAutomaticTradePlanAlertDeliveryRequestSchema,
   DiscordAutomaticTradePlanAlertDeliveryResponseSchema,
   DiscordScheduledReportDeliveryRequestSchema,
@@ -45,6 +47,8 @@ import {
   type Alert,
   type Candle,
   type JournalEntry,
+  type DiscordAutomaticScheduledReportDeliveryRequest,
+  type DiscordAutomaticScheduledReportDeliveryResponse,
   type DiscordAutomaticTradePlanAlertDeliveryRequest,
   type DiscordScheduledReportDeliveryRequest,
   type DiscordScheduledReportDeliveryResponse,
@@ -189,6 +193,18 @@ export const apiClient = {
       request,
       DiscordScheduledReportDeliveryRequestSchema,
       DiscordScheduledReportDeliveryResponseSchema,
+    ),
+  sendDiscordAutomaticScheduledReport: (
+    request: DiscordAutomaticScheduledReportDeliveryRequest,
+  ): Promise<DiscordAutomaticScheduledReportDeliveryResponse> =>
+    postJson<
+      DiscordAutomaticScheduledReportDeliveryRequest,
+      DiscordAutomaticScheduledReportDeliveryResponse
+    >(
+      "/api/discord/scheduled-report/automatic",
+      request,
+      DiscordAutomaticScheduledReportDeliveryRequestSchema,
+      DiscordAutomaticScheduledReportDeliveryResponseSchema,
     ),
   sendDiscordTradePlanAlert: (): Promise<DiscordTradePlanAlertDeliveryResponse> =>
     postJson<

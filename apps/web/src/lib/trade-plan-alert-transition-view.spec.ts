@@ -383,5 +383,64 @@ test("scheduled-report UI has no browser persistence automatic timer or order co
   }
 });
 
+test("automatic scheduled reports are opt-in foreground-only and deduplicated", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+  const client = readFileSync(
+    resolve(process.cwd(), "apps/web/src/lib/api-client.ts"),
+    "utf8",
+  );
+
+  assert.equal(monitor.includes("Automatic Scheduled Report Delivery"), true);
+  assert.equal(monitor.includes("Start scheduled reports"), true);
+  assert.equal(monitor.includes("Stop scheduled reports"), true);
+  assert.equal(monitor.includes("NYSE holiday"), true);
+  assert.equal(monitor.includes("process-memory"), true);
+  assert.equal(
+    monitor.includes("useDiscordAutomaticScheduledReportDelivery"),
+    true,
+  );
+  assert.equal(hook.includes("30_000"), true);
+  assert.equal(hook.includes("60_000"), true);
+  assert.equal(hook.includes("120_000"), true);
+  assert.equal(hook.includes("refetchIntervalInBackground: false"), true);
+  assert.equal(hook.includes("refetchOnWindowFocus: false"), true);
+  assert.equal(hook.includes("retry: false"), true);
+  assert.equal(
+    client.includes("/api/discord/scheduled-report/automatic"),
+    true,
+  );
+});
+
+test("automatic scheduled reports have no browser persistence or permanent scheduler", () => {
+  const monitor = readFileSync(
+    resolve(
+      process.cwd(),
+      "apps/web/src/components/alerts/trade-plan-alert-monitor.tsx",
+    ),
+    "utf8",
+  );
+  const hook = readFileSync(
+    resolve(process.cwd(), "apps/web/src/hooks/use-discord-webhook.ts"),
+    "utf8",
+  );
+
+  for (const forbidden of ["localStorage", "sessionStorage", "indexedDB", "setInterval"]) {
+    assert.equal(monitor.includes(forbidden), false, forbidden);
+    assert.equal(hook.includes(forbidden), false, forbidden);
+  }
+  assert.equal(monitor.includes("permanent scheduler"), true);
+  assert.equal(monitor.includes("persist across refreshes"), true);
+});
+
 console.log(`\nTrade Plan alert-monitor view tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

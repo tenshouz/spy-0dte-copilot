@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type {
   DeterministicScheduledReportType,
+  DiscordAutomaticScheduledReportCadenceMilliseconds,
+  DiscordAutomaticScheduledReportDeliveryResponse,
   DiscordAutomaticTradePlanAlertCadenceMilliseconds,
   DiscordScheduledReportDeliveryResponse,
   DiscordAutomaticTradePlanAlertDeliveryResponse,
@@ -27,7 +29,9 @@ import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  DISCORD_AUTOMATIC_SCHEDULED_REPORT_CADENCE_OPTIONS,
   DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_CADENCE_OPTIONS,
+  useDiscordAutomaticScheduledReportDelivery,
   useDiscordAutomaticTradePlanAlertDelivery,
   useDiscordScheduledReportDelivery,
   useDiscordTradePlanAlertDelivery,
@@ -76,8 +80,12 @@ function badgeVariant(
 export function TradePlanAlertMonitor() {
   const [monitoring, setMonitoring] = useState(false);
   const [automaticDiscordEnabled, setAutomaticDiscordEnabled] = useState(false);
+  const [automaticScheduledReportsEnabled, setAutomaticScheduledReportsEnabled] =
+    useState(false);
   const [automaticDiscordCadence, setAutomaticDiscordCadence] =
     useState<DiscordAutomaticTradePlanAlertCadenceMilliseconds>(30_000);
+  const [automaticScheduledReportCadence, setAutomaticScheduledReportCadence] =
+    useState<DiscordAutomaticScheduledReportCadenceMilliseconds>(60_000);
   const [sessionEvents, setSessionEvents] = useState<SessionAlertEvent[]>([]);
   const [scheduledReportType, setScheduledReportType] =
     useState<DeterministicScheduledReportType>("PREMARKET_0925");
@@ -92,8 +100,15 @@ export function TradePlanAlertMonitor() {
     automaticDiscordEnabled && discordStatus.data?.state === "READY",
     automaticDiscordCadence,
   );
+  const automaticScheduledReportDelivery =
+    useDiscordAutomaticScheduledReportDelivery(
+      automaticScheduledReportsEnabled && discordStatus.data?.state === "READY",
+      automaticScheduledReportCadence,
+    );
   const result = query.data ?? null;
   const automaticDiscordResult = automaticDiscordDelivery.data ?? null;
+  const automaticScheduledReportResult =
+    automaticScheduledReportDelivery.data ?? null;
 
   useEffect(() => {
     if (
@@ -135,6 +150,16 @@ export function TradePlanAlertMonitor() {
       setAutomaticDiscordEnabled(false);
     }
   }, [automaticDiscordEnabled, discordStatus.data]);
+
+  useEffect(() => {
+    if (
+      automaticScheduledReportsEnabled &&
+      discordStatus.data !== undefined &&
+      discordStatus.data.state !== "READY"
+    ) {
+      setAutomaticScheduledReportsEnabled(false);
+    }
+  }, [automaticScheduledReportsEnabled, discordStatus.data]);
 
   const requestScheduledReportDelivery = () => {
     scheduledReportDelivery.mutate({ reportType: scheduledReportType });
@@ -538,6 +563,157 @@ export function TradePlanAlertMonitor() {
       </Panel>
 
       <Panel
+        title="Automatic Scheduled Report Delivery"
+        className="min-w-0 lg:col-span-3"
+        action={
+          <Badge variant={automaticScheduledReportsEnabled ? "bull" : "default"}>
+            {automaticScheduledReportsEnabled ? "Running" : "Stopped"}
+          </Badge>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-3xl space-y-1">
+              <p className="text-sm leading-relaxed text-foreground">
+                Deliver each due deterministic report once while this Alerts
+                page remains open.
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                This is an explicit opt-in foreground browser session, not a
+                permanent scheduler. The backend applies the NYSE holiday
+                calendar, fixed five-minute report windows, and process-memory
+                duplicate suppression. Confirmed delivery is committed once per
+                Eastern date and report type. Timeout or network ambiguity is
+                suppressed for the remainder of the backend process session to
+                avoid duplicate Discord messages.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Cadence
+                <select
+                  aria-label="Automatic scheduled report cadence"
+                  value={automaticScheduledReportCadence}
+                  disabled={automaticScheduledReportsEnabled}
+                  onChange={(event) =>
+                    setAutomaticScheduledReportCadence(
+                      Number(
+                        event.target.value,
+                      ) as DiscordAutomaticScheduledReportCadenceMilliseconds,
+                    )
+                  }
+                  className="block h-9 rounded-md border border-panel-border bg-background px-3 font-mono text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {DISCORD_AUTOMATIC_SCHEDULED_REPORT_CADENCE_OPTIONS.map(
+                    (cadence) => (
+                      <option key={cadence} value={cadence}>
+                        {formatAlertMonitorDuration(cadence)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              {automaticScheduledReportsEnabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAutomaticScheduledReportsEnabled(false)}
+                >
+                  <CirclePause className="h-4 w-4" />
+                  Stop scheduled reports
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={discordStatus.data?.state !== "READY"}
+                  onClick={() => setAutomaticScheduledReportsEnabled(true)}
+                >
+                  <CirclePlay className="h-4 w-4" />
+                  Start scheduled reports
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <MetricCard
+              label="Scheduled Reports"
+              value={automaticScheduledReportsEnabled ? "Running" : "Stopped"}
+              tone={automaticScheduledReportsEnabled ? "bull" : "default"}
+              sublabel="Foreground page session only"
+            />
+            <MetricCard
+              label="Evaluation Cadence"
+              value={formatAlertMonitorDuration(automaticScheduledReportCadence)}
+              sublabel="No background-tab polling"
+            />
+            <MetricCard
+              label="Latest Outcome"
+              value={
+                automaticScheduledReportResult?.automaticDeliveryState ?? "—"
+              }
+              sublabel={
+                automaticScheduledReportResult
+                  ? formatAlertMonitorTimestamp(
+                      automaticScheduledReportResult.evaluatedAt,
+                    )
+                  : "No schedule evaluation yet"
+              }
+            />
+            <MetricCard
+              label="Due / Next Report"
+              value={
+                automaticScheduledReportResult?.scheduleEvaluation
+                  ?.dueReportType ??
+                automaticScheduledReportResult?.scheduleEvaluation
+                  ?.nextReportType ??
+                "—"
+              }
+              sublabel={
+                automaticScheduledReportResult?.scheduleEvaluation
+                  ?.scheduleState ?? "Schedule not evaluated"
+              }
+            />
+          </div>
+
+          {discordStatus.data?.state !== "READY" ? (
+            <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Configure and test the backend Discord webhook in Settings before
+              starting scheduled report delivery.
+            </div>
+          ) : automaticScheduledReportDelivery.isError ? (
+            <div className="flex items-start gap-2 rounded-md border border-bear/30 bg-bear/5 p-3 text-xs text-bear">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              The automatic scheduled-report endpoint failed before returning a
+              validated result. The next foreground evaluation will occur at the
+              selected cadence while this page session remains enabled.
+            </div>
+          ) : automaticScheduledReportResult ? (
+            <AutomaticScheduledReportDeliveryNotice
+              result={automaticScheduledReportResult}
+            />
+          ) : automaticScheduledReportsEnabled &&
+            automaticScheduledReportDelivery.isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Evaluating the deterministic scheduled-report window…
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Automatic scheduled reports are off. Starting them does not
+              persist across refreshes and stops when this page session ends.
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      <Panel
         title={`Session Alert Events (${sessionEvents.length})`}
         className="min-w-0 lg:col-span-3"
         action={
@@ -682,6 +858,93 @@ function ScheduledReportDeliveryNotice({
           </Badge>
           {result.providerStatusCode !== null ? (
             <Badge variant="default">HTTP {result.providerStatusCode}</Badge>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const AUTOMATIC_SCHEDULED_REPORT_COPY: Record<
+  DiscordAutomaticScheduledReportDeliveryResponse["primaryReasonCode"],
+  string
+> = {
+  REPORT_DELIVERED:
+    "Discord confirmed delivery of the due deterministic scheduled report.",
+  NO_REPORT_DUE:
+    "No deterministic report window is currently due, so nothing was sent.",
+  DUPLICATE_REPORT_SUPPRESSED:
+    "This report was already delivered for the current Eastern date and was suppressed.",
+  AMBIGUOUS_PROVIDER_OUTCOME_SUPPRESSED:
+    "A prior provider outcome was ambiguous, so automatic delivery is suppressed to avoid a duplicate message.",
+  SCHEDULE_UNAVAILABLE:
+    "The deterministic schedule evaluation is unavailable, so nothing was sent.",
+  WEBHOOK_NOT_CONFIGURED: "No Discord webhook is configured on the backend.",
+  WEBHOOK_CONFIG_INVALID: "The configured Discord webhook is invalid.",
+  REPORT_UNAVAILABLE:
+    "The deterministic report source is currently unavailable, so nothing was sent.",
+  REPORT_GENERATION_FAILURE:
+    "The deterministic report could not be generated for this evaluation.",
+  WEBHOOK_REQUEST_TIMEOUT:
+    "The Discord request timed out. Automatic delivery is blocked for this report key to avoid a duplicate.",
+  WEBHOOK_NETWORK_FAILURE:
+    "The Discord network outcome was ambiguous. Automatic delivery is blocked for this report key.",
+  WEBHOOK_RATE_LIMITED:
+    "Discord rate-limited the report request. A later foreground evaluation may retry.",
+  WEBHOOK_REJECTED:
+    "Discord rejected the report request. Verify the webhook configuration.",
+  WEBHOOK_PROVIDER_FAILURE:
+    "Discord returned an unexpected confirmed failure. A later foreground evaluation may retry.",
+};
+
+function AutomaticScheduledReportDeliveryNotice({
+  result,
+}: {
+  result: DiscordAutomaticScheduledReportDeliveryResponse;
+}) {
+  const delivered = result.automaticDeliveryState === "DELIVERED";
+  const failed = result.automaticDeliveryState === "FAILED";
+  const unavailable = result.automaticDeliveryState === "UNAVAILABLE";
+
+  return (
+    <div
+      role="status"
+      className={cn(
+        "rounded-md border p-3 text-xs",
+        delivered
+          ? "border-bull/30 bg-bull/5 text-bull"
+          : failed || unavailable
+            ? "border-bear/30 bg-bear/5 text-bear"
+            : "border-panel-border bg-background/40 text-muted-foreground",
+      )}
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2">
+          {delivered ? (
+            <BellRing className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : failed || unavailable ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <div className="min-w-0 space-y-1">
+            <p>{AUTOMATIC_SCHEDULED_REPORT_COPY[result.primaryReasonCode]}</p>
+            <p className="font-mono text-[11px] opacity-80">
+              {result.scheduleEvaluation
+                ? `${result.scheduleEvaluation.easternDate} ${result.scheduleEvaluation.easternTime} ET`
+                : "Schedule unavailable"}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Badge variant={delivered ? "bull" : failed || unavailable ? "bear" : "default"}>
+            {result.automaticDeliveryState.replaceAll("_", " ")}
+          </Badge>
+          {result.delivery?.providerStatusCode !== null &&
+          result.delivery?.providerStatusCode !== undefined ? (
+            <Badge variant="default">
+              HTTP {result.delivery.providerStatusCode}
+            </Badge>
           ) : null}
         </div>
       </div>
