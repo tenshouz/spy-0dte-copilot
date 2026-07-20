@@ -1,15 +1,15 @@
-# SPY 0DTE Copilot V1.1 PRD Compliance Audit
+# SPY 0DTE Copilot V1.1.1 PRD Compliance Audit
 
 ## Release conclusion
 
-The local SPY-only V1.1 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.
+The local SPY-only V1.1.1 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.
 
 ## Implemented capabilities
 
 | Area | V1 implementation |
 |---|---|
 | Market data | Backend-only Schwab OAuth, encrypted tokens, refresh recovery, normalized SPY quote, bounded five-minute candles, current-date options chain, source freshness labels, backoff, timeout, cache, and in-flight deduplication |
-| Session structure | RTH VWAP, previous-session levels, gap, 5/15/30-minute opening ranges, Traditional daily/weekly pivots, NYSE holidays and early closes |
+| Session structure | Provider-aligned 07:00–09:30 ET premarket high/low, RTH VWAP, previous-session levels, gap, 5/15/30-minute opening ranges, Traditional daily/weekly pivots, NYSE holidays and early closes |
 | Options analytics | ATM implied move, returned-window GEX and DEX proxies, ranked wall proxies, cumulative Gamma-balance proxy, cliffs, and DEX anchor |
 | Deterministic reasoning | Market Context, Market State, bias, Trade Plan, objective risk, contract selection, and concise same-snapshot assembly; returned-window GEX/DEX structure modifies plan confidence only through a versioned soft-confirmation layer |
 | Risk support | Manual and read-only Schwab-assisted sizing; no order submission |
@@ -27,6 +27,7 @@ The local SPY-only V1.1 is functionally complete for deterministic decision supp
 - Deterministic calculations remain code-owned and versioned. GEX/DEX confirmation cannot create a direction, satisfy an eligibility gate, or block a structurally eligible setup.
 - LLM-generated trade decisions are not required for V1 correctness.
 - Every market-data product discloses source state and warning codes instead of silently substituting real and mock data.
+- Premarket completeness is evaluated only over the explicit provider-aligned 07:00–09:30 ET window; missing 04:00–07:00 data is neither fabricated nor treated as a failure.
 - Historical replay uses persisted captured snapshots only and does not claim to reconstruct raw history that was never stored.
 
 ## Known intentional limitations

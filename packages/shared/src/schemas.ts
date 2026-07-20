@@ -305,6 +305,23 @@ export const SessionWindowCoverageSchema = z.object({
 });
 export type SessionWindowCoverage = z.infer<typeof SessionWindowCoverageSchema>;
 
+/**
+ * Provider-aligned premarket methodology used by all deterministic session
+ * calculations. The dashboard deliberately owns the 07:00 ET start rather
+ * than implying that uncaptured 04:00-07:00 candles were observed.
+ */
+export const PremarketWindowPolicySchema = z.object({
+  methodologyVersion: z.literal("PREMARKET_WINDOW_V2"),
+  timeZone: z.literal("America/New_York"),
+  startTimeEastern: z.literal("07:00"),
+  endTimeEasternExclusive: z.literal("09:30"),
+  expectedFirstBucketEastern: z.literal("07:00"),
+  expectedLastBucketEastern: z.literal("09:25"),
+  providerAligned: z.literal(true),
+  missingBeforeStartIgnored: z.literal(true),
+});
+export type PremarketWindowPolicy = z.infer<typeof PremarketWindowPolicySchema>;
+
 const MarketDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const ObservedMarketDateCoverageSchema = z.object({
@@ -339,6 +356,7 @@ export const SpySessionDataFoundationResponseSchema = z.object({
   candleCount: z.number().int().nonnegative(),
   extendedHoursRequested: z.literal(true),
   timestampSemantics: z.literal("PROVIDER_TIMESTAMP_UNVERIFIED"),
+  premarketWindow: PremarketWindowPolicySchema,
   currentObservedMarketDate: MarketDateSchema.nullable(),
   previousObservedMarketDate: MarketDateSchema.nullable(),
   observedDates: z.array(ObservedMarketDateCoverageSchema),
@@ -419,6 +437,7 @@ export const SpySessionLevelsResponseSchema = z.object({
   currentMarketDateHasDefinedSessionData: z.boolean(),
   previousRthMarketDate: MarketDateSchema.nullable(),
   candleSourceState: QuoteSourceStateSchema,
+  premarketWindow: PremarketWindowPolicySchema,
   premarketCoverageState: CoverageStateSchema,
   previousRthCoverageState: CoverageStateSchema,
   premarketHigh: SessionLevelValueSchema,
@@ -9411,7 +9430,7 @@ export const SystemReadinessResponseSchema = z
   .object({
     product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
     methodologyVersion: SystemReadinessMethodologyVersionSchema,
-    releaseVersion: z.literal("1.1.0"),
+    releaseVersion: z.literal("1.1.1"),
     calculatedAt: z.string().datetime(),
     engineState: SystemReadinessEngineStateSchema,
     summary: z

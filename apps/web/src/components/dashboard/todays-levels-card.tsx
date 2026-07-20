@@ -21,6 +21,10 @@ import {
   useDisplaySpySessionLevels,
 } from "@/hooks/use-spy-session-levels";
 import { formatEasternTime, formatPrice, formatSigned } from "@/lib/format";
+import {
+  formatPremarketWindowDisclosure,
+  formatPremarketWindowLabel,
+} from "@/lib/premarket-window-view";
 
 function formatSessionLevel(level: SessionLevelValue): string {
   return level.value === null ? "Unavailable" : `$${formatPrice(level.value)}`;
@@ -100,11 +104,11 @@ export function TodaysLevelsCard() {
             {levels && (
               <>
                 <MetricCard
-                  label={`Premarket High · ${levels.premarketHigh.state}`}
+                  label={`Premarket High (${formatPremarketWindowLabel(levels.premarketWindow)}) · ${levels.premarketHigh.state}`}
                   value={formatSessionLevel(levels.premarketHigh)}
                 />
                 <MetricCard
-                  label={`Premarket Low · ${levels.premarketLow.state}`}
+                  label={`Premarket Low (${formatPremarketWindowLabel(levels.premarketWindow)}) · ${levels.premarketLow.state}`}
                   value={formatSessionLevel(levels.premarketLow)}
                 />
                 <MetricCard
@@ -160,6 +164,11 @@ export function TodaysLevelsCard() {
               </>
             )}
           </div>
+          {levels && (
+            <p className="text-xs text-muted-foreground">
+              {formatPremarketWindowDisclosure(levels.premarketWindow)}
+            </p>
+          )}
           {levelsDisplay?.transportFailed && (
             <p className="text-xs text-wait">{SESSION_LEVELS_TRANSPORT_WARNING}</p>
           )}

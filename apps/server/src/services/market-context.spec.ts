@@ -8,6 +8,7 @@ import type {
   MarketContextComponentStatus,
   SpyOpeningRangeResponse,
   SpyQuote,
+  SpyCandle,
   SpyRthGapResponse,
   SpyRthVwapResponse,
   SpySessionDataFoundationResponse,
@@ -24,6 +25,8 @@ import {
   summarizeSpyCandles,
   type SpyMarketContextInputs,
 } from "./market-context.logic";
+import { PREMARKET_WINDOW_POLICY } from "./session-data.logic";
+import { buildSpySessionLevelsResponse } from "./session-levels.logic";
 
 const MARKET_DATE = "2026-07-16";
 const PREVIOUS_DATE = "2026-07-15";
@@ -126,6 +129,7 @@ function baseInputs(): SpyMarketContextInputs {
     candleCount: 12,
     extendedHoursRequested: true,
     timestampSemantics: "PROVIDER_TIMESTAMP_UNVERIFIED",
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     currentObservedMarketDate: MARKET_DATE,
     previousObservedMarketDate: PREVIOUS_DATE,
     observedDates: [
@@ -178,6 +182,7 @@ function baseInputs(): SpyMarketContextInputs {
     currentMarketDateHasDefinedSessionData: true,
     previousRthMarketDate: PREVIOUS_DATE,
     candleSourceState: "LIVE",
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     premarketCoverageState: "COMPLETE",
     previousRthCoverageState: "COMPLETE",
     premarketHigh: liveLevel(753),
@@ -406,6 +411,47 @@ function test(name: string, fn: () => void) {
 function component(response: ReturnType<typeof buildSpyZeroDteMarketContext>, name: string) {
   return response.components.find((item) => item.component === name)!;
 }
+
+function candleSeries(startIso: string, count: number): SpyCandle[] {
+  const start = Date.parse(startIso);
+  return Array.from({ length: count }, (_, index) => ({
+    timestamp: start + index * 5 * 60 * 1000,
+    open: 750,
+    high: 751,
+    low: 749,
+    close: 750.5,
+    volume: 100,
+  }));
+}
+
+test("07:00-only premarket coverage keeps Session Levels and Market Context ready", () => {
+  const inputs = baseInputs();
+  const candles = [
+    ...candleSeries("2026-07-15T13:30:00.000Z", 78),
+    ...candleSeries("2026-07-16T11:00:00.000Z", 30),
+    ...inputs.candles.candles,
+  ].sort((a, b) => a.timestamp - b.timestamp);
+  inputs.sessionLevels = buildSpySessionLevelsResponse(
+    {
+      dataset: {
+        candles,
+        fetchedAtMs: Date.parse(FETCHED_AT),
+        latestCandleAt: LATEST_AT,
+      },
+      requestedStartAtMs: Date.parse("2026-07-09T14:00:00.000Z"),
+      requestedEndAtMs: Date.parse(FETCHED_AT),
+      warningCode: null,
+    },
+    NOW,
+  );
+
+  assert.equal(inputs.sessionLevels.premarketCoverageState, "COMPLETE");
+  assert.equal(inputs.sessionLevels.premarketHigh.state, "LIVE");
+
+  const result = buildSpyZeroDteMarketContext(inputs, NOW);
+  assert.equal(component(result, "SESSION_LEVELS").status, "AVAILABLE");
+  assert.equal(result.contextState, "READY");
+});
 
 test("healthy RTH inputs create a READY validated context", () => {
   const result = buildSpyZeroDteMarketContext(baseInputs(), NOW);

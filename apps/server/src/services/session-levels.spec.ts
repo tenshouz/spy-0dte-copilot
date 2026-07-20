@@ -15,6 +15,7 @@ import {
 } from "./session-levels.logic";
 import {
   getObservedMarketDate,
+  PREMARKET_WINDOW_POLICY,
   selectMarketSessionCandles,
   selectPreviousRthMarketDate,
 } from "./session-data.logic";
@@ -80,7 +81,7 @@ function access(
 }
 
 const EDT_NOW_RTH = Date.parse("2026-07-15T19:00:00.000Z"); // 15:00 ET
-const EDT_PREMARKET_FULL = sequence("2026-07-15T08:00:00.000Z", 66); // 04:00..09:25 ET
+const EDT_PREMARKET_FULL = sequence("2026-07-15T11:00:00.000Z", 30); // 07:00..09:25 ET
 const EDT_PREVIOUS_RTH_FULL = sequence("2026-07-14T13:30:00.000Z", 78); // 09:30..15:55 ET
 
 // --- PURE CALCULATIONS ------------------------------------------------------
@@ -112,7 +113,7 @@ test("final session close uses the last already-selected candle without timestam
 
 test("current market target date is the current New York calendar date, not the latest defined session date", () => {
   const nowMs = Date.parse("2026-07-16T07:30:00.000Z"); // 03:30 ET July 16
-  const priorPremarket = sequence("2026-07-15T08:00:00.000Z", 66);
+  const priorPremarket = sequence("2026-07-15T11:00:00.000Z", 30);
   const out = buildSpySessionLevelsResponse(access(priorPremarket, nowMs - 1_000), nowMs);
   assert.equal(out.currentMarketDate, "2026-07-16");
   assert.equal(out.premarketHigh.state, "UNAVAILABLE");
@@ -133,11 +134,11 @@ test("Friday is selected as previous RTH for Monday", () => {
   assert.equal(selectPreviousRthMarketDate(friday, "2026-07-13"), "2026-07-10");
 });
 
-test("premarket boundaries include 04:00 and 09:25 but exclude 03:55 and 09:30", () => {
+test("premarket boundaries include 07:00 and 09:25 but exclude 06:55 and 09:30", () => {
   const selected = selectMarketSessionCandles(
     [
-      candle(Date.parse("2026-07-15T07:55:00.000Z")), // 03:55 ET
-      candle(Date.parse("2026-07-15T08:00:00.000Z")), // 04:00 ET
+      candle(Date.parse("2026-07-15T10:55:00.000Z")), // 06:55 ET
+      candle(Date.parse("2026-07-15T11:00:00.000Z")), // 07:00 ET
       candle(Date.parse("2026-07-15T13:25:00.000Z")), // 09:25 ET
       candle(Date.parse("2026-07-15T13:30:00.000Z")), // 09:30 ET
     ],
@@ -146,7 +147,7 @@ test("premarket boundaries include 04:00 and 09:25 but exclude 03:55 and 09:30",
   );
   assert.deepEqual(
     selected.map((item) => item.timestamp),
-    [Date.parse("2026-07-15T08:00:00.000Z"), Date.parse("2026-07-15T13:25:00.000Z")],
+    [Date.parse("2026-07-15T11:00:00.000Z"), Date.parse("2026-07-15T13:25:00.000Z")],
   );
 });
 
@@ -168,20 +169,40 @@ test("RTH boundaries include 09:30 and 15:55 but exclude 09:25 and 16:00", () =>
 });
 
 test("EST session selection uses America/New_York rather than a fixed UTC offset", () => {
-  const est0400 = Date.parse("2026-01-15T09:00:00.000Z");
+  const est0700 = Date.parse("2026-01-15T12:00:00.000Z");
   const est0930 = Date.parse("2026-01-15T14:30:00.000Z");
-  assert.equal(getObservedMarketDate(est0400), "2026-01-15");
-  assert.equal(selectMarketSessionCandles([candle(est0400)], "2026-01-15", "PREMARKET").length, 1);
+  assert.equal(getObservedMarketDate(est0700), "2026-01-15");
+  assert.equal(selectMarketSessionCandles([candle(est0700)], "2026-01-15", "PREMARKET").length, 1);
   assert.equal(selectMarketSessionCandles([candle(est0930)], "2026-01-15", "RTH").length, 1);
 });
 
 // --- PREMARKET ELIGIBILITY --------------------------------------------------
 
+test("04:00-06:55 candles are outside the provider-aligned premarket calculation", () => {
+  const earlyExtendedHours = sequence("2026-07-15T08:00:00.000Z", 36, () => ({
+    high: 999,
+    low: 1,
+  }));
+  const providerAligned = EDT_PREMARKET_FULL.map((item, index) => ({
+    ...item,
+    high: index === 10 ? 110 : 101,
+    low: index === 15 ? 90 : 99,
+  }));
+  const out = buildSpySessionLevelsResponse(
+    access([...earlyExtendedHours, ...providerAligned], EDT_NOW_RTH - 500),
+    EDT_NOW_RTH,
+  );
+
+  assert.equal(out.premarketCoverageState, "COMPLETE");
+  assert.equal(out.premarketHigh.value, 110);
+  assert.equal(out.premarketLow.value, 90);
+});
+
 test("complete current-date premarket produces LIVE PMH/PML and ignores RTH extremes", () => {
   const pm = EDT_PREMARKET_FULL.map((item, index) => ({
     ...item,
     high: index === 20 ? 110 : 101,
-    low: index === 30 ? 90 : 99,
+    low: index === 25 ? 90 : 99,
   }));
   const currentRth = [candle(Date.parse("2026-07-15T13:30:00.000Z"), { high: 999, low: 1 })];
   const out = buildSpySessionLevelsResponse(
@@ -189,13 +210,14 @@ test("complete current-date premarket produces LIVE PMH/PML and ignores RTH extr
     EDT_NOW_RTH,
   );
   assert.equal(out.premarketCoverageState, "COMPLETE");
+  assert.deepEqual(out.premarketWindow, PREMARKET_WINDOW_POLICY);
   assert.deepEqual(out.premarketHigh, { value: 110, state: "LIVE" });
   assert.deepEqual(out.premarketLow, { value: 90, state: "LIVE" });
 });
 
-test("valid active in-progress premarket is eligible without requiring future bars", () => {
+test("valid active provider-aligned premarket is eligible without requiring future bars", () => {
   const nowMs = Date.parse("2026-07-15T11:02:00.000Z"); // 07:02 ET
-  const pmThrough0700 = sequence("2026-07-15T08:00:00.000Z", 37, (index) => ({
+  const pmThrough0700 = sequence("2026-07-15T11:00:00.000Z", 1, (index) => ({
     high: 101 + index / 100,
     low: 99 - index / 100,
   }));
@@ -205,10 +227,10 @@ test("valid active in-progress premarket is eligible without requiring future ba
   assert.equal(out.premarketLow.state, "LIVE");
 });
 
-test("leading-truncated active premarket is PARTIAL and levels are unavailable", () => {
-  const nowMs = Date.parse("2026-07-15T11:02:00.000Z"); // 07:02 ET
-  const pmStarting0700 = [candle(Date.parse("2026-07-15T11:00:00.000Z"), { high: 150, low: 50 })];
-  const out = buildSpySessionLevelsResponse(access(pmStarting0700, nowMs - 500), nowMs);
+test("a missing 07:00 boundary is PARTIAL and levels are unavailable", () => {
+  const nowMs = Date.parse("2026-07-15T11:07:00.000Z"); // 07:07 ET
+  const pmStarting0705 = [candle(Date.parse("2026-07-15T11:05:00.000Z"), { high: 150, low: 50 })];
+  const out = buildSpySessionLevelsResponse(access(pmStarting0705, nowMs - 500), nowMs);
   assert.equal(out.premarketCoverageState, "PARTIAL");
   assert.deepEqual(out.premarketHigh, { value: null, state: "UNAVAILABLE" });
   assert.deepEqual(out.premarketLow, { value: null, state: "UNAVAILABLE" });
@@ -291,7 +313,7 @@ test("incomplete immediately previous RTH is not skipped in favor of an older co
   const thursdayComplete = sequence("2026-07-09T13:30:00.000Z", 78, () => ({ high: 200, low: 150 }));
   const fridayPartial = sequence("2026-07-10T15:00:00.000Z", 60, () => ({ high: 120, low: 80 })); // starts 11:00 ET
   const mondayNow = Date.parse("2026-07-13T15:00:00.000Z"); // 11:00 ET
-  const mondayPm = sequence("2026-07-13T08:00:00.000Z", 66);
+  const mondayPm = sequence("2026-07-13T11:00:00.000Z", 30);
   const out = buildSpySessionLevelsResponse(
     access([...thursdayComplete, ...fridayPartial, ...mondayPm], mondayNow - 500),
     mondayNow,
@@ -347,7 +369,7 @@ test("missing real bounded dataset does not fabricate mock multi-day levels", ()
 });
 
 test("same-timestamp provider revision remains deduplicated before session-level calculation", () => {
-  const ts = Date.parse("2026-07-15T08:00:00.000Z");
+  const ts = Date.parse("2026-07-15T11:00:00.000Z");
   const normalized = normalizeRawSpyCandles(
     {
       candles: [

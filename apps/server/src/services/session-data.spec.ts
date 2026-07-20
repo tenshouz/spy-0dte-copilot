@@ -10,6 +10,7 @@ import type { SpyCandle } from "@spy-copilot/shared";
 import { buildSpyPriceHistoryUrl } from "./schwab-price-history.client";
 import {
   FIVE_MINUTES_MS,
+  PREMARKET_WINDOW_POLICY,
   SESSION_DATA_LOOKBACK_MS,
   analyzeObservedMarketDates,
   buildSessionDataRequestWindow,
@@ -148,17 +149,17 @@ test("New York date grouping can differ from UTC date", () => {
   assert.equal(getObservedMarketDate(Date.parse("2026-07-15T00:30:00.000Z")), "2026-07-14");
 });
 
-test("EDT 04:00 boundary is premarket", () => {
-  assert.equal(classifyMarketSession(Date.parse("2026-07-15T08:00:00.000Z")), "PREMARKET");
+test("EDT 07:00 provider-aligned boundary is premarket", () => {
+  assert.equal(classifyMarketSession(Date.parse("2026-07-15T11:00:00.000Z")), "PREMARKET");
 });
 
-test("EST 04:00 boundary is premarket", () => {
-  assert.equal(classifyMarketSession(Date.parse("2026-01-15T09:00:00.000Z")), "PREMARKET");
+test("EST 07:00 provider-aligned boundary is premarket", () => {
+  assert.equal(classifyMarketSession(Date.parse("2026-01-15T12:00:00.000Z")), "PREMARKET");
 });
 
 test("session boundaries are half-open in America/New_York", () => {
-  assert.equal(classifyMarketSession(Date.parse("2026-07-15T07:59:59.000Z")), null); // 03:59:59 ET
-  assert.equal(classifyMarketSession(Date.parse("2026-07-15T08:00:00.000Z")), "PREMARKET");
+  assert.equal(classifyMarketSession(Date.parse("2026-07-15T10:59:59.000Z")), null); // 06:59:59 ET
+  assert.equal(classifyMarketSession(Date.parse("2026-07-15T11:00:00.000Z")), "PREMARKET");
   assert.equal(classifyMarketSession(Date.parse("2026-07-15T13:29:59.000Z")), "PREMARKET");
   assert.equal(classifyMarketSession(Date.parse("2026-07-15T13:30:00.000Z")), "RTH");
   assert.equal(classifyMarketSession(Date.parse("2026-07-15T19:59:59.000Z")), "RTH");
@@ -170,17 +171,33 @@ test("session boundaries are half-open in America/New_York", () => {
 // --- COVERAGE ---------------------------------------------------------------
 
 const PAST_NOW = Date.parse("2026-07-16T02:00:00.000Z"); // Jul 15, 22:00 ET
-const JUL15_PREMARKET_START = Date.parse("2026-07-15T08:00:00.000Z"); // 04:00 ET
+const JUL15_PREMARKET_START = Date.parse("2026-07-15T11:00:00.000Z"); // 07:00 ET
 const JUL15_PREMARKET_LAST = Date.parse("2026-07-15T13:25:00.000Z"); // 09:25 ET
-const JUL15_0700 = Date.parse("2026-07-15T11:00:00.000Z");
+const JUL15_0705 = Date.parse("2026-07-15T11:05:00.000Z");
 
-test("full contiguous observed premarket boundaries are COMPLETE", () => {
+test("full contiguous provider-aligned premarket boundaries are COMPLETE", () => {
   const state = sessionState(range(JUL15_PREMARKET_START, JUL15_PREMARKET_LAST), "2026-07-15", "premarket", PAST_NOW);
   assert.equal(state.state, "COMPLETE");
 });
 
-test("definite 07:00 start for required 04:00 premarket is PARTIAL", () => {
-  const state = sessionState(range(JUL15_0700, JUL15_PREMARKET_LAST), "2026-07-15", "premarket", PAST_NOW);
+test("04:00-06:55 candles are outside provider-aligned premarket coverage", () => {
+  const earlyExtendedHours = range(
+    Date.parse("2026-07-15T08:00:00.000Z"),
+    Date.parse("2026-07-15T10:55:00.000Z"),
+  );
+  const state = sessionState(
+    [...earlyExtendedHours, ...range(JUL15_PREMARKET_START, JUL15_PREMARKET_LAST)],
+    "2026-07-15",
+    "premarket",
+    PAST_NOW,
+  );
+  assert.equal(state.state, "COMPLETE");
+  assert.equal(state.candleCount, 30);
+  assert.equal(state.firstCandleAt, "2026-07-15T11:00:00.000Z");
+});
+
+test("a 07:05 start is PARTIAL because the required 07:00 boundary is missing", () => {
+  const state = sessionState(range(JUL15_0705, JUL15_PREMARKET_LAST), "2026-07-15", "premarket", PAST_NOW);
   assert.equal(state.state, "PARTIAL");
 });
 
@@ -214,9 +231,9 @@ test("current RTH can be COMPLETE through the latest fully elapsed bucket", () =
   assert.equal(state.state, "COMPLETE");
 });
 
-test("LIVE source does not imply COMPLETE coverage", () => {
+test("LIVE source does not imply COMPLETE coverage when the 07:00 boundary is missing", () => {
   const fetchedAtMs = Date.parse("2026-07-15T14:00:00.000Z");
-  const candles = range(JUL15_0700, JUL15_PREMARKET_LAST);
+  const candles = range(JUL15_0705, JUL15_PREMARKET_LAST);
   const response = toSpySessionDataFoundationResponse(
     { candles, latestCandleAt: new Date(candles.at(-1)!.timestamp).toISOString(), fetchedAtMs },
     fetchedAtMs - SESSION_DATA_LOOKBACK_MS,
@@ -225,6 +242,7 @@ test("LIVE source does not imply COMPLETE coverage", () => {
     null,
   );
   assert.equal(response.sourceState, "LIVE");
+  assert.deepEqual(response.premarketWindow, PREMARKET_WINDOW_POLICY);
   assert.equal(response.observedDates[0]!.premarket.state, "PARTIAL");
 });
 

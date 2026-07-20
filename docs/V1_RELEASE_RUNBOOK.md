@@ -1,8 +1,8 @@
-# SPY 0DTE Copilot V1.1 Release Runbook
+# SPY 0DTE Copilot V1.1.1 Release Runbook
 
 ## Scope
 
-V1.1 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It does not create, modify, route, or execute orders.
+V1.1.1 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It does not create, modify, route, or execute orders.
 
 ## Required services
 
@@ -26,6 +26,8 @@ V1.1 is a local, single-user, SPY-only, read-only decision-support system. It pr
 ## Release verification
 
 Run `npm run verify:v1` after Prisma generation. The command executes every backend and frontend specification, both TypeScript builds, lint, the frontend production build, tracked-secret checks, route safety checks, and whitespace validation.
+
+Premarket coverage is complete when the 07:00 through 09:25 ET five-minute buckets are present; 04:00–06:55 ET candles are outside the release methodology and do not block Trade Plans.
 
 The explicit data probe on `/system` is intentionally manual because it may call Schwab. A closed market or a day without a current-date expiration can produce a legitimate stale or not-applicable result.
 

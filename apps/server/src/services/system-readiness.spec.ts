@@ -532,14 +532,20 @@ test("release documentation and verification scripts are present", () => {
     resolve(process.cwd(), "docs/V1_PRD_COMPLIANCE_AUDIT.md"),
     "utf8",
   );
+  const premarketMethodology = readFileSync(
+    resolve(process.cwd(), "docs/V1_1_1_PROVIDER_ALIGNED_PREMARKET.md"),
+    "utf8",
+  );
   const verifier = readFileSync(
     resolve(process.cwd(), "scripts/verify-v1.mjs"),
     "utf8",
   );
-  assert.match(readme, /Local V1(?:\.1)? Complete/i);
+  assert.match(readme, /Local V1(?:\.1(?:\.1)?)? Complete/i);
   assert.match(runbook, /Backup and restore/i);
   assert.match(runbook, /Schwab recovery/i);
   assert.match(audit, /No order execution/i);
+  assert.match(premarketMethodology, /07:00–09:30 ET/);
+  assert.match(premarketMethodology, /missing 04:00–07:00 ET data does not produce `PARTIAL`/i);
   assert.match(verifier, /V1 verification passed/);
 });
 

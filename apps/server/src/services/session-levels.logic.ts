@@ -10,6 +10,7 @@ import { decideCandleState } from "./schwab-candles.logic";
 import {
   analyzeMarketSessionCoverage,
   getObservedMarketDate,
+  PREMARKET_WINDOW_POLICY,
   selectMarketSessionCandles,
   selectPreviousRthMarketDate,
 } from "./session-data.logic";
@@ -70,6 +71,7 @@ function buildUnavailableResponse(
     currentMarketDateHasDefinedSessionData: false,
     previousRthMarketDate: null,
     candleSourceState: "MOCK",
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     premarketCoverageState: "UNAVAILABLE",
     previousRthCoverageState: "UNAVAILABLE",
     premarketHigh: unavailableLevel(),
@@ -151,6 +153,7 @@ export function buildSpySessionLevelsResponse(
     currentMarketDateHasDefinedSessionData,
     previousRthMarketDate,
     candleSourceState,
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     premarketCoverageState: premarketCoverage.state,
     previousRthCoverageState: previousRthCoverage?.state ?? "UNAVAILABLE",
     premarketHigh: premarketEligible

@@ -51,6 +51,10 @@ import {
 import { getExposureStructureReferenceLines } from "@/lib/exposure-structure-view";
 import { formatEasternTime, formatPrice, formatSigned, formatVolume } from "@/lib/format";
 import {
+  formatPremarketWindowDisclosure,
+  formatPremarketWindowLabel,
+} from "@/lib/premarket-window-view";
+import {
   formatDeterministicState,
   formatFeatureStatus,
   formatOptionalPoints,
@@ -214,11 +218,11 @@ export default function MarketDataPage() {
     const response = levelsDisplay.response;
     structureRows.push(
       {
-        label: `Premarket High · ${response.premarketHigh.state}`,
+        label: `Premarket High (${formatPremarketWindowLabel(response.premarketWindow)}) · ${response.premarketHigh.state}`,
         value: formatSessionLevel(response.premarketHigh),
       },
       {
-        label: `Premarket Low · ${response.premarketLow.state}`,
+        label: `Premarket Low (${formatPremarketWindowLabel(response.premarketWindow)}) · ${response.premarketLow.state}`,
         value: formatSessionLevel(response.premarketLow),
       },
       {
@@ -426,10 +430,13 @@ export default function MarketDataPage() {
         >
           <div className="space-y-2">
             {levelsDisplay && (
-              <p className="text-xs text-muted-foreground">
-                Current date: {levelsDisplay.response.currentMarketDate} · Previous RTH:{" "}
-                {levelsDisplay.response.previousRthMarketDate ?? "Unavailable"}
-              </p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>
+                  Current date: {levelsDisplay.response.currentMarketDate} · Previous RTH:{" "}
+                  {levelsDisplay.response.previousRthMarketDate ?? "Unavailable"}
+                </p>
+                <p>{formatPremarketWindowDisclosure(levelsDisplay.response.premarketWindow)}</p>
+              </div>
             )}
             <DataTable
               columns={structureColumns}

@@ -14,6 +14,18 @@ export const SESSION_DATA_LOOKBACK_MS = 21 * 24 * 60 * 60 * 1000;
 export const SESSION_DATA_SHORT_CACHE_MS = 60_000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const MARKET_TIME_ZONE = "America/New_York";
+export const PREMARKET_WINDOW_START_MINUTE = 7 * 60;
+export const PREMARKET_WINDOW_END_MINUTE = 9 * 60 + 30;
+export const PREMARKET_WINDOW_POLICY = {
+  methodologyVersion: "PREMARKET_WINDOW_V2",
+  timeZone: MARKET_TIME_ZONE,
+  startTimeEastern: "07:00",
+  endTimeEasternExclusive: "09:30",
+  expectedFirstBucketEastern: "07:00",
+  expectedLastBucketEastern: "09:25",
+  providerAligned: true,
+  missingBeforeStartIgnored: true,
+} as const;
 const MAX_REPORTED_GAPS = 20;
 
 export type MarketSessionName = "PREMARKET" | "RTH" | "AFTER_HOURS";
@@ -25,7 +37,11 @@ interface SessionWindowDefinition {
 }
 
 export const SESSION_WINDOWS: readonly SessionWindowDefinition[] = [
-  { name: "PREMARKET", startMinute: 4 * 60, endMinute: 9 * 60 + 30 },
+  {
+    name: "PREMARKET",
+    startMinute: PREMARKET_WINDOW_START_MINUTE,
+    endMinute: PREMARKET_WINDOW_END_MINUTE,
+  },
   { name: "RTH", startMinute: 9 * 60 + 30, endMinute: 16 * 60 },
   { name: "AFTER_HOURS", startMinute: 16 * 60, endMinute: 20 * 60 },
 ] as const;
@@ -360,6 +376,7 @@ export function toSpySessionDataFoundationResponse(
     candleCount: dataset.candles.length,
     extendedHoursRequested: true,
     timestampSemantics: "PROVIDER_TIMESTAMP_UNVERIFIED",
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     currentObservedMarketDate,
     previousObservedMarketDate,
     observedDates,
@@ -387,6 +404,7 @@ export function toUnavailableSessionDataFoundationResponse(
     candleCount: 0,
     extendedHoursRequested: true,
     timestampSemantics: "PROVIDER_TIMESTAMP_UNVERIFIED",
+    premarketWindow: PREMARKET_WINDOW_POLICY,
     currentObservedMarketDate: null,
     previousObservedMarketDate: null,
     observedDates: [],
