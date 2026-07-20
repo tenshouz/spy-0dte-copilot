@@ -20,6 +20,7 @@ model User {
   automationRuntime BackendAutomationRuntime?
   automationDeliveryKeys BackendAutomationDeliveryKey[]
   automationDeliveryLogs BackendAutomationDeliveryLog[]
+  historicalReplayRuns HistoricalReplayRun[]
   createdAt    DateTime     @default(now())
 }
 
@@ -197,4 +198,25 @@ model BackendAutomationDeliveryLog {
 
   @@index([userId, attemptedAt])
   @@index([userId, category, attemptedAt])
+}
+
+
+model HistoricalReplayRun {
+  id                String   @id
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  startMarketDate   String?
+  endMarketDate     String?
+  snapshotCount     Int
+  marketDateCount   Int
+  auditState        String
+  auditFailureCount Int
+  stateChangeCount  Int
+  tradeOutcomeCount Int
+  totalPnlDollars   Float?
+  result            Json
+
+  @@index([userId, createdAt])
+  @@index([userId, auditState, createdAt])
 }

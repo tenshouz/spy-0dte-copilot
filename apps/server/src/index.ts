@@ -17,6 +17,7 @@ import { discordWebhookRouter, setDiscordWebhookHeaders } from "./routes/discord
 import { gapRouter } from "./routes/gap.routes";
 import { gexRouter } from "./routes/gex.routes";
 import { journalRouter, setDeterministicJournalHeaders } from "./routes/journal.routes";
+import { historicalReplayRouter, setHistoricalReplayHeaders } from "./routes/historical-replay.routes";
 import { marketContextRouter } from "./routes/market-context.routes";
 import { marketBiasRouter } from "./routes/market-bias.routes";
 import { marketStateRouter } from "./routes/market-state.routes";
@@ -58,6 +59,7 @@ app.use("/api/automation", backendAutomationRouter);
 app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
+app.use("/api/replay", historicalReplayRouter);
 app.use("/api/market-context", marketContextRouter);
 app.use("/api/market-bias", marketBiasRouter);
 app.use("/api/market-state", marketStateRouter);
@@ -90,6 +92,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: unknown }).status
       : null;
+  if (
+    req.originalUrl.startsWith("/api/replay/spy/runs") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setHistoricalReplayHeaders(res);
+    res.status(400).json({ error: "INVALID_HISTORICAL_REPLAY_JSON" });
+    return;
+  }
   if (
     req.originalUrl.startsWith("/api/automation/") &&
     error instanceof SyntaxError &&

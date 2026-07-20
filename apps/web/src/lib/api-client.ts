@@ -22,6 +22,9 @@ import {
   DeterministicJournalOutcomeUpdateRequestSchema,
   DeterministicJournalOutcomeUpdateResponseSchema,
   DeterministicJournalSnapshotListResponseSchema,
+  HistoricalReplayHistoryResponseSchema,
+  HistoricalReplayRunRequestSchema,
+  HistoricalReplayRunResponseSchema,
   SpyZeroDteDeterministicScheduledReportResponseSchema,
   SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
   DiscordTradePlanAlertDeliveryRequestSchema,
@@ -81,6 +84,9 @@ import {
   type DeterministicJournalOutcomeUpdateRequest,
   type DeterministicJournalOutcomeUpdateResponse,
   type DeterministicJournalSnapshotListResponse,
+  type HistoricalReplayHistoryResponse,
+  type HistoricalReplayRunRequest,
+  type HistoricalReplayRunResponse,
   type SpyZeroDteDeterministicScheduledReportResponse,
   type SpyZeroDteScheduledReportScheduleEvaluationResponse,
   type DiscordAutomaticTradePlanAlertDeliveryResponse,
@@ -237,6 +243,27 @@ export const apiClient = {
       request,
       DeterministicJournalOutcomeUpdateRequestSchema,
       DeterministicJournalOutcomeUpdateResponseSchema,
+    ),
+  getHistoricalReplayRuns: (): Promise<HistoricalReplayHistoryResponse> =>
+    getPrivateNoStoreJson(
+      "/api/replay/spy/runs",
+      HistoricalReplayHistoryResponseSchema,
+    ),
+  getHistoricalReplayRun: (
+    runId: string,
+  ): Promise<HistoricalReplayRunResponse> =>
+    getPrivateNoStoreJson(
+      `/api/replay/spy/runs/${encodeURIComponent(runId)}`,
+      HistoricalReplayRunResponseSchema,
+    ),
+  createHistoricalReplayRun: (
+    request: HistoricalReplayRunRequest,
+  ): Promise<HistoricalReplayRunResponse> =>
+    postJson<HistoricalReplayRunRequest, HistoricalReplayRunResponse>(
+      "/api/replay/spy/runs",
+      request,
+      HistoricalReplayRunRequestSchema,
+      HistoricalReplayRunResponseSchema,
     ),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getBackendAutomationSettings: (): Promise<BackendAutomationSettingsResponse> =>

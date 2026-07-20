@@ -7,6 +7,7 @@ import {
   BookOpen,
   LayoutDashboard,
   LineChart,
+  History,
   Rows3,
   Settings as SettingsIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/trade-plan", label: "Trade Plan", icon: Activity },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/journal", label: "Trade Journal", icon: BookOpen },
+  { href: "/replay", label: "Historical Replay", icon: History },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 

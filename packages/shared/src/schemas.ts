@@ -8550,3 +8550,533 @@ export const BackendAutomationRunOnceResponseSchema = z.object({
 export type BackendAutomationRunOnceResponse = z.infer<
   typeof BackendAutomationRunOnceResponseSchema
 >;
+
+
+/**
+ * Captured-snapshot historical replay and no-look-ahead audit.
+ *
+ * This product replays persisted deterministic Trade Plan Assembly snapshots in
+ * chronological order. It never claims to reconstruct uncaptured raw market
+ * states and keeps post-hoc user outcomes separate from source-time validation.
+ */
+export const HistoricalReplayMethodologyVersionSchema = z.literal(
+  "CAPTURED_REPLAY_V1",
+);
+export type HistoricalReplayMethodologyVersion = z.infer<
+  typeof HistoricalReplayMethodologyVersionSchema
+>;
+
+export const HistoricalReplayEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "UNAVAILABLE",
+]);
+export type HistoricalReplayEngineState = z.infer<
+  typeof HistoricalReplayEngineStateSchema
+>;
+
+export const HistoricalReplayAuditStateSchema = z.enum([
+  "PASS",
+  "FAIL",
+  "EMPTY",
+]);
+export type HistoricalReplayAuditState = z.infer<
+  typeof HistoricalReplayAuditStateSchema
+>;
+
+export const HistoricalReplayPrimaryReasonCodeSchema = z.enum([
+  "REPLAY_COMPLETE",
+  "REPLAY_COMPLETE_WITH_AUDIT_FAILURES",
+  "REPLAY_EMPTY",
+  "REPLAY_RUN_NOT_FOUND",
+  "DATABASE_NOT_CONFIGURED",
+  "DATABASE_UNAVAILABLE",
+]);
+export type HistoricalReplayPrimaryReasonCode = z.infer<
+  typeof HistoricalReplayPrimaryReasonCodeSchema
+>;
+
+export const HistoricalReplayRunIdSchema = z.string().min(1).max(128);
+export type HistoricalReplayRunId = z.infer<
+  typeof HistoricalReplayRunIdSchema
+>;
+
+export const HistoricalReplayRunRequestSchema = z
+  .object({
+    startMarketDate: MarketDateSchema.nullable(),
+    endMarketDate: MarketDateSchema.nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.startMarketDate !== null &&
+      value.endMarketDate !== null &&
+      value.startMarketDate > value.endMarketDate
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay start date cannot be after end date",
+        path: ["startMarketDate"],
+      });
+    }
+
+    if (value.startMarketDate !== null && value.endMarketDate !== null) {
+      const start = Date.parse(`${value.startMarketDate}T00:00:00.000Z`);
+      const end = Date.parse(`${value.endMarketDate}T00:00:00.000Z`);
+      const daySpan = Math.floor((end - start) / 86_400_000);
+      if (daySpan > 366) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Replay date range cannot exceed 366 calendar days",
+          path: ["endMarketDate"],
+        });
+      }
+    }
+  });
+export type HistoricalReplayRunRequest = z.infer<
+  typeof HistoricalReplayRunRequestSchema
+>;
+
+export const HistoricalReplayCheckCodeSchema = z.enum([
+  "ASSEMBLY_SCHEMA_INVALID",
+  "STORED_SUMMARY_MISMATCH",
+  "SOURCE_CALCULATED_AT_MISMATCH",
+  "SOURCE_CALCULATED_AFTER_CAPTURE",
+  "SOURCE_TIMESTAMP_AFTER_ASSEMBLY",
+  "CURRENT_MARKET_DATE_MISMATCH",
+  "MOST_RECENT_RTH_DATE_AFTER_MARKET_DATE",
+  "SELECTED_CONTRACT_EXPIRATION_MISMATCH",
+  "OUTCOME_UPDATED_BEFORE_CAPTURE",
+]);
+export type HistoricalReplayCheckCode = z.infer<
+  typeof HistoricalReplayCheckCodeSchema
+>;
+
+export const HistoricalReplayAuditIssueSchema = z
+  .object({
+    snapshotId: DeterministicJournalSnapshotIdSchema,
+    marketDate: MarketDateSchema,
+    checkCode: HistoricalReplayCheckCodeSchema,
+    fieldPath: z.string().min(1).max(160),
+    observedValue: z.string().max(160).nullable(),
+    boundaryValue: z.string().max(160).nullable(),
+    message: z.string().min(1).max(280),
+  })
+  .strict();
+export type HistoricalReplayAuditIssue = z.infer<
+  typeof HistoricalReplayAuditIssueSchema
+>;
+
+export const HistoricalReplayNoLookaheadStateSchema = z.enum([
+  "PASS",
+  "FAIL",
+]);
+export type HistoricalReplayNoLookaheadState = z.infer<
+  typeof HistoricalReplayNoLookaheadStateSchema
+>;
+
+export const HistoricalReplayEventTypeSchema = z.enum([
+  "SESSION_INITIAL",
+  "STATE_CHANGED",
+  "STATE_UNCHANGED",
+]);
+export type HistoricalReplayEventType = z.infer<
+  typeof HistoricalReplayEventTypeSchema
+>;
+
+export const HistoricalReplayEventSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    snapshotId: DeterministicJournalSnapshotIdSchema,
+    marketDate: MarketDateSchema,
+    sourceCalculatedAt: z.string().datetime(),
+    capturedAt: z.string().datetime(),
+    captureMode: DeterministicJournalCaptureModeSchema,
+    eventType: HistoricalReplayEventTypeSchema,
+    noLookaheadState: HistoricalReplayNoLookaheadStateSchema,
+    planState: DeterministicTradePlanStateSchema,
+    direction: AssembledTradePlanDirectionSchema,
+    entryConditionState: TradePlanAssemblyEntryConditionStateSchema,
+    selectedContractSymbol: z.string().min(1).nullable(),
+    structuralConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+    primaryReasonCode: TradePlanAssemblyPrimaryReasonCodeSchema,
+    outcomeState: DeterministicJournalOutcomeStateSchema,
+    realizedPnlDollars: z
+      .number()
+      .finite()
+      .min(-10_000_000)
+      .max(10_000_000)
+      .nullable(),
+  })
+  .strict();
+export type HistoricalReplayEvent = z.infer<
+  typeof HistoricalReplayEventSchema
+>;
+
+export const HistoricalReplayOutcomeSummarySchema = z
+  .object({
+    reviewedSnapshotCount: z.number().int().nonnegative(),
+    unreviewedSnapshotCount: z.number().int().nonnegative(),
+    noTradeCount: z.number().int().nonnegative(),
+    tradeOutcomeCount: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+    totalPnlDollars: z
+      .number()
+      .finite()
+      .min(-1_000_000_000)
+      .max(1_000_000_000)
+      .nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.noTradeCount + value.tradeOutcomeCount !==
+      value.reviewedSnapshotCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay reviewed count is inconsistent",
+      });
+    }
+    if (
+      value.wins + value.losses + value.breakevens !==
+      value.tradeOutcomeCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay trade-outcome count is inconsistent",
+      });
+    }
+  });
+export type HistoricalReplayOutcomeSummary = z.infer<
+  typeof HistoricalReplayOutcomeSummarySchema
+>;
+
+export const HistoricalReplaySessionSummarySchema = z
+  .object({
+    marketDate: MarketDateSchema,
+    snapshotCount: z.number().int().positive(),
+    firstSourceCalculatedAt: z.string().datetime(),
+    lastSourceCalculatedAt: z.string().datetime(),
+    auditPassCount: z.number().int().nonnegative(),
+    auditFailCount: z.number().int().nonnegative(),
+    stateChangeCount: z.number().int().nonnegative(),
+    candidateSnapshotCount: z.number().int().nonnegative(),
+    terminalPlanState: DeterministicTradePlanStateSchema,
+    terminalDirection: AssembledTradePlanDirectionSchema,
+    outcomeSummary: HistoricalReplayOutcomeSummarySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.auditPassCount + value.auditFailCount !== value.snapshotCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay session audit counts are inconsistent",
+      });
+    }
+  });
+export type HistoricalReplaySessionSummary = z.infer<
+  typeof HistoricalReplaySessionSummarySchema
+>;
+
+export const HistoricalReplaySourceSummarySchema = z
+  .object({
+    snapshotLimit: z.literal(1000),
+    snapshotLimitReached: z.boolean(),
+    snapshotCount: z.number().int().nonnegative().max(1000),
+    marketDateCount: z.number().int().nonnegative().max(367),
+    dataStartMarketDate: MarketDateSchema.nullable(),
+    dataEndMarketDate: MarketDateSchema.nullable(),
+    chronologicalOrdering: z.literal("SOURCE_CALCULATED_AT_ASCENDING"),
+    sourceProduct: z.literal(
+      "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_SNAPSHOT",
+    ),
+    sourceMethodology: DeterministicJournalMethodologyVersionSchema,
+  })
+  .strict();
+export type HistoricalReplaySourceSummary = z.infer<
+  typeof HistoricalReplaySourceSummarySchema
+>;
+
+export const HistoricalReplayAuditSummarySchema = z
+  .object({
+    auditState: HistoricalReplayAuditStateSchema,
+    checksPerformed: z.number().int().nonnegative(),
+    snapshotPassCount: z.number().int().nonnegative(),
+    snapshotFailCount: z.number().int().nonnegative(),
+    issueCount: z.number().int().nonnegative(),
+    returnedIssueCount: z.number().int().nonnegative().max(500),
+    issuesTruncated: z.boolean(),
+    issues: z.array(HistoricalReplayAuditIssueSchema).max(500),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.snapshotPassCount + value.snapshotFailCount === 0 &&
+      value.auditState !== "EMPTY"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Empty replay audit must use EMPTY state",
+      });
+    }
+    if (value.snapshotFailCount > 0 && value.auditState !== "FAIL") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay audit failures require FAIL state",
+      });
+    }
+    if (
+      value.snapshotPassCount > 0 &&
+      value.snapshotFailCount === 0 &&
+      value.auditState !== "PASS"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passing replay audit requires PASS state",
+      });
+    }
+    if (value.returnedIssueCount !== value.issues.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Returned replay issue count is inconsistent",
+      });
+    }
+    if (value.issueCount < value.returnedIssueCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay issue count cannot be below returned issue count",
+      });
+    }
+  });
+export type HistoricalReplayAuditSummary = z.infer<
+  typeof HistoricalReplayAuditSummarySchema
+>;
+
+export const HistoricalReplayTimelineSummarySchema = z
+  .object({
+    eventCount: z.number().int().nonnegative().max(1000),
+    stateChangeCount: z.number().int().nonnegative(),
+    unchangedStateCount: z.number().int().nonnegative(),
+    candidateSnapshotCount: z.number().int().nonnegative(),
+    sessions: z.array(HistoricalReplaySessionSummarySchema).max(367),
+    events: z.array(HistoricalReplayEventSchema).max(1000),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.eventCount !== value.events.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay event count is inconsistent",
+      });
+    }
+  });
+export type HistoricalReplayTimelineSummary = z.infer<
+  typeof HistoricalReplayTimelineSummarySchema
+>;
+
+export const HistoricalReplayMethodologySchema = z
+  .object({
+    replayScope: z.literal("PERSISTED_CAPTURED_ASSEMBLY_SNAPSHOTS"),
+    chronologicalBoundary: z.literal("SOURCE_CALCULATED_AT"),
+    noLookaheadBoundary: z.literal("ASSEMBLY_CALCULATED_AT"),
+    stateTransitionMethod: z.literal("ADJACENT_CAPTURED_STATE_FINGERPRINT"),
+    rawMarketRecomputationMethod: z.literal("NONE"),
+    outcomeUsage: z.literal("POST_HOC_SUMMARY_ONLY"),
+    persistenceMethod: z.literal("POSTGRESQL_REPLAY_RUN"),
+  })
+  .strict();
+export type HistoricalReplayMethodology = z.infer<
+  typeof HistoricalReplayMethodologySchema
+>;
+
+export const HistoricalReplayRunPayloadSchema = z
+  .object({
+    id: HistoricalReplayRunIdSchema,
+    createdAt: z.string().datetime(),
+    request: HistoricalReplayRunRequestSchema,
+    source: HistoricalReplaySourceSummarySchema,
+    audit: HistoricalReplayAuditSummarySchema,
+    timeline: HistoricalReplayTimelineSummarySchema,
+    outcomeSummary: HistoricalReplayOutcomeSummarySchema,
+    methodology: HistoricalReplayMethodologySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.source.snapshotCount !== value.timeline.eventCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay source and event counts must match",
+      });
+    }
+    if (
+      value.audit.snapshotPassCount + value.audit.snapshotFailCount !==
+      value.source.snapshotCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay source and audit counts must match",
+      });
+    }
+    if (value.source.marketDateCount !== value.timeline.sessions.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Replay source and session counts must match",
+      });
+    }
+  });
+export type HistoricalReplayRunPayload = z.infer<
+  typeof HistoricalReplayRunPayloadSchema
+>;
+
+export const HistoricalReplayDisclosuresSchema = z
+  .object({
+    capturedSnapshotsOnly: z.literal(true),
+    noRawMarketReconstruction: z.literal(true),
+    noFutureDataUsed: z.literal(true),
+    sourceTimeAuditApplied: z.literal(true),
+    postHocOutcomesSeparated: z.literal(true),
+    persistedReplayRuns: z.literal(true),
+    snapshotLimitApplied: z.literal(true),
+    noTradingRecommendation: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  })
+  .strict();
+export type HistoricalReplayDisclosures = z.infer<
+  typeof HistoricalReplayDisclosuresSchema
+>;
+
+export const HistoricalReplayRunResponseSchema = z
+  .object({
+    product: z.literal("SPY_DETERMINISTIC_CAPTURED_HISTORY_REPLAY"),
+    methodologyVersion: HistoricalReplayMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: HistoricalReplayEngineStateSchema,
+    primaryReasonCode: HistoricalReplayPrimaryReasonCodeSchema,
+    run: HistoricalReplayRunPayloadSchema.nullable(),
+    disclosures: HistoricalReplayDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.engineState === "AVAILABLE") {
+      if (
+        ["REPLAY_COMPLETE", "REPLAY_COMPLETE_WITH_AUDIT_FAILURES", "REPLAY_EMPTY"].includes(
+          value.primaryReasonCode,
+        ) &&
+        value.run === null
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Available replay response requires a run",
+        });
+      }
+      if (
+        value.primaryReasonCode === "REPLAY_RUN_NOT_FOUND" &&
+        value.run !== null
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Missing replay run response cannot contain a run",
+        });
+      }
+      return;
+    }
+
+    if (
+      value.run !== null ||
+      !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(
+        value.primaryReasonCode,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable replay must be database-related and run-free",
+      });
+    }
+  });
+export type HistoricalReplayRunResponse = z.infer<
+  typeof HistoricalReplayRunResponseSchema
+>;
+
+export const HistoricalReplayRunSummarySchema = z
+  .object({
+    id: HistoricalReplayRunIdSchema,
+    createdAt: z.string().datetime(),
+    startMarketDate: MarketDateSchema.nullable(),
+    endMarketDate: MarketDateSchema.nullable(),
+    snapshotCount: z.number().int().nonnegative().max(1000),
+    marketDateCount: z.number().int().nonnegative().max(367),
+    auditState: HistoricalReplayAuditStateSchema,
+    auditFailureCount: z.number().int().nonnegative(),
+    stateChangeCount: z.number().int().nonnegative(),
+    tradeOutcomeCount: z.number().int().nonnegative(),
+    totalPnlDollars: z
+      .number()
+      .finite()
+      .min(-1_000_000_000)
+      .max(1_000_000_000)
+      .nullable(),
+  })
+  .strict();
+export type HistoricalReplayRunSummary = z.infer<
+  typeof HistoricalReplayRunSummarySchema
+>;
+
+export const HistoricalReplayHistoryResponseSchema = z
+  .object({
+    product: z.literal("SPY_DETERMINISTIC_CAPTURED_HISTORY_REPLAY_HISTORY"),
+    methodologyVersion: HistoricalReplayMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: HistoricalReplayEngineStateSchema,
+    primaryReasonCode: z.enum([
+      "REPLAY_HISTORY_AVAILABLE",
+      "REPLAY_HISTORY_EMPTY",
+      "DATABASE_NOT_CONFIGURED",
+      "DATABASE_UNAVAILABLE",
+    ]),
+    maximumEntries: z.literal(50),
+    runs: z.array(HistoricalReplayRunSummarySchema).max(50),
+    disclosures: HistoricalReplayDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.engineState === "AVAILABLE") {
+      if (
+        value.runs.length === 0 &&
+        value.primaryReasonCode !== "REPLAY_HISTORY_EMPTY"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Empty replay history requires empty reason",
+        });
+      }
+      if (
+        value.runs.length > 0 &&
+        value.primaryReasonCode !== "REPLAY_HISTORY_AVAILABLE"
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Populated replay history requires available reason",
+        });
+      }
+      return;
+    }
+
+    if (
+      value.runs.length !== 0 ||
+      !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(
+        value.primaryReasonCode,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable replay history must be database-related and empty",
+      });
+    }
+  });
+export type HistoricalReplayHistoryResponse = z.infer<
+  typeof HistoricalReplayHistoryResponseSchema
+>;
