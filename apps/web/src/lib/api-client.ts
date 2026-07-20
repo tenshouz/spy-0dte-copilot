@@ -31,6 +31,7 @@ import {
   SpyOpeningRangeResponseSchema,
   SpyDeterministicSessionStructureResponseSchema,
   SpyZeroDteExpectedMoveResponseSchema,
+  SpyZeroDteExposureStructureResponseSchema,
   SpyZeroDteDexProxyResponseSchema,
   SpyZeroDteGexProxyResponseSchema,
   SpyZeroDteOptionsChainResponseSchema,
@@ -84,6 +85,7 @@ import {
   type SpyOpeningRangeResponse,
   type SpyDeterministicSessionStructureResponse,
   type SpyZeroDteExpectedMoveResponse,
+  type SpyZeroDteExposureStructureResponse,
   type SpyZeroDteDexProxyResponse,
   type SpyZeroDteGexProxyResponse,
   type SpyZeroDteOptionsChainResponse,
@@ -318,6 +320,11 @@ export const apiClient = {
     getJson("/api/options-chain/spy", SpyZeroDteOptionsChainResponseSchema),
   getSpyZeroDteExpectedMove: (): Promise<SpyZeroDteExpectedMoveResponse> =>
     getJson("/api/expected-move/spy", SpyZeroDteExpectedMoveResponseSchema),
+  getSpyZeroDteExposureStructure: (): Promise<SpyZeroDteExposureStructureResponse> =>
+    getPrivateNoStoreJson(
+      "/api/exposure-structure/spy",
+      SpyZeroDteExposureStructureResponseSchema,
+    ),
   getSpyZeroDteGexProxy: (): Promise<SpyZeroDteGexProxyResponse> =>
     getJson("/api/gex/spy", SpyZeroDteGexProxyResponseSchema),
   getSpyZeroDteDexProxy: (): Promise<SpyZeroDteDexProxyResponse> =>

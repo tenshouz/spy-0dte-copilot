@@ -10,6 +10,7 @@ import { alertsRouter } from "./routes/alerts.routes";
 import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
 import { expectedMoveRouter } from "./routes/expected-move.routes";
+import { exposureStructureRouter } from "./routes/exposure-structure.routes";
 import { dexRouter } from "./routes/dex.routes";
 import { discordWebhookRouter, setDiscordWebhookHeaders } from "./routes/discord-webhook.routes";
 import { gapRouter } from "./routes/gap.routes";
@@ -69,6 +70,7 @@ app.use("/api/options-chain", optionsChainRouter);
 app.use("/api/quote", quoteRouter);
 app.use("/api/candles", candlesRouter);
 app.use("/api/expected-move", expectedMoveRouter);
+app.use("/api/exposure-structure", exposureStructureRouter);
 app.use("/api/dex", dexRouter);
 app.use("/api/discord", discordWebhookRouter);
 app.use("/api/gap", gapRouter);
@@ -176,7 +178,7 @@ app.listen(PORT, () => {
     `[server] SPY quote endpoint (/api/quote/spy) uses Schwab when an authenticated connection is available; every quote is labeled LIVE, STALE, or MOCK.`,
   );
   console.log(
-    `[server] RTH VWAP, core session levels, RTH gap metrics, fixed 5/15/30-minute Opening Ranges, and Traditional daily/weekly pivots are derived deterministically from normalized SPY candles. The SPY current-date Options Chain, deterministic ATM straddle-Mark implied move, and returned-window 0DTE GEX and DEX proxies are live when Schwab returns eligible inputs; remaining advanced options analytics remain mock.`,
+    `[server] RTH VWAP, core session levels, RTH gap metrics, fixed 5/15/30-minute Opening Ranges, and Traditional daily/weekly pivots are derived deterministically from normalized SPY candles. The SPY current-date Options Chain, deterministic ATM straddle-Mark implied move, returned-window 0DTE GEX and DEX proxies, and deterministic Exposure Structure (ranked walls, cumulative Gamma-balance proxy, cliffs, and DEX anchor) are live when Schwab returns eligible inputs.`,
   );
   if (!hasDatabaseUrl) {
     console.log(

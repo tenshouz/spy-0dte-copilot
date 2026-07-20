@@ -10,6 +10,10 @@ import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
 import {
+  EXPOSURE_STRUCTURE_TRANSPORT_WARNING,
+  useDisplaySpyZeroDteExposureStructure,
+} from "@/hooks/use-spy-exposure-structure";
+import {
   OPENING_RANGE_TRANSPORT_WARNING,
   useDisplaySpyOpeningRange,
 } from "@/hooks/use-spy-opening-range";
@@ -25,6 +29,7 @@ import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import { getExposureStructureReferenceLines } from "@/lib/exposure-structure-view";
 import {
   getEasternMarketDate,
   getSessionStructureReferenceLines,
@@ -56,6 +61,7 @@ export function LiveChart() {
   const { display: levelsDisplay } = useDisplaySpySessionLevels();
   const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
   const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
+  const exposureStructureQuery = useDisplaySpyZeroDteExposureStructure();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
   // Never draw a MOCK VWAP over LIVE/STALE provider candles, or a provider
@@ -96,13 +102,22 @@ export function LiveChart() {
   // (weekends, holidays, or before current-date candles exist).
   const sessionStructure = sessionStructureQuery.display?.response ?? null;
   const chartMarketDate = getEasternMarketDate(display?.response.latestCandleAt ?? null);
-  const additionalPriceLines =
+  const sessionReferenceLines =
     display &&
     !isMockCandles &&
     sessionStructure &&
     chartMarketDate === sessionStructure.currentMarketDate
       ? getSessionStructureReferenceLines(sessionStructure)
       : [];
+  const exposureStructure = exposureStructureQuery.display?.response ?? null;
+  const exposureReferenceLines =
+    display &&
+    !isMockCandles &&
+    exposureStructure &&
+    chartMarketDate === exposureStructure.currentMarketDate
+      ? getExposureStructureReferenceLines(exposureStructure)
+      : [];
+  const additionalPriceLines = [...sessionReferenceLines, ...exposureReferenceLines];
 
   return (
     <Panel
@@ -156,6 +171,11 @@ export function LiveChart() {
           {sessionStructureQuery.display?.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">
               {SESSION_STRUCTURE_TRANSPORT_WARNING}
+            </p>
+          )}
+          {exposureStructureQuery.display?.transportFailed && (
+            <p className="px-4 pb-3 text-xs text-wait">
+              {EXPOSURE_STRUCTURE_TRANSPORT_WARNING}
             </p>
           )}
         </div>

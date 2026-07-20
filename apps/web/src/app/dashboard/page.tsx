@@ -3,6 +3,7 @@
 import { BiasCard } from "@/components/dashboard/bias-card";
 import { ConfidenceCard } from "@/components/dashboard/confidence-card";
 import { CurrentPriceCard } from "@/components/dashboard/current-price-card";
+import { ExposureStructurePanel } from "@/components/dashboard/exposure-structure-panel";
 import { LiveChart } from "@/components/dashboard/live-chart";
 import { MarketRegimeCard } from "@/components/dashboard/market-regime-card";
 import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
@@ -21,7 +22,6 @@ import {
   formatDashboardNumber,
   formatDashboardPrice,
   getDashboardPlanStateLabel,
-  summarizeGexConcentrations,
 } from "@/lib/dashboard-deterministic-view";
 
 function stateTone(state: string): "bull" | "wait" {
@@ -34,9 +34,6 @@ export default function DashboardPage() {
   const dex = useDisplaySpyZeroDteDexProxy();
   const assemblyQuery = useSpyZeroDteTradePlanAssembly();
   const assembly = assemblyQuery.isError ? null : assemblyQuery.data ?? null;
-  const gexSummary = gex.display
-    ? summarizeGexConcentrations(gex.display.response)
-    : null;
 
   return (
     <div className="mx-auto max-w-[1600px]">
@@ -51,41 +48,7 @@ export default function DashboardPage() {
         <ConfidenceCard />
         <MarketRegimeCard />
 
-        <Panel
-          title="GEX Concentrations"
-          isLoading={gex.isLoading}
-          isError={gex.isError}
-          className="lg:col-span-1"
-          action={
-            gex.display && (
-              <Badge variant={stateTone(gex.display.response.metricState)}>
-                {gex.display.response.metricState}
-              </Badge>
-            )
-          }
-        >
-          {gex.display && gexSummary && (
-            <div className="grid grid-cols-1 gap-2">
-              <MetricCard
-                label="Largest Positive Net GEX Strike"
-                value={formatDashboardPrice(gexSummary.largestPositiveStrike)}
-                sublabel={formatDashboardCompact(gexSummary.largestPositiveExposure)}
-                tone="bull"
-              />
-              <MetricCard
-                label="Largest Negative Net GEX Strike"
-                value={formatDashboardPrice(gexSummary.largestNegativeStrike)}
-                sublabel={formatDashboardCompact(gexSummary.largestNegativeExposure)}
-                tone="bear"
-              />
-              <MetricCard
-                label="Returned Strike Window"
-                value={`${formatDashboardPrice(gex.display.response.minimumReturnedStrike)} – ${formatDashboardPrice(gex.display.response.maximumReturnedStrike)}`}
-                sublabel={`${gex.display.response.coverageState} coverage · not a dealer wall model`}
-              />
-            </div>
-          )}
-        </Panel>
+        <ExposureStructurePanel compact className="lg:col-span-1" />
 
         <TodaysLevelsCard />
 

@@ -1297,6 +1297,275 @@ export const SpyZeroDteDexProxyResponseSchema = z
   });
 export type SpyZeroDteDexProxyResponse = z.infer<typeof SpyZeroDteDexProxyResponseSchema>;
 
+
+/** Deterministic advanced structure derived from the returned-window SPY 0DTE GEX/DEX proxies. */
+export const ExposureStructureEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type ExposureStructureEngineState = z.infer<
+  typeof ExposureStructureEngineStateSchema
+>;
+
+export const ExposureStructureCoverageStateSchema = z.enum([
+  "COMPLETE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type ExposureStructureCoverageState = z.infer<
+  typeof ExposureStructureCoverageStateSchema
+>;
+
+export const ExposureStructureGammaRegimeSchema = z.enum([
+  "CALL_DOMINANT",
+  "PUT_DOMINANT",
+  "BALANCED",
+  "UNAVAILABLE",
+]);
+export type ExposureStructureGammaRegime = z.infer<
+  typeof ExposureStructureGammaRegimeSchema
+>;
+
+export const ExposureStructureDexRegimeSchema = z.enum([
+  "POSITIVE",
+  "NEGATIVE",
+  "BALANCED",
+  "UNAVAILABLE",
+]);
+export type ExposureStructureDexRegime = z.infer<
+  typeof ExposureStructureDexRegimeSchema
+>;
+
+export const ExposureStructureWarningCodeSchema = z.enum([
+  "GEX_UNAVAILABLE",
+  "DEX_UNAVAILABLE",
+  "PARTIAL_GEX_COVERAGE",
+  "PARTIAL_DEX_COVERAGE",
+  "RETAINED_STALE_CHAIN",
+  "GAMMA_BALANCE_CROSS_NOT_FOUND",
+  "INSUFFICIENT_STRIKES_FOR_CLIFFS",
+]);
+export type ExposureStructureWarningCode = z.infer<
+  typeof ExposureStructureWarningCodeSchema
+>;
+
+export const ExposureWallSchema = z.object({
+  rank: z.number().int().min(1).max(3),
+  strikePrice: z.number().finite().positive(),
+  exposureMagnitude: z.number().finite().nonnegative(),
+  shareOfSidePercent: z.number().finite().min(0).max(100),
+  shareOfGrossGammaPercent: z.number().finite().min(0).max(100),
+  distanceFromUnderlyingPoints: z.number().finite(),
+  distanceFromUnderlyingPercent: z.number().finite(),
+});
+export type ExposureWall = z.infer<typeof ExposureWallSchema>;
+
+export const GammaFlipProxyStateSchema = z.enum([
+  "EXACT_STRIKE",
+  "INTERPOLATED",
+  "NO_CROSS",
+  "UNAVAILABLE",
+]);
+export type GammaFlipProxyState = z.infer<typeof GammaFlipProxyStateSchema>;
+
+export const GammaFlipProxySchema = z
+  .object({
+    state: GammaFlipProxyStateSchema,
+    estimatedStrike: z.number().finite().positive().nullable(),
+    lowerStrike: z.number().finite().positive().nullable(),
+    upperStrike: z.number().finite().positive().nullable(),
+    cumulativeNetGammaAtLower: z.number().finite().nullable(),
+    cumulativeNetGammaAtUpper: z.number().finite().nullable(),
+    distanceFromUnderlyingPoints: z.number().finite().nullable(),
+    distanceFromUnderlyingPercent: z.number().finite().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const calculated = [
+      value.estimatedStrike,
+      value.lowerStrike,
+      value.upperStrike,
+      value.cumulativeNetGammaAtLower,
+      value.cumulativeNetGammaAtUpper,
+      value.distanceFromUnderlyingPoints,
+      value.distanceFromUnderlyingPercent,
+    ];
+    if (value.state === "UNAVAILABLE" || value.state === "NO_CROSS") {
+      if (calculated.some((item) => item !== null)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unavailable or no-cross Gamma balance proxy cannot expose calculated levels",
+        });
+      }
+    } else if (calculated.some((item) => item === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Calculated Gamma balance proxy requires complete crossing metadata",
+      });
+    }
+  });
+export type GammaFlipProxy = z.infer<typeof GammaFlipProxySchema>;
+
+export const GammaCliffDirectionSchema = z.enum([
+  "POSITIVE_JUMP",
+  "NEGATIVE_JUMP",
+]);
+export type GammaCliffDirection = z.infer<typeof GammaCliffDirectionSchema>;
+
+export const GammaCliffSchema = z.object({
+  rank: z.number().int().min(1).max(3),
+  lowerStrike: z.number().finite().positive(),
+  upperStrike: z.number().finite().positive(),
+  midpointStrike: z.number().finite().positive(),
+  netGammaAtLower: z.number().finite(),
+  netGammaAtUpper: z.number().finite(),
+  netGammaChange: z.number().finite(),
+  absoluteGammaChange: z.number().finite().nonnegative(),
+  direction: GammaCliffDirectionSchema,
+  distanceFromUnderlyingPoints: z.number().finite(),
+  distanceFromUnderlyingPercent: z.number().finite(),
+});
+export type GammaCliff = z.infer<typeof GammaCliffSchema>;
+
+export const DexAnchorSchema = z.object({
+  strikePrice: z.number().finite().positive(),
+  netDeltaExposureProxy: z.number().finite(),
+  absoluteMagnitude: z.number().finite().nonnegative(),
+  distanceFromUnderlyingPoints: z.number().finite(),
+  distanceFromUnderlyingPercent: z.number().finite(),
+});
+export type DexAnchor = z.infer<typeof DexAnchorSchema>;
+
+export const SpyZeroDteExposureStructureResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_EXPOSURE_STRUCTURE"),
+    methodologyVersion: z.literal("EXPOSURE_STRUCTURE_V1"),
+    currentMarketDate: MarketDateSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: ExposureStructureEngineStateSchema,
+    metricState: z.enum(["LIVE", "STALE", "UNAVAILABLE"]),
+    coverageState: ExposureStructureCoverageStateSchema,
+    expirationDate: MarketDateSchema.nullable(),
+    underlyingPrice: z.number().finite().positive().nullable(),
+    minimumReturnedStrike: z.number().finite().positive().nullable(),
+    maximumReturnedStrike: z.number().finite().positive().nullable(),
+    eligibleGexStrikeCount: z.number().int().nonnegative(),
+    eligibleDexStrikeCount: z.number().int().nonnegative(),
+    grossGammaExposure: z.number().finite().nonnegative().nullable(),
+    returnedWindowNetGammaExposureProxy: z.number().finite().nullable(),
+    gammaRegime: ExposureStructureGammaRegimeSchema,
+    gammaRegimeRatioPercent: z.number().finite().min(-100).max(100).nullable(),
+    callWalls: z.array(ExposureWallSchema).max(3),
+    putWalls: z.array(ExposureWallSchema).max(3),
+    largestPositiveNetGexStrike: z.number().finite().positive().nullable(),
+    largestNegativeNetGexStrike: z.number().finite().positive().nullable(),
+    gammaFlipProxy: GammaFlipProxySchema,
+    gammaCliffs: z.array(GammaCliffSchema).max(3),
+    returnedWindowNetDeltaExposureProxy: z.number().finite().nullable(),
+    dexRegime: ExposureStructureDexRegimeSchema,
+    dexRegimeRatioPercent: z.number().finite().min(-100).max(100).nullable(),
+    largestAbsoluteDexAnchor: DexAnchorSchema.nullable(),
+    sourceGexMetricState: GexMetricStateSchema,
+    sourceGexCoverageState: GexCoverageStateSchema,
+    sourceDexMetricState: DexMetricStateSchema,
+    sourceDexCoverageState: DexCoverageStateSchema,
+    latestOptionQuoteAt: z.string().datetime().nullable(),
+    chainFetchedAt: z.string().datetime().nullable(),
+    warnings: z.array(ExposureStructureWarningCodeSchema),
+    disclosures: z.object({
+      returnedWindowOnly: z.literal(true),
+      openInterestMayBeStaleIntraday: z.literal(true),
+      analyticalCallPositivePutNegativeConvention: z.literal(true),
+      gammaFlipIsCumulativeBalanceProxy: z.literal(true),
+      notObservedDealerInventory: z.literal(true),
+      noStandaloneSignal: z.literal(true),
+      noPrivateAccountData: z.literal(true),
+      noPositionSizing: z.literal(true),
+      noOrderExecution: z.literal(true),
+    }),
+  })
+  .superRefine((value, ctx) => {
+    const available = value.engineState !== "UNAVAILABLE";
+    const calculated = [
+      value.underlyingPrice,
+      value.grossGammaExposure,
+      value.returnedWindowNetGammaExposureProxy,
+      value.gammaRegimeRatioPercent,
+    ];
+
+    if (available) {
+      if (
+        value.metricState === "UNAVAILABLE" ||
+        value.coverageState === "UNAVAILABLE" ||
+        value.expirationDate === null ||
+        calculated.some((item) => item === null) ||
+        value.callWalls.length === 0 ||
+        value.putWalls.length === 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Available Exposure Structure requires GEX coverage, walls, and calculated Gamma structure",
+        });
+      }
+    } else if (
+      value.metricState !== "UNAVAILABLE" ||
+      value.coverageState !== "UNAVAILABLE" ||
+      calculated.some((item) => item !== null) ||
+      value.callWalls.length > 0 ||
+      value.putWalls.length > 0 ||
+      value.gammaCliffs.length > 0 ||
+      value.largestAbsoluteDexAnchor !== null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable Exposure Structure cannot expose calculated structure",
+      });
+    }
+
+    if (value.expirationDate !== null && value.expirationDate !== value.currentMarketDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exposure Structure must use current-date expiration",
+      });
+    }
+
+    const callRanks = value.callWalls.map((wall) => wall.rank);
+    const putRanks = value.putWalls.map((wall) => wall.rank);
+    if (
+      callRanks.some((rank, index) => rank !== index + 1) ||
+      putRanks.some((rank, index) => rank !== index + 1)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exposure walls must use contiguous deterministic ranks",
+      });
+    }
+
+    if (
+      value.gammaRegime === "UNAVAILABLE" !==
+      (value.returnedWindowNetGammaExposureProxy === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma regime availability is inconsistent",
+      });
+    }
+
+    if (
+      value.dexRegime === "UNAVAILABLE" !==
+      (value.returnedWindowNetDeltaExposureProxy === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "DEX regime availability is inconsistent",
+      });
+    }
+  });
+export type SpyZeroDteExposureStructureResponse = z.infer<
+  typeof SpyZeroDteExposureStructureResponseSchema
+>;
+
 /** Integration-only readiness for the assembled SPY market context. */
 export const MarketContextStateSchema = z.enum(["READY", "DEGRADED", "UNAVAILABLE"]);
 export type MarketContextState = z.infer<typeof MarketContextStateSchema>;

@@ -9,6 +9,7 @@ import type {
   SpyRthGapResponse,
   VwapMetricState,
 } from "@spy-copilot/shared";
+import { ExposureStructurePanel } from "@/components/dashboard/exposure-structure-panel";
 import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { ChartContainer } from "@/components/panels/chart-container";
@@ -17,6 +18,7 @@ import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import { useDisplaySpyZeroDteExposureStructure } from "@/hooks/use-spy-exposure-structure";
 import {
   MARKET_CONTEXT_TRANSPORT_WARNING,
   useDisplaySpyZeroDteMarketContext,
@@ -46,6 +48,7 @@ import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import { getExposureStructureReferenceLines } from "@/lib/exposure-structure-view";
 import { formatEasternTime, formatPrice, formatSigned, formatVolume } from "@/lib/format";
 import {
   formatDeterministicState,
@@ -143,6 +146,7 @@ export default function MarketDataPage() {
   const contextQuery = useDisplaySpyZeroDteMarketContext();
   const marketStateQuery = useDisplaySpyZeroDteDeterministicMarketState();
   const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
+  const exposureStructureQuery = useDisplaySpyZeroDteExposureStructure();
 
   const quote = quoteQuery.display?.quote ?? null;
   const candleDisplay = candleQuery.display;
@@ -154,6 +158,7 @@ export default function MarketDataPage() {
   const context = contextQuery.display?.response ?? null;
   const marketState = marketStateQuery.display?.response ?? null;
   const sessionStructure = sessionStructureQuery.display?.response ?? null;
+  const exposureStructure = exposureStructureQuery.display?.response ?? null;
 
   const isMockCandles = candleResponse?.sourceState === "MOCK";
   const vwapSeries =
@@ -183,13 +188,21 @@ export default function MarketDataPage() {
       : null;
 
   const chartMarketDate = getEasternMarketDate(candleResponse?.latestCandleAt ?? null);
-  const additionalPriceLines =
+  const sessionReferenceLines =
     candleDisplay &&
     !isMockCandles &&
     sessionStructure &&
     chartMarketDate === sessionStructure.currentMarketDate
       ? getSessionStructureReferenceLines(sessionStructure)
       : [];
+  const exposureReferenceLines =
+    candleDisplay &&
+    !isMockCandles &&
+    exposureStructure &&
+    chartMarketDate === exposureStructure.currentMarketDate
+      ? getExposureStructureReferenceLines(exposureStructure)
+      : [];
+  const additionalPriceLines = [...sessionReferenceLines, ...exposureReferenceLines];
 
   const structureColumns: DataTableColumn<StructureLevelRow>[] = [
     { key: "label", header: "Level", render: (row) => row.label },
@@ -434,6 +447,8 @@ export default function MarketDataPage() {
         </Panel>
 
         <SessionStructurePanel className="lg:col-span-4" />
+
+        <ExposureStructurePanel className="lg:col-span-4" />
 
         <Panel
           title="Quote & Candle Context"
