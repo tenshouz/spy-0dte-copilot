@@ -9430,7 +9430,7 @@ export const SystemReadinessResponseSchema = z
   .object({
     product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
     methodologyVersion: SystemReadinessMethodologyVersionSchema,
-    releaseVersion: z.literal("1.1.1"),
+    releaseVersion: z.literal("1.2.0"),
     calculatedAt: z.string().datetime(),
     engineState: SystemReadinessEngineStateSchema,
     summary: z

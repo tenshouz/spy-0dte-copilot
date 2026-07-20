@@ -3,8 +3,13 @@
 import type { SpyDeterministicSessionStructureResponse } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  SPY_DERIVED_ACTIVE_POLL_INTERVAL_MS,
+  getSpyDerivedPollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
-export const SESSION_STRUCTURE_POLL_INTERVAL_MS = 15_000;
+export const SESSION_STRUCTURE_POLL_INTERVAL_MS = SPY_DERIVED_ACTIVE_POLL_INTERVAL_MS;
 export const SESSION_STRUCTURE_TRANSPORT_WARNING =
   "Session Structure service temporarily unavailable — showing the last validated response.";
 
@@ -12,8 +17,8 @@ export function useSpyDeterministicSessionStructure() {
   return useQuery({
     queryKey: ["spy-deterministic-session-structure"],
     queryFn: apiClient.getSpyDeterministicSessionStructure,
-    refetchInterval: SESSION_STRUCTURE_POLL_INTERVAL_MS,
-    staleTime: SESSION_STRUCTURE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyDerivedPollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (previous) => previous,
   });
 }

@@ -24,7 +24,7 @@ import { z } from "zod";
  */
 
 export { CANDLE_FRESHNESS_THRESHOLD_MS };
-export const CANDLE_SHORT_CACHE_MS = 15_000;
+export const CANDLE_SHORT_CACHE_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // STAGE 1 — raw provider validation (external model, separate from internal).

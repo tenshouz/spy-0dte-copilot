@@ -6,6 +6,7 @@ import {
 } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { LIVE_QUERY_RESPONSIVENESS_OPTIONS } from "@/lib/live-refresh-policy";
 
 export const SPY_OPTIONS_CHAIN_POLL_INTERVAL_MS = 30_000;
 export const OPTIONS_CHAIN_TRANSPORT_WARNING =
@@ -16,7 +17,7 @@ export function useSpyZeroDteOptionsChain() {
     queryKey: ["spy-zero-dte-options-chain"],
     queryFn: apiClient.getSpyZeroDteOptionsChain,
     refetchInterval: SPY_OPTIONS_CHAIN_POLL_INTERVAL_MS,
-    staleTime: SPY_OPTIONS_CHAIN_POLL_INTERVAL_MS,
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (previous) => previous,
   });
 }

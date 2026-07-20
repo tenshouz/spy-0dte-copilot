@@ -9,6 +9,7 @@ import type {
   SpyRthGapResponse,
   VwapMetricState,
 } from "@spy-copilot/shared";
+import { useMemo } from "react";
 import { ExposureStructurePanel } from "@/components/dashboard/exposure-structure-panel";
 import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
 import { PageHeader } from "@/components/layout/page-header";
@@ -18,6 +19,7 @@ import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import { useLiveDataAge } from "@/hooks/use-live-data-age";
 import { useDisplaySpyZeroDteExposureStructure } from "@/hooks/use-spy-exposure-structure";
 import {
   MARKET_CONTEXT_TRANSPORT_WARNING,
@@ -192,21 +194,33 @@ export default function MarketDataPage() {
       : null;
 
   const chartMarketDate = getEasternMarketDate(candleResponse?.latestCandleAt ?? null);
-  const sessionReferenceLines =
-    candleDisplay &&
-    !isMockCandles &&
-    sessionStructure &&
-    chartMarketDate === sessionStructure.currentMarketDate
-      ? getSessionStructureReferenceLines(sessionStructure)
-      : [];
-  const exposureReferenceLines =
-    candleDisplay &&
-    !isMockCandles &&
-    exposureStructure &&
-    chartMarketDate === exposureStructure.currentMarketDate
-      ? getExposureStructureReferenceLines(exposureStructure)
-      : [];
-  const additionalPriceLines = [...sessionReferenceLines, ...exposureReferenceLines];
+  const quoteMarketDate = getEasternMarketDate(quote?.quoteTimestamp ?? null);
+  const quoteMatchesCandleProvenance =
+    Boolean(candleResponse && quote) &&
+    ((candleResponse!.sourceState === "MOCK" && quote!.sourceState === "MOCK") ||
+      (candleResponse!.sourceState !== "MOCK" && quote!.sourceState !== "MOCK"));
+  const liveQuote =
+    quoteMatchesCandleProvenance && chartMarketDate === quoteMarketDate ? quote : null;
+  const candleAge = useLiveDataAge(candleResponse?.fetchedAt ?? null);
+  const quoteAge = useLiveDataAge(liveQuote?.fetchedAt ?? null);
+  const additionalPriceLines = useMemo(() => {
+    const sessionReferenceLines =
+      candleDisplay &&
+      !isMockCandles &&
+      sessionStructure &&
+      chartMarketDate === sessionStructure.currentMarketDate
+        ? getSessionStructureReferenceLines(sessionStructure)
+        : [];
+    const exposureReferenceLines =
+      candleDisplay &&
+      !isMockCandles &&
+      exposureStructure &&
+      chartMarketDate === exposureStructure.currentMarketDate
+        ? getExposureStructureReferenceLines(exposureStructure)
+        : [];
+
+    return [...sessionReferenceLines, ...exposureReferenceLines];
+  }, [candleDisplay, chartMarketDate, exposureStructure, isMockCandles, sessionStructure]);
 
   const structureColumns: DataTableColumn<StructureLevelRow>[] = [
     { key: "label", header: "Level", render: (row) => row.label },
@@ -391,6 +405,8 @@ export default function MarketDataPage() {
               <ChartContainer
                 candles={candleDisplay.chartCandles}
                 vwapSeries={vwapSeries}
+                livePrice={liveQuote?.lastPrice}
+                livePriceSourceState={liveQuote?.sourceState}
                 openingRangeHigh={openingRange?.openingRangeHigh}
                 openingRangeLow={openingRange?.openingRangeLow}
                 premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
@@ -402,6 +418,12 @@ export default function MarketDataPage() {
                 showDerivedSessionExtremes={false}
                 height={420}
               />
+              <p className="px-4 pb-2 text-right font-mono text-[10px] text-muted-foreground">
+                Live quote {quoteAge.label} · official 5m candles {candleAge.label}
+              </p>
+              <p className="px-4 pb-2 text-[10px] text-muted-foreground">
+                The live quote marker updates independently and never rewrites official candle OHLC.
+              </p>
               {candleDisplay.transportFailed && (
                 <p className="px-4 pb-3 text-xs text-wait">{CANDLE_TRANSPORT_WARNING}</p>
               )}

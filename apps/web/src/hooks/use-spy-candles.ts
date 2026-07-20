@@ -6,10 +6,16 @@ import {
   type SpyCandleResponse,
 } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { apiClient } from "@/lib/api-client";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  SPY_CANDLE_ACTIVE_POLL_INTERVAL_MS,
+  getSpyCandlePollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
-/** Frontend candle polling interval — named constant, independent of quote polling. */
-export const SPY_CANDLE_POLL_INTERVAL_MS = 30_000;
+/** Active-window interval retained as the public compatibility constant. */
+export const SPY_CANDLE_POLL_INTERVAL_MS = SPY_CANDLE_ACTIVE_POLL_INTERVAL_MS;
 
 /** Fixed safe warning for frontend transport failures — never a raw fetch error. */
 export const CANDLE_TRANSPORT_WARNING =
@@ -24,8 +30,8 @@ export function useSpyCandles() {
   return useQuery({
     queryKey: ["spy-candles"],
     queryFn: apiClient.getSpyCandles,
-    refetchInterval: SPY_CANDLE_POLL_INTERVAL_MS,
-    staleTime: SPY_CANDLE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyCandlePollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (prev) => prev,
   });
 }
@@ -52,6 +58,18 @@ export function useDisplaySpyCandles(): {
   isError: boolean;
 } {
   const { data, isLoading, isError } = useSpyCandles();
+  const chartCandles = useMemo<Candle[]>(
+    () =>
+      (data?.candles ?? []).map((candle) => ({
+        time: Math.floor(candle.timestamp / 1000),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      })),
+    [data?.candles],
+  );
 
   if (!data) {
     return { display: null, isLoading, isError };
@@ -66,15 +84,6 @@ export function useDisplaySpyCandles(): {
         : data.sourceState;
     response = { ...data, sourceState: downgraded, dataAgeMs: ageMs };
   }
-
-  const chartCandles: Candle[] = response.candles.map((c) => ({
-    time: Math.floor(c.timestamp / 1000),
-    open: c.open,
-    high: c.high,
-    low: c.low,
-    close: c.close,
-    volume: c.volume,
-  }));
 
   return {
     display: { response, chartCandles, transportFailed: isError },

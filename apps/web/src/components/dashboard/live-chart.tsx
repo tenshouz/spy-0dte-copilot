@@ -5,10 +5,13 @@ import type {
   SessionLevelValue,
   VwapMetricState,
 } from "@spy-copilot/shared";
+import { useMemo } from "react";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { CANDLE_TRANSPORT_WARNING, useDisplaySpyCandles } from "@/hooks/use-spy-candles";
+import { useLiveDataAge } from "@/hooks/use-live-data-age";
+import { useDisplaySpyQuote } from "@/hooks/use-spy-quote";
 import {
   EXPOSURE_STRUCTURE_TRANSPORT_WARNING,
   useDisplaySpyZeroDteExposureStructure,
@@ -57,6 +60,7 @@ function renderableLevel(level: SessionLevelValue): number | undefined {
 
 export function LiveChart() {
   const { display, isLoading, isError } = useDisplaySpyCandles();
+  const { display: quoteDisplay } = useDisplaySpyQuote();
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
   const { display: levelsDisplay } = useDisplaySpySessionLevels();
   const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
@@ -102,22 +106,36 @@ export function LiveChart() {
   // (weekends, holidays, or before current-date candles exist).
   const sessionStructure = sessionStructureQuery.display?.response ?? null;
   const chartMarketDate = getEasternMarketDate(display?.response.latestCandleAt ?? null);
-  const sessionReferenceLines =
-    display &&
-    !isMockCandles &&
-    sessionStructure &&
-    chartMarketDate === sessionStructure.currentMarketDate
-      ? getSessionStructureReferenceLines(sessionStructure)
-      : [];
+  const quoteMarketDate = getEasternMarketDate(quoteDisplay?.quote.quoteTimestamp ?? null);
+  const quoteMatchesCandleProvenance =
+    Boolean(display && quoteDisplay) &&
+    ((display!.response.sourceState === "MOCK" && quoteDisplay!.quote.sourceState === "MOCK") ||
+      (display!.response.sourceState !== "MOCK" && quoteDisplay!.quote.sourceState !== "MOCK"));
+  const liveQuote =
+    quoteMatchesCandleProvenance && chartMarketDate === quoteMarketDate
+      ? quoteDisplay!.quote
+      : null;
+  const candleAge = useLiveDataAge(display?.response.fetchedAt ?? null);
+  const quoteAge = useLiveDataAge(liveQuote?.fetchedAt ?? null);
   const exposureStructure = exposureStructureQuery.display?.response ?? null;
-  const exposureReferenceLines =
-    display &&
-    !isMockCandles &&
-    exposureStructure &&
-    chartMarketDate === exposureStructure.currentMarketDate
-      ? getExposureStructureReferenceLines(exposureStructure)
-      : [];
-  const additionalPriceLines = [...sessionReferenceLines, ...exposureReferenceLines];
+  const additionalPriceLines = useMemo(() => {
+    const sessionReferenceLines =
+      display &&
+      !isMockCandles &&
+      sessionStructure &&
+      chartMarketDate === sessionStructure.currentMarketDate
+        ? getSessionStructureReferenceLines(sessionStructure)
+        : [];
+    const exposureReferenceLines =
+      display &&
+      !isMockCandles &&
+      exposureStructure &&
+      chartMarketDate === exposureStructure.currentMarketDate
+        ? getExposureStructureReferenceLines(exposureStructure)
+        : [];
+
+    return [...sessionReferenceLines, ...exposureReferenceLines];
+  }, [chartMarketDate, display, exposureStructure, isMockCandles, sessionStructure]);
 
   return (
     <Panel
@@ -137,6 +155,9 @@ export function LiveChart() {
                 {VWAP_BADGE[vwapDisplay.response.metricState].label}
               </Badge>
             )}
+            <span className="font-mono text-[10px] text-muted-foreground">
+              Quote {quoteAge.label} · candles {candleAge.label}
+            </span>
           </div>
         )
       }
@@ -146,6 +167,8 @@ export function LiveChart() {
           <ChartContainer
             candles={display.chartCandles}
             vwapSeries={vwapSeries}
+            livePrice={liveQuote?.lastPrice}
+            livePriceSourceState={liveQuote?.sourceState}
             openingRangeHigh={openingRange?.openingRangeHigh ?? undefined}
             openingRangeLow={openingRange?.openingRangeLow ?? undefined}
             premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
@@ -156,6 +179,9 @@ export function LiveChart() {
             additionalPriceLines={additionalPriceLines}
             showDerivedSessionExtremes={false}
           />
+          <p className="px-4 pb-2 text-[10px] text-muted-foreground">
+            Live SPY marker follows the quote feed; official 5m candle OHLC is never rewritten.
+          </p>
           {display.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">{CANDLE_TRANSPORT_WARNING}</p>
           )}

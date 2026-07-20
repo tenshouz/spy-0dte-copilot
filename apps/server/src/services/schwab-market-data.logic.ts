@@ -16,7 +16,7 @@ import { z } from "zod";
 
 // Named constants (config candidates — deliberately not env vars yet):
 export { QUOTE_FRESHNESS_THRESHOLD_MS };
-export const QUOTE_SHORT_CACHE_MS = 5_000;
+export const QUOTE_SHORT_CACHE_MS = 2_000;
 export const RATE_LIMIT_DEFAULT_BACKOFF_MS = 60_000;
 export const RATE_LIMIT_MAX_BACKOFF_MS = 5 * 60_000;
 

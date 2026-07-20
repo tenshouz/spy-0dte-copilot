@@ -1,8 +1,8 @@
-# SPY 0DTE Copilot V1.1.1 Release Runbook
+# SPY 0DTE Copilot V1.2.0 Release Runbook
 
 ## Scope
 
-V1.1.1 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It does not create, modify, route, or execute orders.
+V1.2.0 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It does not create, modify, route, or execute orders.
 
 ## Required services
 
@@ -27,7 +27,7 @@ V1.1.1 is a local, single-user, SPY-only, read-only decision-support system. It 
 
 Run `npm run verify:v1` after Prisma generation. The command executes every backend and frontend specification, both TypeScript builds, lint, the frontend production build, tracked-secret checks, route safety checks, and whitespace validation.
 
-Premarket coverage is complete when the 07:00 through 09:25 ET five-minute buckets are present; 04:00–06:55 ET candles are outside the release methodology and do not block Trade Plans.
+Premarket coverage is complete when the 07:00 through 09:25 ET five-minute buckets are present; 04:00–06:55 ET candles are outside the release methodology and do not block Trade Plans. During weekdays from 07:00 through 16:15 ET, the frontend requests quotes every 5 seconds, official candles every 10 seconds, and derived Trade Plan products every 15 seconds. Returning to a visible tab or reconnecting the network triggers an immediate refresh.
 
 The explicit data probe on `/system` is intentionally manual because it may call Schwab. A closed market or a day without a current-date expiration can produce a legitimate stale or not-applicable result.
 
@@ -88,7 +88,7 @@ Use `git archive` from a committed checkpoint. Never include `.env`, database du
 - `config_invalid`: correct the exact HTTPS callback path and encryption-key requirements.
 - `not_connected`: run the OAuth connection flow from Settings.
 - `token_expired`: reconnect. Normal near-expiry access tokens are refreshed automatically; a definitive refresh rejection invalidates the stored token so stale authenticated data is not mislabeled live.
-- rate limit, timeout, or network failure: the market-data services apply bounded timeouts, in-flight deduplication, shared backoff, and honest LIVE/STALE/MOCK or UNAVAILABLE labeling.
+- rate limit, timeout, or network failure: the market-data services apply bounded timeouts, in-flight deduplication, shared backoff, and honest LIVE/STALE/MOCK or UNAVAILABLE labeling. If faster refresh produces a provider rate limit, do not lower the intervals further; allow the existing backoff to recover.
 
 Never paste access tokens, refresh tokens, client secrets, account hashes, raw provider bodies, or the Discord webhook URL into support messages.
 

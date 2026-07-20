@@ -2,6 +2,7 @@
 
 import type { QuoteSourceState, QuoteWarningCode } from "@spy-copilot/shared";
 import { Panel } from "@/components/panels/panel";
+import { useLiveDataAge } from "@/hooks/use-live-data-age";
 import { Badge } from "@/components/ui/badge";
 import { formatPrice, formatTime, formatVolume } from "@/lib/format";
 import { QUOTE_TRANSPORT_WARNING, useDisplaySpyQuote } from "@/hooks/use-spy-quote";
@@ -49,6 +50,7 @@ function StatValue({ label, value }: { label: string; value: string }) {
 export function CurrentPriceCard() {
   const { display, isLoading, isError } = useDisplaySpyQuote();
   const quote = display?.quote;
+  const quoteAge = useLiveDataAge(quote?.fetchedAt ?? null);
 
   return (
     <Panel
@@ -74,6 +76,7 @@ export function CurrentPriceCard() {
             <StatValue label="Ask" value={quote.askPrice != null ? `$${formatPrice(quote.askPrice)}` : "—"} />
             <StatValue label="Volume" value={quote.volume != null ? formatVolume(quote.volume) : "—"} />
             <StatValue label="Quote Time" value={formatTime(quote.quoteTimestamp)} />
+            <StatValue label="Updated" value={quoteAge.label} />
             <StatValue label="Session" value={MARKET_STATUS_LABEL[quote.marketStatus] ?? "—"} />
           </div>
           {display?.transportFailed && (

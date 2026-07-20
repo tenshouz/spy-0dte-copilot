@@ -3,9 +3,14 @@
 import { QUOTE_FRESHNESS_THRESHOLD_MS, type SpyQuote } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  SPY_QUOTE_ACTIVE_POLL_INTERVAL_MS,
+  getSpyQuotePollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
-/** Frontend polling interval — named constant, not a magic number. */
-export const SPY_QUOTE_POLL_INTERVAL_MS = 15_000;
+/** Active-window interval retained as the public compatibility constant. */
+export const SPY_QUOTE_POLL_INTERVAL_MS = SPY_QUOTE_ACTIVE_POLL_INTERVAL_MS;
 
 /**
  * The single quote query shared by the dashboard header and the Current
@@ -18,8 +23,8 @@ export function useSpyQuote() {
   return useQuery({
     queryKey: ["spy-quote"],
     queryFn: apiClient.getSpyQuote,
-    refetchInterval: SPY_QUOTE_POLL_INTERVAL_MS,
-    staleTime: SPY_QUOTE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyQuotePollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     // Keep showing the previous quote while a refetch is in flight — no flicker.
     placeholderData: (prev) => prev,
   });

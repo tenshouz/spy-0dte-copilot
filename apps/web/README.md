@@ -1,4 +1,4 @@
-# SPY 0DTE Copilot Web Application — V1.1.1
+# SPY 0DTE Copilot Web Application — V1.2.0
 
 The frontend is a Next.js 15 / React 19 / TypeScript dashboard. It consumes the Express API only through `src/lib/api-client.ts`, validates every response with the shared Zod contracts, and uses TanStack Query for bounded refresh behavior.
 
@@ -37,7 +37,7 @@ src/
 └── stores/       Client-only UI state
 ```
 
-The primary V1.1.1 pages use deterministic backend products. The Trade Plan page displays structural confidence separately from a versioned GEX/DEX soft-confirmation adjustment; exposure context cannot create a direction, pass or fail eligibility, or alter trigger, risk, objective, or contract rules. Premarket labels explicitly disclose the provider-aligned 07:00–09:30 ET methodology; missing 04:00–07:00 data does not reduce coverage completeness. Legacy mock compatibility hooks remain isolated and are not used by the main decision-support panels.
+The primary V1.2.0 pages use deterministic backend products. The Trade Plan page displays structural confidence separately from a versioned GEX/DEX soft-confirmation adjustment; exposure context cannot create a direction, pass or fail eligibility, or alter trigger, risk, objective, or contract rules. Premarket labels explicitly disclose the provider-aligned 07:00–09:30 ET methodology; missing 04:00–07:00 data does not reduce coverage completeness. The live refresh policy uses five-second quotes, ten-second official candle refreshes, fifteen-second derived Trade Plan refreshes, immediate focus/reconnect refetches, and an independent quote-driven chart marker that never rewrites candle OHLC. Data-age labels make quote and candle latency explicit. Legacy mock compatibility hooks remain isolated and are not used by the main decision-support panels.
 
 ## Safety boundary
 

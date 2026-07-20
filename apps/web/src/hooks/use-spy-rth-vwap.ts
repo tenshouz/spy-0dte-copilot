@@ -6,8 +6,12 @@ import {
   type VwapPoint,
 } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { apiClient } from "@/lib/api-client";
-import { SPY_CANDLE_POLL_INTERVAL_MS } from "@/hooks/use-spy-candles";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  getSpyCandlePollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
 export const RTH_VWAP_TRANSPORT_WARNING =
   "VWAP service temporarily unavailable — showing the last received value.";
@@ -16,8 +20,8 @@ export function useSpyRthVwap() {
   return useQuery({
     queryKey: ["spy-rth-vwap"],
     queryFn: apiClient.getSpyRthVwap,
-    refetchInterval: SPY_CANDLE_POLL_INTERVAL_MS,
-    staleTime: SPY_CANDLE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyCandlePollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (prev) => prev,
   });
 }
@@ -51,6 +55,10 @@ export function useDisplaySpyRthVwap(): {
   isError: boolean;
 } {
   const { data, isLoading, isError } = useSpyRthVwap();
+  const chartSeries = useMemo(
+    () => toChartSeries(data?.series ?? []),
+    [data?.series],
+  );
 
   if (!data) {
     return { display: null, isLoading, isError };
@@ -73,7 +81,7 @@ export function useDisplaySpyRthVwap(): {
   return {
     display: {
       response,
-      chartSeries: toChartSeries(response.series),
+      chartSeries,
       transportFailed: isError,
     },
     isLoading: false,

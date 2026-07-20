@@ -6,8 +6,11 @@ import {
   type SpySessionLevelsResponse,
 } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
-import { SPY_CANDLE_POLL_INTERVAL_MS } from "@/hooks/use-spy-candles";
 import { apiClient } from "@/lib/api-client";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  getSpyCandlePollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
 export const SESSION_LEVELS_TRANSPORT_WARNING =
   "Session levels service temporarily unavailable — showing the last received levels.";
@@ -16,8 +19,8 @@ export function useSpySessionLevels() {
   return useQuery({
     queryKey: ["spy-session-levels"],
     queryFn: apiClient.getSpySessionLevels,
-    refetchInterval: SPY_CANDLE_POLL_INTERVAL_MS,
-    staleTime: SPY_CANDLE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyCandlePollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (prev) => prev,
   });
 }

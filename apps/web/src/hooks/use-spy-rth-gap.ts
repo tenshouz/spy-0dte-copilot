@@ -5,8 +5,11 @@ import {
   type SpyRthGapResponse,
 } from "@spy-copilot/shared";
 import { useQuery } from "@tanstack/react-query";
-import { SPY_CANDLE_POLL_INTERVAL_MS } from "@/hooks/use-spy-candles";
 import { apiClient } from "@/lib/api-client";
+import {
+  LIVE_QUERY_RESPONSIVENESS_OPTIONS,
+  getSpyCandlePollIntervalMs,
+} from "@/lib/live-refresh-policy";
 
 export const RTH_GAP_TRANSPORT_WARNING =
   "RTH gap service temporarily unavailable — showing the last received result.";
@@ -15,8 +18,8 @@ export function useSpyRthGap() {
   return useQuery({
     queryKey: ["spy-rth-gap"],
     queryFn: apiClient.getSpyRthGap,
-    refetchInterval: SPY_CANDLE_POLL_INTERVAL_MS,
-    staleTime: SPY_CANDLE_POLL_INTERVAL_MS,
+    refetchInterval: () => getSpyCandlePollIntervalMs(),
+    ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
     placeholderData: (prev) => prev,
   });
 }
