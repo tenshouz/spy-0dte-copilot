@@ -84,6 +84,17 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
       ? (error as { status?: unknown }).status
       : null;
   if (
+    req.originalUrl.startsWith("/api/journal/spy/snapshots/automatic") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setDeterministicJournalHeaders(res);
+    res.status(400).json({
+      error: "INVALID_DETERMINISTIC_JOURNAL_AUTOMATIC_CAPTURE_REQUEST",
+    });
+    return;
+  }
+  if (
     req.originalUrl.startsWith("/api/journal/spy/snapshots") &&
     error instanceof SyntaxError &&
     status === 400

@@ -4,21 +4,34 @@ import type {
   DeterministicJournalOutcomeState,
   DeterministicJournalSnapshotEntry,
 } from "@spy-copilot/shared";
-import { Camera, Database, PencilLine, Save } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  Camera,
+  CirclePause,
+  CirclePlay,
+  Database,
+  PencilLine,
+  RefreshCw,
+  Save,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  AUTOMATIC_JOURNAL_CAPTURE_CADENCE_OPTIONS,
+  useAutomaticDeterministicJournalCapture,
   useCaptureDeterministicJournalSnapshot,
   useDeterministicJournalSnapshots,
   useUpdateDeterministicJournalOutcome,
+  type AutomaticJournalCaptureCadence,
 } from "@/hooks/use-journal";
 import { formatEasternTime } from "@/lib/format";
 import {
+  automaticCaptureResultCopy,
   captureResultCopy,
+  JOURNAL_CAPTURE_MODE_LABEL,
   JOURNAL_OUTCOME_LABEL,
   JOURNAL_OUTCOME_OPTIONS,
   JOURNAL_PLAN_STATE_LABEL,
@@ -28,6 +41,7 @@ import {
   validateJournalOutcomeDraft,
   type JournalOutcomeDraft,
 } from "@/lib/deterministic-journal-view";
+import { cn } from "@/lib/utils";
 
 function stateVariant(
   state: DeterministicJournalSnapshotEntry["planState"],
@@ -55,6 +69,18 @@ function outcomeVariant(
   return "default";
 }
 
+function automaticTone(
+  state: "CAPTURED" | "DUPLICATE_SUPPRESSED" | "NO_CAPTURE" | "UNAVAILABLE",
+): string {
+  if (state === "CAPTURED") return "border-bull/30 bg-bull-muted text-bull";
+  if (state === "UNAVAILABLE") return "border-bear/30 bg-bear-muted text-bear";
+  return "border-wait/30 bg-wait-muted text-wait";
+}
+
+function formatCadence(milliseconds: number): string {
+  return `${milliseconds / 1000} sec`;
+}
+
 const EMPTY_DRAFT: JournalOutcomeDraft = {
   outcomeState: "UNREVIEWED",
   realizedPnlDollars: "",
@@ -66,10 +92,28 @@ export default function JournalPage() {
   const journalQuery = useDeterministicJournalSnapshots();
   const captureMutation = useCaptureDeterministicJournalSnapshot();
   const outcomeMutation = useUpdateDeterministicJournalOutcome();
+  const [automaticCaptureEnabled, setAutomaticCaptureEnabled] = useState(false);
+  const [automaticCaptureCadence, setAutomaticCaptureCadence] =
+    useState<AutomaticJournalCaptureCadence>(30_000);
+  const automaticCaptureQuery = useAutomaticDeterministicJournalCapture(
+    automaticCaptureEnabled,
+    automaticCaptureCadence,
+  );
   const journal = journalQuery.data ?? null;
+  const refetchJournal = journalQuery.refetch;
   const entries = journal?.entries ?? EMPTY_ENTRIES;
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
   const [outcomeDraft, setOutcomeDraft] = useState<JournalOutcomeDraft>(EMPTY_DRAFT);
+
+  useEffect(() => {
+    if (automaticCaptureQuery.data?.automaticCaptureState === "CAPTURED") {
+      void refetchJournal();
+    }
+  }, [
+    automaticCaptureQuery.data?.automaticCaptureState,
+    automaticCaptureQuery.data?.entry?.id,
+    refetchJournal,
+  ]);
 
   const selectedEntry = useMemo(
     () => entries.find((entry) => entry.id === selectedSnapshotId) ?? null,
@@ -106,6 +150,15 @@ export default function JournalPage() {
           <div className="font-mono text-xs">{formatEasternTime(row.capturedAt)}</div>
           <div className="text-[11px] text-muted-foreground">{row.currentMarketDate}</div>
         </div>
+      ),
+    },
+    {
+      key: "captureMode",
+      header: "Capture",
+      render: (row) => (
+        <Badge variant={row.captureMode === "AUTOMATIC_CANDIDATE" ? "accent" : "default"}>
+          {JOURNAL_CAPTURE_MODE_LABEL[row.captureMode]}
+        </Badge>
       ),
     },
     {
@@ -182,7 +235,7 @@ export default function JournalPage() {
     <div className="mx-auto max-w-[1500px]">
       <PageHeader
         title="Trade Journal"
-        description="Persist deterministic Trade Plan snapshots and explicitly annotate outcomes for later analysis. Nothing is inferred and no trade is created or executed."
+        description="Persist deterministic Trade Plan snapshots, opt into candidate-based automatic capture, and explicitly annotate outcomes. Nothing is inferred and no trade is created or executed."
       />
 
       <Panel title="Deterministic Journal Snapshot" className="mb-3">
@@ -193,9 +246,10 @@ export default function JournalPage() {
               PostgreSQL-backed snapshot history
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Save captures the current ASSEMBLY_V1 state and complete structured
-              source snapshot. Outcome review is explicit and user-entered; the
-              dashboard does not infer whether a trade was taken or calculate P&amp;L.
+              Manual save captures the current ASSEMBLY_V1 state and complete
+              structured source snapshot. Outcome review remains explicit and
+              user-entered; the dashboard does not infer whether a trade was
+              taken or calculate P&amp;L.
             </p>
           </div>
           <Button
@@ -246,6 +300,132 @@ export default function JournalPage() {
       </Panel>
 
       <Panel
+        title="Automatic Candidate Capture"
+        className="mb-3"
+        action={
+          <Badge variant={automaticCaptureEnabled ? "bull" : "default"}>
+            {automaticCaptureEnabled ? "Running" : "Stopped"}
+          </Badge>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold">
+                Persist each new meaningful Trade Plan candidate once while this page remains open.
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                This is an explicit opt-in foreground browser session, not a background
+                scheduler. READY, WAITING, NO-CONTRACT, and NOT-QUALIFIED candidates
+                are deduplicated in PostgreSQL by user and stable candidate key. Closed
+                sessions, no-setup states, and unavailable sources are not captured.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Cadence
+                <select
+                  aria-label="Automatic journal capture cadence"
+                  value={automaticCaptureCadence}
+                  disabled={automaticCaptureEnabled}
+                  onChange={(event) =>
+                    setAutomaticCaptureCadence(
+                      Number(event.target.value) as AutomaticJournalCaptureCadence,
+                    )
+                  }
+                  className="block h-9 rounded-md border border-panel-border bg-background px-3 font-mono text-xs text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {AUTOMATIC_JOURNAL_CAPTURE_CADENCE_OPTIONS.map((cadence) => (
+                    <option key={cadence} value={cadence}>
+                      {formatCadence(cadence)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {automaticCaptureEnabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAutomaticCaptureEnabled(false)}
+                >
+                  <CirclePause className="h-4 w-4" />
+                  Stop automatic capture
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setAutomaticCaptureEnabled(true)}
+                >
+                  <CirclePlay className="h-4 w-4" />
+                  Start automatic capture
+                </Button>
+              )}
+
+              <Button
+                type="button"
+                variant="subtle"
+                size="sm"
+                disabled={!automaticCaptureEnabled || automaticCaptureQuery.isFetching}
+                onClick={() => void automaticCaptureQuery.refetch()}
+              >
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    automaticCaptureQuery.isFetching && "animate-spin",
+                  )}
+                />
+                Evaluate now
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-2 text-xs sm:grid-cols-4">
+            <div className="rounded-md border border-panel-border bg-background/30 p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Automatic Capture</div>
+              <div className="mt-1 font-mono font-semibold">
+                {automaticCaptureEnabled ? "RUNNING" : "STOPPED"}
+              </div>
+            </div>
+            <div className="rounded-md border border-panel-border bg-background/30 p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Cadence</div>
+              <div className="mt-1 font-mono font-semibold">{formatCadence(automaticCaptureCadence)}</div>
+            </div>
+            <div className="rounded-md border border-panel-border bg-background/30 p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Latest Outcome</div>
+              <div className="mt-1 font-mono font-semibold">
+                {automaticCaptureQuery.data?.automaticCaptureState ?? "—"}
+              </div>
+            </div>
+            <div className="rounded-md border border-panel-border bg-background/30 p-3">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Duplicate Protection</div>
+              <div className="mt-1 font-mono font-semibold">DATABASE UNIQUE</div>
+            </div>
+          </div>
+
+          {automaticCaptureQuery.isError ? (
+            <div className="rounded-md border border-bear/30 bg-bear-muted px-3 py-2 text-xs text-bear">
+              The automatic journal endpoint failed before returning a validated result.
+            </div>
+          ) : automaticCaptureQuery.data ? (
+            <div
+              className={`rounded-md border px-3 py-2 text-xs ${automaticTone(
+                automaticCaptureQuery.data.automaticCaptureState,
+              )}`}
+            >
+              {automaticCaptureResultCopy(automaticCaptureQuery.data)}
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-panel-border px-3 py-2 text-xs text-muted-foreground">
+              Automatic capture is off. Starting it does not persist across page refreshes.
+            </div>
+          )}
+        </div>
+      </Panel>
+
+      <Panel
         title={`Persisted Snapshots (${entries.length})`}
         isLoading={journalQuery.isLoading}
         isError={journalQuery.isError}
@@ -273,7 +453,7 @@ export default function JournalPage() {
                   {selectedEntry.currentMarketDate} · {JOURNAL_PLAN_STATE_LABEL[selectedEntry.planState]}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Captured {formatEasternTime(selectedEntry.capturedAt)} · Snapshot ID {selectedEntry.id}
+                  Captured {formatEasternTime(selectedEntry.capturedAt)} · {JOURNAL_CAPTURE_MODE_LABEL[selectedEntry.captureMode]} · Snapshot ID {selectedEntry.id}
                 </p>
               </div>
               <Badge variant={outcomeVariant(selectedEntry.outcomeState)}>
@@ -373,9 +553,10 @@ export default function JournalPage() {
       </Panel>
 
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        Outcome state, realized P&amp;L, and notes are explicit user inputs. Automatic
-        capture, performance analytics, expectancy, and setup-level statistics remain
-        separate future milestones.
+        Automatic capture records deterministic candidate snapshots only while this
+        Journal page remains open. Outcome state, realized P&amp;L, and notes remain
+        explicit user inputs. Performance analytics and expectancy remain separate
+        future milestones.
       </p>
     </div>
   );

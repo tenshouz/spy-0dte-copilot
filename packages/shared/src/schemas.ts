@@ -7026,9 +7026,9 @@ export type DiscordAutomaticScheduledReportDeliveryResponse = z.infer<
   typeof DiscordAutomaticScheduledReportDeliveryResponseSchema
 >;
 
-/** Explicit, persistent capture and user-entered outcome annotation for one current deterministic Trade Plan Assembly snapshot. */
+/** Explicit and opt-in automatic persistent capture plus user-entered outcome annotation for deterministic Trade Plan Assembly snapshots. */
 export const DeterministicJournalMethodologyVersionSchema = z.literal(
-  "JOURNAL_SNAPSHOT_V2",
+  "JOURNAL_SNAPSHOT_V3",
 );
 export type DeterministicJournalMethodologyVersion = z.infer<
   typeof DeterministicJournalMethodologyVersionSchema
@@ -7040,6 +7040,21 @@ export const DeterministicJournalEngineStateSchema = z.enum([
 ]);
 export type DeterministicJournalEngineState = z.infer<
   typeof DeterministicJournalEngineStateSchema
+>;
+
+export const DeterministicJournalCaptureModeSchema = z.enum([
+  "EXPLICIT",
+  "AUTOMATIC_CANDIDATE",
+]);
+export type DeterministicJournalCaptureMode = z.infer<
+  typeof DeterministicJournalCaptureModeSchema
+>;
+
+export const DeterministicJournalSourceReferenceTypeSchema = z.literal(
+  "TRADE_PLAN_ALERT_CANDIDATE",
+);
+export type DeterministicJournalSourceReferenceType = z.infer<
+  typeof DeterministicJournalSourceReferenceTypeSchema
 >;
 
 export const DeterministicJournalOutcomeStateSchema = z.enum([
@@ -7057,6 +7072,9 @@ export const DeterministicJournalPrimaryReasonCodeSchema = z.enum([
   "JOURNAL_ENTRIES_AVAILABLE",
   "JOURNAL_EMPTY",
   "JOURNAL_SNAPSHOT_CAPTURED",
+  "JOURNAL_AUTOMATIC_SNAPSHOT_CAPTURED",
+  "JOURNAL_AUTOMATIC_DUPLICATE_SUPPRESSED",
+  "JOURNAL_AUTOMATIC_NO_ELIGIBLE_CANDIDATE",
   "JOURNAL_OUTCOME_UPDATED",
   "JOURNAL_SNAPSHOT_NOT_FOUND",
   "SOURCE_ASSEMBLY_UNAVAILABLE",
@@ -7124,6 +7142,9 @@ export const DeterministicJournalSnapshotEntrySchema = z
     currentMarketDate: MarketDateSchema,
     sourceCalculatedAt: z.string().datetime(),
     capturedAt: z.string().datetime(),
+    captureMode: DeterministicJournalCaptureModeSchema,
+    sourceReferenceType:
+      DeterministicJournalSourceReferenceTypeSchema.nullable(),
     engineState: TradePlanAssemblyEngineStateSchema,
     planState: DeterministicTradePlanStateSchema,
     direction: AssembledTradePlanDirectionSchema,
@@ -7156,6 +7177,22 @@ export const DeterministicJournalSnapshotEntrySchema = z
         path: ["outcomeUpdatedAt"],
       });
     }
+
+    if (value.captureMode === "EXPLICIT") {
+      if (value.sourceReferenceType !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Explicit journal capture cannot expose an automatic source reference",
+          path: ["sourceReferenceType"],
+        });
+      }
+    } else if (value.sourceReferenceType !== "TRADE_PLAN_ALERT_CANDIDATE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Automatic candidate capture requires candidate source provenance",
+        path: ["sourceReferenceType"],
+      });
+    }
   });
 export type DeterministicJournalSnapshotEntry = z.infer<
   typeof DeterministicJournalSnapshotEntrySchema
@@ -7163,11 +7200,14 @@ export type DeterministicJournalSnapshotEntry = z.infer<
 
 export const DeterministicJournalDisclosuresSchema = z
   .object({
-    explicitCaptureOnly: z.literal(true),
+    explicitCaptureAvailable: z.literal(true),
+    automaticCandidateCaptureAvailable: z.literal(true),
+    automaticCaptureForegroundOnly: z.literal(true),
     currentSnapshotOnly: z.literal(true),
     deterministicSourceOnly: z.literal(true),
     databasePersistence: z.literal(true),
-    noAutomaticCapture: z.literal(true),
+    databaseDuplicateSuppression: z.literal(true),
+    noBackgroundScheduler: z.literal(true),
     userEnteredOutcomeOnly: z.literal(true),
     noAutomaticOutcomeInference: z.literal(true),
     noPerformanceAnalytics: z.literal(true),
@@ -7250,8 +7290,12 @@ export const DeterministicJournalCaptureResponseSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message });
 
     if (value.primaryReasonCode === "JOURNAL_SNAPSHOT_CAPTURED") {
-      if (value.engineState !== "AVAILABLE" || value.entry === null) {
-        issue("Captured journal response requires an available entry");
+      if (
+        value.engineState !== "AVAILABLE" ||
+        value.entry === null ||
+        value.entry.captureMode !== "EXPLICIT"
+      ) {
+        issue("Captured journal response requires an explicit available entry");
       }
     } else if (value.entry !== null || value.engineState !== "UNAVAILABLE") {
       issue("Uncaptured journal response must be unavailable and entry-free");
@@ -7259,6 +7303,157 @@ export const DeterministicJournalCaptureResponseSchema = z
   });
 export type DeterministicJournalCaptureResponse = z.infer<
   typeof DeterministicJournalCaptureResponseSchema
+>;
+
+export const DeterministicJournalAutomaticCaptureRequestSchema = z
+  .object({})
+  .strict();
+export type DeterministicJournalAutomaticCaptureRequest = z.infer<
+  typeof DeterministicJournalAutomaticCaptureRequestSchema
+>;
+
+export const DeterministicJournalAutomaticCaptureStateSchema = z.enum([
+  "CAPTURED",
+  "DUPLICATE_SUPPRESSED",
+  "NO_CAPTURE",
+  "UNAVAILABLE",
+]);
+export type DeterministicJournalAutomaticCaptureState = z.infer<
+  typeof DeterministicJournalAutomaticCaptureStateSchema
+>;
+
+export const DeterministicJournalAutomaticCandidateSummarySchema = z
+  .object({
+    alertState: TradePlanAlertCandidateStateSchema,
+    primaryReasonCode: TradePlanAlertCandidatePrimaryReasonCodeSchema,
+    category: TradePlanAlertCategorySchema.nullable(),
+    severity: TradePlanAlertSeveritySchema.nullable(),
+    direction: AssembledTradePlanDirectionSchema.nullable(),
+    deduplicationKey: z.string().min(1).nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const hasCandidate = value.alertState === "CANDIDATE";
+    const candidateFields = [
+      value.category,
+      value.severity,
+      value.direction,
+      value.deduplicationKey,
+    ];
+    if (hasCandidate && candidateFields.some((field) => field === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Candidate summary requires complete candidate provenance",
+      });
+    }
+    if (!hasCandidate && candidateFields.some((field) => field !== null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-candidate summary cannot expose candidate provenance",
+      });
+    }
+  });
+export type DeterministicJournalAutomaticCandidateSummary = z.infer<
+  typeof DeterministicJournalAutomaticCandidateSummarySchema
+>;
+
+export const DeterministicJournalAutomaticCaptureResponseSchema = z
+  .object({
+    product: z.literal(
+      "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_AUTOMATIC_CAPTURE",
+    ),
+    methodologyVersion: DeterministicJournalMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: DeterministicJournalEngineStateSchema,
+    automaticCaptureState: DeterministicJournalAutomaticCaptureStateSchema,
+    primaryReasonCode: DeterministicJournalPrimaryReasonCodeSchema,
+    warningCode: DeterministicJournalWarningCodeSchema.nullable(),
+    entry: DeterministicJournalSnapshotEntrySchema.nullable(),
+    sourceCandidate: DeterministicJournalAutomaticCandidateSummarySchema.nullable(),
+    disclosures: DeterministicJournalDisclosuresSchema,
+    methodology: z
+      .object({
+        sourceProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
+        ),
+        sourceMethodology: z.literal("ASSEMBLY_V1"),
+        candidateProduct: z.literal(
+          "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE",
+        ),
+        candidateMethodology: z.literal("TRADE_PLAN_ALERT_CANDIDATE_V1"),
+        eligibleCandidateStates: z.tuple([
+          z.literal("READY"),
+          z.literal("WAITING_FOR_TRIGGER"),
+          z.literal("NO_QUALIFIED_CONTRACT"),
+          z.literal("NOT_QUALIFIED"),
+        ]),
+        triggerMethod: z.literal("EXPLICIT_FOREGROUND_POST_POLL"),
+        deduplicationMethod: z.literal(
+          "POSTGRESQL_UNIQUE_USER_SOURCE_REFERENCE_KEY",
+        ),
+        persistenceMethod: z.literal("POSTGRESQL"),
+        schedulerMethod: z.literal("NONE"),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.automaticCaptureState === "CAPTURED") {
+      if (
+        value.primaryReasonCode !== "JOURNAL_AUTOMATIC_SNAPSHOT_CAPTURED" ||
+        value.engineState !== "AVAILABLE" ||
+        value.entry === null ||
+        value.entry.captureMode !== "AUTOMATIC_CANDIDATE" ||
+        value.sourceCandidate?.alertState !== "CANDIDATE"
+      ) {
+        issue("Captured automatic response requires one new automatic entry");
+      }
+      return;
+    }
+
+    if (value.automaticCaptureState === "DUPLICATE_SUPPRESSED") {
+      if (
+        value.primaryReasonCode !== "JOURNAL_AUTOMATIC_DUPLICATE_SUPPRESSED" ||
+        value.engineState !== "AVAILABLE" ||
+        value.entry === null ||
+        value.entry.captureMode !== "AUTOMATIC_CANDIDATE" ||
+        value.sourceCandidate?.alertState !== "CANDIDATE"
+      ) {
+        issue("Duplicate automatic response requires the existing automatic entry");
+      }
+      return;
+    }
+
+    if (value.automaticCaptureState === "NO_CAPTURE") {
+      if (
+        value.primaryReasonCode !== "JOURNAL_AUTOMATIC_NO_ELIGIBLE_CANDIDATE" ||
+        value.engineState !== "AVAILABLE" ||
+        value.entry !== null ||
+        value.sourceCandidate === null ||
+        value.sourceCandidate.alertState === "CANDIDATE"
+      ) {
+        issue("No-capture response requires one non-candidate source summary");
+      }
+      return;
+    }
+
+    if (
+      value.engineState !== "UNAVAILABLE" ||
+      value.entry !== null ||
+      ![
+        "SOURCE_ASSEMBLY_UNAVAILABLE",
+        "DATABASE_NOT_CONFIGURED",
+        "DATABASE_UNAVAILABLE",
+      ].includes(value.primaryReasonCode)
+    ) {
+      issue("Unavailable automatic response must be source or database related");
+    }
+  });
+export type DeterministicJournalAutomaticCaptureResponse = z.infer<
+  typeof DeterministicJournalAutomaticCaptureResponseSchema
 >;
 
 export const DeterministicJournalOutcomeUpdateRequestSchema = z

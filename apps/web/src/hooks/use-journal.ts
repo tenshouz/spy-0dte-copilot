@@ -41,3 +41,28 @@ export function useUpdateDeterministicJournalOutcome() {
     },
   });
 }
+
+export const AUTOMATIC_JOURNAL_CAPTURE_CADENCE_OPTIONS = [15_000, 30_000, 60_000] as const;
+export type AutomaticJournalCaptureCadence =
+  (typeof AUTOMATIC_JOURNAL_CAPTURE_CADENCE_OPTIONS)[number];
+
+export function useAutomaticDeterministicJournalCapture(
+  enabled: boolean,
+  cadenceMilliseconds: AutomaticJournalCaptureCadence,
+) {
+  return useQuery({
+    queryKey: [
+      "deterministic-journal-automatic-capture",
+      "JOURNAL_SNAPSHOT_V3",
+      cadenceMilliseconds,
+    ],
+    queryFn: apiClient.automaticallyCaptureDeterministicJournalSnapshot,
+    enabled,
+    refetchInterval: enabled ? cadenceMilliseconds : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+    staleTime: 0,
+  });
+}

@@ -1,5 +1,7 @@
 import {
   DeterministicJournalOutcomeUpdateRequestSchema,
+  type DeterministicJournalAutomaticCaptureResponse,
+  type DeterministicJournalCaptureMode,
   type DeterministicJournalCaptureResponse,
   type DeterministicJournalOutcomeState,
   type DeterministicJournalOutcomeUpdateRequest,
@@ -17,6 +19,14 @@ export const JOURNAL_PLAN_STATE_LABEL: Record<DeterministicTradePlanState, strin
   NO_SETUP: "No setup",
   NOT_APPLICABLE: "Not applicable",
   UNAVAILABLE: "Unavailable",
+};
+
+export const JOURNAL_CAPTURE_MODE_LABEL: Record<
+  DeterministicJournalCaptureMode,
+  string
+> = {
+  EXPLICIT: "Manual",
+  AUTOMATIC_CANDIDATE: "Automatic",
 };
 
 export const JOURNAL_OUTCOME_LABEL: Record<DeterministicJournalOutcomeState, string> = {
@@ -90,7 +100,13 @@ export function journalReasonCopy(
     case "JOURNAL_EMPTY":
       return "No deterministic snapshots have been saved yet.";
     case "JOURNAL_SNAPSHOT_CAPTURED":
-      return "The current deterministic Trade Plan snapshot was saved.";
+      return "The current deterministic Trade Plan snapshot was saved manually.";
+    case "JOURNAL_AUTOMATIC_SNAPSHOT_CAPTURED":
+      return "A new meaningful deterministic candidate was captured automatically.";
+    case "JOURNAL_AUTOMATIC_DUPLICATE_SUPPRESSED":
+      return "This deterministic candidate is already persisted, so no duplicate was created.";
+    case "JOURNAL_AUTOMATIC_NO_ELIGIBLE_CANDIDATE":
+      return "No meaningful deterministic candidate is currently eligible for automatic capture.";
     case "JOURNAL_OUTCOME_UPDATED":
       return "The user-entered outcome annotation was saved.";
     case "JOURNAL_SNAPSHOT_NOT_FOUND":
@@ -106,6 +122,12 @@ export function journalReasonCopy(
 
 export function captureResultCopy(
   response: DeterministicJournalCaptureResponse,
+): string {
+  return journalReasonCopy(response.primaryReasonCode);
+}
+
+export function automaticCaptureResultCopy(
+  response: DeterministicJournalAutomaticCaptureResponse,
 ): string {
   return journalReasonCopy(response.primaryReasonCode);
 }

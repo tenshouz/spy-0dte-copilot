@@ -107,6 +107,9 @@ model DeterministicJournalSnapshot {
   currentMarketDate      String
   sourceCalculatedAt     DateTime
   capturedAt             DateTime @default(now())
+  captureMode            String   @default("EXPLICIT")
+  sourceReferenceType    String?
+  sourceReferenceKey     String?
   engineState            String
   planState              String
   direction              String
@@ -124,6 +127,8 @@ model DeterministicJournalSnapshot {
   @@index([userId, capturedAt])
   @@index([userId, currentMarketDate])
   @@index([userId, outcomeState])
+  @@index([userId, captureMode])
+  @@unique([userId, sourceReferenceKey])
 }
 
 model DiscordLog {

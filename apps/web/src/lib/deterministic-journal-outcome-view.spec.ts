@@ -1,5 +1,5 @@
 /**
- * Deterministic UI tests for JOURNAL_SNAPSHOT_V2 outcome annotation.
+ * Deterministic UI tests for JOURNAL_SNAPSHOT_V3 outcome annotation.
  * Run: npx --no-install tsx apps/web/src/lib/deterministic-journal-outcome-view.spec.ts
  */
 import assert from "node:assert/strict";
@@ -18,10 +18,12 @@ function entry(
     id: "journal-1",
     symbol: "SPY",
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_SNAPSHOT",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V3",
     currentMarketDate: "2026-07-20",
     sourceCalculatedAt: "2026-07-20T14:34:59.000Z",
     capturedAt: "2026-07-20T14:35:00.000Z",
+    captureMode: "EXPLICIT",
+    sourceReferenceType: null,
     engineState: "AVAILABLE",
     planState: "READY",
     direction: "CALLS",
@@ -174,9 +176,11 @@ test("outcome hook is an explicit mutation with no polling", () => {
     resolve(process.cwd(), "apps/web/src/hooks/use-journal.ts"),
     "utf8",
   );
-  assert.equal(source.includes("useUpdateDeterministicJournalOutcome"), true);
-  assert.equal(source.includes("mutationFn"), true);
-  assert.equal(source.includes("refetchInterval"), false);
+  const outcomeSection = source.split(
+    "export function useUpdateDeterministicJournalOutcome",
+  )[1]?.split("export const AUTOMATIC_JOURNAL_CAPTURE_CADENCE_OPTIONS")[0] ?? "";
+  assert.equal(outcomeSection.includes("mutationFn"), true);
+  assert.equal(outcomeSection.includes("refetchInterval"), false);
 });
 
 for (const [name, fn] of tests) {

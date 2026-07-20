@@ -8,6 +8,8 @@ import {
   DiscordScheduledReportDeliveryRequestSchema,
   DiscordScheduledReportDeliveryResponseSchema,
   DeterministicScheduledReportRequestSchema,
+  DeterministicJournalAutomaticCaptureRequestSchema,
+  DeterministicJournalAutomaticCaptureResponseSchema,
   DeterministicJournalCaptureRequestSchema,
   DeterministicJournalCaptureResponseSchema,
   DeterministicJournalOutcomeUpdateRequestSchema,
@@ -56,6 +58,8 @@ import {
   type DiscordScheduledReportDeliveryRequest,
   type DiscordScheduledReportDeliveryResponse,
   type DeterministicScheduledReportRequest,
+  type DeterministicJournalAutomaticCaptureRequest,
+  type DeterministicJournalAutomaticCaptureResponse,
   type DeterministicJournalCaptureRequest,
   type DeterministicJournalCaptureResponse,
   type DeterministicJournalOutcomeUpdateRequest,
@@ -187,6 +191,16 @@ export const apiClient = {
       {},
       DeterministicJournalCaptureRequestSchema,
       DeterministicJournalCaptureResponseSchema,
+    ),
+  automaticallyCaptureDeterministicJournalSnapshot: (): Promise<DeterministicJournalAutomaticCaptureResponse> =>
+    postJson<
+      DeterministicJournalAutomaticCaptureRequest,
+      DeterministicJournalAutomaticCaptureResponse
+    >(
+      "/api/journal/spy/snapshots/automatic",
+      {},
+      DeterministicJournalAutomaticCaptureRequestSchema,
+      DeterministicJournalAutomaticCaptureResponseSchema,
     ),
   updateDeterministicJournalOutcome: (
     snapshotId: string,

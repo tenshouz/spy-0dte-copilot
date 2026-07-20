@@ -1,7 +1,9 @@
 import {
+  DeterministicJournalAutomaticCaptureRequestSchema,
   DeterministicJournalCaptureRequestSchema,
   DeterministicJournalOutcomeUpdateRequestSchema,
   DeterministicJournalSnapshotIdSchema,
+  type DeterministicJournalAutomaticCaptureResponse,
   type DeterministicJournalCaptureResponse,
   type DeterministicJournalOutcomeUpdateRequest,
   type DeterministicJournalOutcomeUpdateResponse,
@@ -10,6 +12,7 @@ import {
 import { Router, type Response } from "express";
 import { isAllowedAccountRiskOrigin } from "./account-risk.routes";
 import {
+  automaticallyCaptureDeterministicJournalSnapshot,
   captureDeterministicJournalSnapshot,
   listDeterministicJournalSnapshots,
   updateDeterministicJournalOutcome,
@@ -18,6 +21,7 @@ import {
 export interface JournalRouterDependencies {
   listSnapshots: () => Promise<DeterministicJournalSnapshotListResponse>;
   captureSnapshot: () => Promise<DeterministicJournalCaptureResponse>;
+  automaticallyCaptureSnapshot: () => Promise<DeterministicJournalAutomaticCaptureResponse>;
   updateOutcome: (
     snapshotId: string,
     request: DeterministicJournalOutcomeUpdateRequest,
@@ -29,6 +33,7 @@ export interface JournalRouterDependencies {
 const DEFAULT_DEPENDENCIES: JournalRouterDependencies = {
   listSnapshots: listDeterministicJournalSnapshots,
   captureSnapshot: captureDeterministicJournalSnapshot,
+  automaticallyCaptureSnapshot: automaticallyCaptureDeterministicJournalSnapshot,
   updateOutcome: updateDeterministicJournalOutcome,
   frontendUrl: () => process.env.FRONTEND_URL,
   log: (category) => {
@@ -107,6 +112,30 @@ export function createJournalRouter(
       res.json(await deps.captureSnapshot());
     } catch {
       deps.log("capture route unexpected failure");
+      res.status(500).json({ error: "DETERMINISTIC_JOURNAL_UNEXPECTED_FAILURE" });
+    }
+  });
+
+  // POST /api/journal/spy/snapshots/automatic — opt-in foreground evaluation and database-deduplicated capture.
+  router.post("/spy/snapshots/automatic", async (req, res) => {
+    setDeterministicJournalHeaders(res);
+    if (!configureJournalOrigin(req.get("Origin"), deps.frontendUrl(), res)) return;
+    if (rejectUnsupportedQuery(req.query, res)) return;
+
+    const parsed = DeterministicJournalAutomaticCaptureRequestSchema.safeParse(
+      req.body ?? {},
+    );
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "INVALID_DETERMINISTIC_JOURNAL_AUTOMATIC_CAPTURE_REQUEST",
+      });
+      return;
+    }
+
+    try {
+      res.json(await deps.automaticallyCaptureSnapshot());
+    } catch {
+      deps.log("automatic capture route unexpected failure");
       res.status(500).json({ error: "DETERMINISTIC_JOURNAL_UNEXPECTED_FAILURE" });
     }
   });
