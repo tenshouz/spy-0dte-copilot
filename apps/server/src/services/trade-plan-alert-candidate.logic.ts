@@ -8,7 +8,7 @@ import {
 } from "@spy-copilot/shared";
 
 export const TRADE_PLAN_ALERT_CANDIDATE_METHODOLOGY_VERSION =
-  "TRADE_PLAN_ALERT_CANDIDATE_V1" as const;
+  "TRADE_PLAN_ALERT_CANDIDATE_V2" as const;
 
 const DISCLOSURES = {
   currentSnapshotOnly: true as const,
@@ -23,7 +23,7 @@ const DISCLOSURES = {
 
 const METHODOLOGY = {
   sourceProduct: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY" as const,
-  sourceMethodology: "ASSEMBLY_V1" as const,
+  sourceMethodology: "ASSEMBLY_V2" as const,
   evaluationScope: "CURRENT_ASSEMBLY_SNAPSHOT" as const,
   candidateStates: [
     "READY",
@@ -66,6 +66,7 @@ function stableCandidateKey(
     assembly.currentMarketDate,
     category,
     assembly.direction,
+    assembly.exposureConfirmation?.state ?? "EXPOSURE_UNAVAILABLE",
     assembly.selectedContract.contractSymbol ?? "NO_CONTRACT",
     normalizedKeyNumber(assembly.entryCondition.planningReferencePrice),
     normalizedKeyNumber(assembly.entryCondition.triggerLevel),
@@ -85,6 +86,18 @@ function isDirectionalDirection(
 
 function formatPrice(value: number | null): string {
   return value === null ? "unavailable" : `$${value.toFixed(2)}`;
+}
+
+
+function confidenceContext(
+  assembly: SpyZeroDteTradePlanAssemblyResponse,
+): string {
+  const exposure = assembly.exposureConfirmation;
+  const planConfidence = assembly.planConfidence?.adjustedConfidenceScore ?? null;
+  if (exposure === undefined || planConfidence === null) {
+    return "Exposure confirmation is unavailable; structural confidence remains unchanged.";
+  }
+  return `Exposure confirmation: ${exposure.state.toLowerCase()}; adjusted plan confidence: ${planConfidence.toFixed(0)}%.`;
 }
 
 function buildReadyCandidate(
@@ -114,7 +127,7 @@ function buildReadyCandidate(
     category: "PLAN_READY",
     severity: "OPPORTUNITY",
     title: `Qualified ${assembly.direction} plan ready for review`,
-    message: `The deterministic ${assembly.direction} structure is qualified with ${contractSymbol} selected. Current ask reference: ${formatPrice(contractAsk)}. Revalidate all live values before any independently entered order.`,
+    message: `The deterministic ${assembly.direction} structure is qualified with ${contractSymbol} selected. Current ask reference: ${formatPrice(contractAsk)}. ${confidenceContext(assembly)} Revalidate all live values before any independently entered order.`,
     direction: assembly.direction,
     currentPrice: assembly.entryCondition.currentPrice,
     planningReferenceType: assembly.entryCondition.planningReferenceType,
@@ -147,7 +160,7 @@ function buildWaitingCandidate(
     category: "WAITING_FOR_TRIGGER",
     severity: "INFO",
     title: `${assembly.direction} setup waiting for its trigger`,
-    message: `The deterministic ${assembly.direction} setup remains conditional at the ${formatPrice(assembly.entryCondition.triggerLevel)} SPY trigger reference. No contract is selected until the trigger is satisfied.`,
+    message: `The deterministic ${assembly.direction} setup remains conditional at the ${formatPrice(assembly.entryCondition.triggerLevel)} SPY trigger reference. No contract is selected until the trigger is satisfied. ${confidenceContext(assembly)}`,
     direction: assembly.direction,
     currentPrice: assembly.entryCondition.currentPrice,
     planningReferenceType: assembly.entryCondition.planningReferenceType,
@@ -173,7 +186,7 @@ function buildNoContractCandidate(
     category: "NO_QUALIFIED_CONTRACT",
     severity: "WARNING",
     title: `Qualified ${assembly.direction} structure has no eligible contract`,
-    message: `The underlying ${assembly.direction} structure passed deterministic risk qualification, but CONTRACT_V1 did not select a fresh eligible contract. No sizing or order action applies.`,
+    message: `The underlying ${assembly.direction} structure passed deterministic risk qualification, but CONTRACT_V1 did not select a fresh eligible contract. ${confidenceContext(assembly)} No sizing or order action applies.`,
     direction: assembly.direction,
     currentPrice: assembly.entryCondition.currentPrice,
     planningReferenceType: assembly.entryCondition.planningReferenceType,
@@ -201,7 +214,7 @@ function buildNotQualifiedCandidate(
     category: "SETUP_NOT_QUALIFIED",
     severity: "WARNING",
     title: `${assembly.direction} setup did not pass risk qualification`,
-    message: `The deterministic ${assembly.direction} setup did not meet the objective/risk requirement. Underlying reward-to-risk reference: ${ratioText}. No contract or sizing action applies.`,
+    message: `The deterministic ${assembly.direction} setup did not meet the objective/risk requirement. Underlying reward-to-risk reference: ${ratioText}. ${confidenceContext(assembly)} No contract or sizing action applies.`,
     direction: assembly.direction,
     currentPrice: assembly.entryCondition.currentPrice,
     planningReferenceType: assembly.entryCondition.planningReferenceType,

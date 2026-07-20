@@ -316,7 +316,7 @@ function nonApplicableResponse(
 }
 
 /**
- * Pure SIZING_V1 calculator. It uses only one validated ASSEMBLY_V1 response
+ * Pure SIZING_V1 calculator. It uses only one validated supported Assembly response
  * and the explicit caller-supplied policy snapshot. No provider, route,
  * database, persistence, midpoint, bid, mark, or option-pricing model is used.
  */

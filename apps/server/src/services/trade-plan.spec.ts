@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for the SPY 0DTE TRADE_PLAN_V1 eligibility engine.
+ * Deterministic tests for the SPY 0DTE TRADE_PLAN_V2 eligibility and soft-exposure engine.
  * Run: npx --no-install tsx apps/server/src/services/trade-plan.spec.ts
  */
 import assert from "node:assert/strict";
@@ -8,6 +8,7 @@ import {
   SpyZeroDteDeterministicTradePlanResponseSchema,
   type SpyZeroDteDeterministicBiasResponse,
   type SpyZeroDteDeterministicMarketStateResponse,
+  type SpyZeroDteExposureStructureResponse,
 } from "@spy-copilot/shared";
 import { buildSpyZeroDteDeterministicBias } from "./market-bias.logic";
 import {
@@ -294,6 +295,76 @@ function putsState(): SpyZeroDteDeterministicMarketStateResponse {
   return validated(state);
 }
 
+
+function planExposure(
+  gammaRegime: SpyZeroDteExposureStructureResponse["gammaRegime"],
+  dexRegime: SpyZeroDteExposureStructureResponse["dexRegime"],
+): SpyZeroDteExposureStructureResponse {
+  const gexSign = gammaRegime === "PUT_DOMINANT" ? -1 : 1;
+  const dexSign = dexRegime === "NEGATIVE" ? -1 : 1;
+  return {
+    symbol: "SPY",
+    product: "SPY_ZERO_DTE_DETERMINISTIC_EXPOSURE_STRUCTURE",
+    methodologyVersion: "EXPOSURE_STRUCTURE_V1",
+    currentMarketDate: MARKET_DATE,
+    calculatedAt: STATE_AT,
+    engineState: "AVAILABLE",
+    metricState: "LIVE",
+    coverageState: "COMPLETE",
+    expirationDate: MARKET_DATE,
+    underlyingPrice: 760,
+    minimumReturnedStrike: 750,
+    maximumReturnedStrike: 770,
+    eligibleGexStrikeCount: 20,
+    eligibleDexStrikeCount: 20,
+    grossGammaExposure: 1_000_000,
+    returnedWindowNetGammaExposureProxy: 500_000 * gexSign,
+    gammaRegime,
+    gammaRegimeRatioPercent: 50 * gexSign,
+    callWalls: [{
+      rank: 1, strikePrice: 765, exposureMagnitude: 300_000,
+      shareOfSidePercent: 40, shareOfGrossGammaPercent: 30,
+      distanceFromUnderlyingPoints: 5, distanceFromUnderlyingPercent: 5 / 7.6,
+    }],
+    putWalls: [{
+      rank: 1, strikePrice: 755, exposureMagnitude: 300_000,
+      shareOfSidePercent: 40, shareOfGrossGammaPercent: 30,
+      distanceFromUnderlyingPoints: -5, distanceFromUnderlyingPercent: -5 / 7.6,
+    }],
+    largestPositiveNetGexStrike: 765,
+    largestNegativeNetGexStrike: 755,
+    gammaFlipProxy: {
+      state: "NO_CROSS", estimatedStrike: null, lowerStrike: null,
+      upperStrike: null, cumulativeNetGammaAtLower: null,
+      cumulativeNetGammaAtUpper: null, distanceFromUnderlyingPoints: null,
+      distanceFromUnderlyingPercent: null,
+    },
+    gammaCliffs: [],
+    returnedWindowNetDeltaExposureProxy: 400_000_000 * dexSign,
+    dexRegime,
+    dexRegimeRatioPercent: 40 * dexSign,
+    largestAbsoluteDexAnchor: null,
+    sourceGexMetricState: "LIVE",
+    sourceGexCoverageState: "COMPLETE",
+    sourceDexMetricState: "LIVE",
+    sourceDexCoverageState: "COMPLETE",
+    latestOptionQuoteAt: QUOTE_AT,
+    chainFetchedAt: STATE_AT,
+    warnings: [],
+    disclosures: {
+      returnedWindowOnly: true,
+      openInterestMayBeStaleIntraday: true,
+      analyticalCallPositivePutNegativeConvention: true,
+      gammaFlipIsCumulativeBalanceProxy: true,
+      notObservedDealerInventory: true,
+      noStandaloneSignal: true,
+      noPrivateAccountData: true,
+      noPositionSizing: true,
+      noOrderExecution: true,
+    },
+  };
+}
+
 function waitingCallsState(): SpyZeroDteDeterministicMarketStateResponse {
   const state = callsState();
   setPrice(state, 756);
@@ -340,7 +411,9 @@ function gate(result: ReturnType<typeof build>, gateId: string) {
 test("locked product, methodology, and route response contract validate", () => {
   const result = build(callsState());
   assert.equal(result.product, "SPY_ZERO_DTE_DETERMINISTIC_CONDITIONAL_TRADE_PLAN");
-  assert.equal(result.methodologyVersion, "TRADE_PLAN_V1");
+  assert.equal(result.methodologyVersion, "TRADE_PLAN_V2");
+  assert.equal(result.structuralConfidenceScore, result.biasConfidenceScore);
+  assert.equal(result.planConfidenceScore, result.exposureConfirmation!.adjustedConfidenceScore);
   assert.deepEqual(SpyZeroDteDeterministicTradePlanResponseSchema.parse(result), result);
 });
 
@@ -616,11 +689,40 @@ test("neutral evidence does not block Calls", () => {
   assert.equal(result.setupState, "ELIGIBLE");
 });
 
-test("non-directional GEX and DEX do not block eligibility", () => {
+test("legacy sign features do not create or block eligibility", () => {
   const state = callsState();
   state.features.netGexProxySign.state = "NEGATIVE";
   state.features.netDexProxySign.state = "POSITIVE";
   assert.equal(build(state).setupState, "ELIGIBLE");
+});
+
+test("supportive GEX and DEX increase plan confidence without changing eligibility", () => {
+  const state = callsState();
+  state.exposureStructure = planExposure("CALL_DOMINANT", "POSITIVE");
+  const result = build(state);
+  assert.equal(result.setupState, "ELIGIBLE");
+  assert.equal(result.exposureConfirmation!.state, "SUPPORTIVE");
+  assert.equal(result.exposureConfidenceAdjustmentPoints, 18);
+  assert.equal(
+    result.planConfidenceScore,
+    Math.min(100, result.biasConfidenceScore! + 18),
+  );
+});
+
+test("conflicting GEX and DEX regimes lower confidence but never block an eligible Calls plan", () => {
+  const state = callsState();
+  state.exposureStructure = planExposure("PUT_DOMINANT", "NEGATIVE");
+  const result = build(state);
+  assert.equal(result.setupState, "ELIGIBLE");
+  assert.equal(result.setupDirection, "CALLS");
+  assert.equal(result.exposureConfirmation!.state, "MIXED");
+  assert.equal(result.exposureConfidenceAdjustmentPoints, -10);
+  assert.equal(
+    result.planConfidenceScore,
+    Math.max(0, result.biasConfidenceScore! - 10),
+  );
+  assert.ok(result.exposureConfirmation!.warnings.includes("EXPOSURE_CONFLICT"));
+  assert.equal(result.exposureConfirmation!.disclosures.cannotBlockEligibility, true);
 });
 
 test("partial required VWAP blocks ELIGIBLE with PARTIAL engine", () => {

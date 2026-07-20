@@ -57,10 +57,10 @@ const DISCLOSURES = {
 
 const AUTOMATIC_METHODOLOGY = {
   sourceProduct: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
-  sourceMethodology: "ASSEMBLY_V1",
+  sourceMethodology: "ASSEMBLY_V2",
   candidateProduct:
     "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE",
-  candidateMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V1",
+  candidateMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V2",
   eligibleCandidateStates: [
     "READY",
     "WAITING_FOR_TRIGGER",

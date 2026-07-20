@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for explicit Discord SCHEDULED_REPORT_V1 delivery.
+ * Deterministic tests for explicit Discord SCHEDULED_REPORT_V2 delivery.
  * Run: npx --no-install tsx apps/server/src/services/discord-scheduled-report.spec.ts
  */
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ function baseAssembly(
   const value = {
     symbol: "SPY",
     product: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
-    methodologyVersion: "ASSEMBLY_V1",
+    methodologyVersion: "ASSEMBLY_V2",
     currentMarketDate: MARKET_DATE,
     mostRecentRthSessionDate: "2026-07-17",
     calculatedAt: ASSEMBLED_AT,
@@ -38,6 +38,46 @@ function baseAssembly(
     direction: "CALLS",
     primaryReasonCode: "TRADE_PLAN_READY",
     warningCode: null,
+    planConfidence: {
+      methodologyVersion: "EXPOSURE_CONFIRMATION_V1",
+      structuralConfidenceScore: 82,
+      exposureAdjustmentPoints: 8,
+      adjustedConfidenceScore: 90,
+      scope: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    },
+    exposureConfirmation: {
+      methodologyVersion: "EXPOSURE_CONFIRMATION_V1",
+      evaluatedDirection: "CALLS",
+      state: "SUPPORTIVE",
+      sourceQuality: "COMPLETE",
+      baseStructuralConfidenceScore: 82,
+      adjustmentPoints: 8,
+      adjustedConfidenceScore: 90,
+      supportiveComponentCount: 1,
+      conflictingComponentCount: 0,
+      neutralComponentCount: 2,
+      unavailableComponentCount: 0,
+      nearbyWallThresholdPercent: 1,
+      primaryDirectionalWall: null,
+      components: [
+        { componentId: "GEX_REGIME", status: "SUPPORTIVE", rawState: "CALL_DOMINANT", contributionPoints: 8, maximumAbsoluteContributionPoints: 8, sourceQuality: "COMPLETE", reasonCode: "CALL_GEX_SUPPORTS_CALLS" },
+        { componentId: "DEX_REGIME", status: "NEUTRAL", rawState: "BALANCED", contributionPoints: 0, maximumAbsoluteContributionPoints: 6, sourceQuality: "COMPLETE", reasonCode: "DEX_BALANCED" },
+        { componentId: "DIRECTIONAL_WALL", status: "NEUTRAL", rawState: "650", contributionPoints: 0, maximumAbsoluteContributionPoints: 4, sourceQuality: "COMPLETE", reasonCode: "DIRECTIONAL_WALL_NOT_NEARBY" },
+      ],
+      warnings: [],
+      disclosures: {
+        softConfirmationOnly: true,
+        cannotCreateDirection: true,
+        cannotBlockEligibility: true,
+        returnedWindowOnly: true,
+        openInterestMayBeStaleIntraday: true,
+        notObservedDealerInventory: true,
+        directionalWallIsContextNotTarget: true,
+        noPrivateAccountData: true,
+        noPositionSizing: true,
+        noOrderExecution: true,
+      },
+    },
     currentPrice: 640.25,
     priceSource: "QUOTE_LAST_PRICE",
     quoteTimestamp: "2026-07-20T14:29:59.000Z",

@@ -10,7 +10,7 @@ import {
 } from "@spy-copilot/shared";
 
 export const DETERMINISTIC_SCHEDULED_REPORT_METHODOLOGY_VERSION =
-  "SCHEDULED_REPORT_V1" as const;
+  "SCHEDULED_REPORT_V2" as const;
 
 const SCHEDULE_REFERENCE: Record<
   DeterministicScheduledReportType,
@@ -44,7 +44,7 @@ const DISCLOSURES = {
 
 const METHODOLOGY = {
   sourceProduct: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY" as const,
-  sourceMethodology: "ASSEMBLY_V1" as const,
+  sourceMethodology: "ASSEMBLY_V2" as const,
   reportMethod: "FIXED_COPY_FROM_CURRENT_ASSEMBLY_SNAPSHOT" as const,
   scheduleMethod: "CALLER_SELECTED_REPORT_TYPE_REFERENCE_ONLY" as const,
   persistenceMethod: "NONE" as const,
@@ -66,7 +66,8 @@ function sourceAssemblySummary(assembly: SpyZeroDteTradePlanAssemblyResponse) {
     currentPrice: assembly.currentPrice,
     sessionPhase: assembly.sessionPhase,
     biasState: assembly.bias.biasState,
-    confidenceScore: assembly.bias.confidenceScore,
+    confidenceScore:
+      assembly.planConfidence?.adjustedConfidenceScore ?? assembly.bias.confidenceScore,
     confidenceUnit: assembly.bias.confidenceUnit,
     sourceQualityState: assembly.bias.sourceQualityState,
   };
@@ -80,6 +81,8 @@ function planSnapshot(assembly: SpyZeroDteTradePlanAssemblyResponse) {
     underlyingRiskReward: assembly.underlyingRiskReward,
     selectedContract: assembly.selectedContract,
     premiumReference: assembly.premiumReference,
+    planConfidence: assembly.planConfidence,
+    exposureConfirmation: assembly.exposureConfirmation,
   };
 }
 
@@ -117,7 +120,10 @@ function biasChecklistStatus(
     return {
       code: "BIAS_EVIDENCE",
       status: "PASS",
-      message: `Structural bias evidence is complete at ${assembly.bias.confidenceScore.toFixed(0)} percent confidence.`,
+      message: assembly.planConfidence?.adjustedConfidenceScore === null ||
+        assembly.planConfidence === undefined
+        ? `Structural bias evidence is complete at ${assembly.bias.confidenceScore.toFixed(0)} percent confidence.`
+        : `Structural bias evidence is complete at ${assembly.bias.confidenceScore.toFixed(0)} percent; soft GEX/DEX confirmation is ${assembly.exposureConfirmation?.state.toLowerCase() ?? "unavailable"}, producing ${assembly.planConfidence.adjustedConfidenceScore.toFixed(0)} percent adjusted plan confidence.`,
     };
   }
   if (assembly.bias.sourceQualityState === "PARTIAL") {

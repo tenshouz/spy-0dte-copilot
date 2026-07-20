@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for TRADE_PLAN_ALERT_CANDIDATE_V1.
+ * Deterministic tests for TRADE_PLAN_ALERT_CANDIDATE_V2 with V1 compatibility retained in shared contracts.
  * Run: npx --no-install tsx apps/server/src/services/trade-plan-alert-candidate.spec.ts
  */
 import assert from "node:assert/strict";
@@ -22,7 +22,7 @@ function baseAssembly(
   const value = {
     symbol: "SPY",
     product: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
-    methodologyVersion: "ASSEMBLY_V1",
+    methodologyVersion: "ASSEMBLY_V2",
     currentMarketDate: MARKET_DATE,
     calculatedAt: ASSEMBLED_AT,
     engineState: "AVAILABLE",
@@ -30,6 +30,31 @@ function baseAssembly(
     direction: "CALLS",
     primaryReasonCode: "TRADE_PLAN_READY",
     warningCode: null,
+    planConfidence: {
+      methodologyVersion: "EXPOSURE_CONFIRMATION_V1",
+      structuralConfidenceScore: 82,
+      exposureAdjustmentPoints: 8,
+      adjustedConfidenceScore: 90,
+      scope: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    },
+    exposureConfirmation: {
+      methodologyVersion: "EXPOSURE_CONFIRMATION_V1",
+      evaluatedDirection: "CALLS",
+      state: "SUPPORTIVE",
+      sourceQuality: "COMPLETE",
+      baseStructuralConfidenceScore: 82,
+      adjustmentPoints: 8,
+      adjustedConfidenceScore: 90,
+      supportiveComponentCount: 1,
+      conflictingComponentCount: 0,
+      neutralComponentCount: 2,
+      unavailableComponentCount: 0,
+      nearbyWallThresholdPercent: 1,
+      primaryDirectionalWall: null,
+      components: [],
+      warnings: [],
+      disclosures: { cannotBlockEligibility: true },
+    },
     entryCondition: {
       state: "SATISFIED",
       planningReferenceType: "CURRENT_PRICE",
@@ -265,6 +290,10 @@ await test("READY creates an opportunity candidate with selected contract refere
   assert.equal(result.candidate?.selectedContractAsk, 1.25);
   assert.equal(result.candidate?.structuralInvalidationLevel, 639.5);
   assert.equal(result.candidate?.primaryObjectiveLevel, 642);
+  assert.match(result.candidate?.message ?? "", /supportive/i);
+  assert.match(result.candidate?.message ?? "", /90%/);
+  assert.match(result.candidate?.message ?? "", /supportive/i);
+  assert.match(result.candidate?.message ?? "", /90%/);
 });
 
 await test("READY PUTS uses the same deterministic candidate contract", () => {
@@ -369,6 +398,34 @@ await test("candidate key changes when the selected contract changes", () => {
   });
   const second = buildSpyZeroDteTradePlanAlertCandidate(source, ALERT_AT_MS);
   assert.notEqual(first.candidate?.deduplicationKey, second.candidate?.deduplicationKey);
+});
+
+await test("candidate key changes when exposure confirmation state materially changes", () => {
+  const supportive = buildSpyZeroDteTradePlanAlertCandidate(
+    baseAssembly(),
+    ALERT_AT_MS,
+  );
+  const conflictingAssembly = baseAssembly({
+    planConfidence: {
+      ...baseAssembly().planConfidence!,
+      exposureAdjustmentPoints: -8,
+      adjustedConfidenceScore: 74,
+    },
+    exposureConfirmation: {
+      ...baseAssembly().exposureConfirmation!,
+      state: "CONFLICTING",
+      adjustmentPoints: -8,
+      adjustedConfidenceScore: 74,
+    },
+  });
+  const conflicting = buildSpyZeroDteTradePlanAlertCandidate(
+    conflictingAssembly,
+    ALERT_AT_MS + 1_000,
+  );
+  assert.notEqual(
+    supportive.candidate?.deduplicationKey,
+    conflicting.candidate?.deduplicationKey,
+  );
 });
 
 await test("source warning is retained without changing candidate state", () => {

@@ -234,8 +234,8 @@ function auditSourceRow(row: HistoricalReplaySourceRow): {
       checkCode: "ASSEMBLY_SCHEMA_INVALID",
       fieldPath: "sourceAssembly",
       observedValue: null,
-      boundaryValue: "ASSEMBLY_V1",
-      message: "Stored source Assembly no longer validates against ASSEMBLY_V1.",
+      boundaryValue: "ASSEMBLY_V1_OR_V2",
+      message: "Stored source Assembly no longer validates against a supported Assembly methodology.",
     });
     return { issues, checksPerformed };
   }

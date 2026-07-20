@@ -27,7 +27,7 @@ function disclosures() {
 function methodology() {
   return {
     sourceProduct: "SPY_ZERO_DTE_DETERMINISTIC_SCHEDULED_REPORT" as const,
-    sourceMethodology: "SCHEDULED_REPORT_V1" as const,
+    sourceMethodology: "SCHEDULED_REPORT_V2" as const,
     deliveryTrigger: "EXPLICIT_POST_ONLY" as const,
     providerConfirmationMethod: "DISCORD_WAIT_TRUE_HTTP_SUCCESS" as const,
     persistenceMethod: "NONE" as const,

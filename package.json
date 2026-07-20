@@ -1,8 +1,8 @@
 {
   "name": "spy-0dte-copilot",
   "private": true,
-  "version": "1.0.0",
-  "description": "Local SPY 0DTE deterministic decision-support platform \u2014 V1",
+  "version": "1.1.0",
+  "description": "Local SPY 0DTE deterministic decision-support platform — V1.1",
   "workspaces": [
     "apps/*",
     "packages/*"

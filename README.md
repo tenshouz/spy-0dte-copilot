@@ -1,10 +1,10 @@
-# SPY 0DTE Copilot — Local V1 Complete
+# SPY 0DTE Copilot — Local V1.1 Complete
 
 SPY 0DTE Copilot is a local, single-user decision-support dashboard for discretionary SPY same-day options trading. It combines backend-only Schwab connectivity, deterministic market structure, 0DTE options analytics, Trade Plan assembly, read-only sizing support, Discord notifications, persistent journaling, performance analytics, and captured-snapshot historical replay.
 
-**V1 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
+**V1.1 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
 
-## V1 capabilities
+## V1.1 capabilities
 
 - Encrypted Schwab OAuth token storage and refresh recovery
 - Normalized SPY quote, bounded five-minute candles, and current-date options chain
@@ -12,6 +12,7 @@ SPY 0DTE Copilot is a local, single-user decision-support dashboard for discreti
 - ATM straddle-Mark expected move
 - Returned-window GEX/DEX proxies, ranked walls, Gamma-balance proxy, cliffs, and DEX anchor
 - Deterministic Market Context, Market State, bias, Trade Plan, risk, contract selection, and assembly
+- Soft GEX/DEX exposure confirmation that adjusts plan confidence without creating direction or blocking eligibility
 - Manual and read-only Schwab-assisted position sizing
 - Deterministic scheduled reports and Discord delivery
 - Persistent backend automation with lease protection, restart-safe deduplication, and sanitized audit history
@@ -30,7 +31,8 @@ spy-0dte-copilot/
 │   └── shared/    Shared Zod contracts and TypeScript types
 ├── docs/
 │   ├── V1_RELEASE_RUNBOOK.md
-│   └── V1_PRD_COMPLIANCE_AUDIT.md
+│   ├── V1_PRD_COMPLIANCE_AUDIT.md
+│   └── V1_1_GEX_DEX_SOFT_CONFIRMATION.md
 └── scripts/
     ├── run-specs.mjs
     └── verify-v1.mjs
@@ -105,7 +107,7 @@ For Schwab OAuth, keep the HTTPS tunnel pointed at backend port 4000 and registe
 https://<stable-tunnel-host>/api/auth/schwab/callback
 ```
 
-## V1 readiness and verification
+## V1.1 readiness and verification
 
 Open:
 
@@ -130,6 +132,6 @@ This executes every backend and frontend specification, server and frontend Type
 - Persistent automation is safely disabled by default.
 - The backend must remain running for scheduled automation.
 - Keep real Schwab credentials, tokens, the encryption key, Discord webhook URL, database dumps, and account identifiers private.
-- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1 panels.
+- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1.1 panels.
 
-See [the V1 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations.
+See [the V1.1 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1.1 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations, and [the GEX/DEX soft-confirmation methodology](docs/V1_1_GEX_DEX_SOFT_CONFIRMATION.md) for the fixed weights and safety boundaries.

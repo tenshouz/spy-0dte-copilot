@@ -15,8 +15,9 @@ import {
   type TradePlanAssemblyPrimaryReasonCode,
   type TradePlanAssemblyWarningCode,
 } from "@spy-copilot/shared";
+import { buildTradePlanExposureConfirmation } from "./trade-plan-exposure.logic";
 
-export const ASSEMBLY_METHODOLOGY_VERSION = "ASSEMBLY_V1" as const;
+export const ASSEMBLY_METHODOLOGY_VERSION = "ASSEMBLY_V2" as const;
 
 const EMPTY_ENTRY_CONDITION = {
   state: "NOT_APPLICABLE" as const,
@@ -93,7 +94,7 @@ const DISCLOSURES = {
   structuralInvalidation: "STRUCTURAL_INVALIDATION_REFERENCE_ONLY" as const,
   underlyingObjective: "UNDERLYING_OBJECTIVE_REFERENCE_ONLY" as const,
   premiumReference: "MIDPOINT_REFERENCE_ONLY" as const,
-  confidence: "STRUCTURAL_EVIDENCE_ONLY" as const,
+  confidence: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" as const,
   noOrderExecution: true as const,
   noPositionSizing: true as const,
   noGuaranteedFill: true as const,
@@ -109,7 +110,7 @@ const METHODOLOGY = {
     "SPY_ZERO_DTE_DETERMINISTIC_OBJECTIVE_RISK_FRAMEWORK",
     "SPY_ZERO_DTE_DETERMINISTIC_CONTRACT_SELECTION_LIQUIDITY",
   ] as const,
-  sourceMethodologies: ["V1", "BIAS_V1", "TRADE_PLAN_V1", "RISK_V1", "CONTRACT_V1"] as const,
+  sourceMethodologies: ["V1", "BIAS_V1", "TRADE_PLAN_V2", "RISK_V1", "CONTRACT_V1"] as const,
   calculationUnit: "SPY_UNDERLYING_PRICE_POINTS" as const,
   assemblyOnly: true as const,
   contractCandidateDetailsRoute: "/api/trade-contract/spy" as const,
@@ -718,6 +719,19 @@ export function buildSpyZeroDteTradePlanAssembly(
     failure?.warning ?? determineWarning(engineState, planState, risk, contract);
   const selectedCandidate = planState === "READY" ? resolved.contract : null;
   const upstreamSameSnapshotGuaranteed = sourceCompositionValid;
+  const exposureDirection =
+    bias.biasState === "BULLISH"
+      ? ("CALLS" as const)
+      : bias.biasState === "BEARISH"
+        ? ("PUTS" as const)
+        : ("NONE" as const);
+  const exposureConfirmation =
+    tradePlan.exposureConfirmation ??
+    buildTradePlanExposureConfirmation(
+      marketState,
+      exposureDirection,
+      bias.confidenceScore,
+    );
 
   const result = {
     symbol: "SPY" as const,
@@ -737,6 +751,14 @@ export function buildSpyZeroDteTradePlanAssembly(
     quoteTimestamp: risk.quoteTimestamp,
     sessionPhase: tradePlan.sessionPhase,
     bias: biasSummary(bias),
+    planConfidence: {
+      methodologyVersion: exposureConfirmation.methodologyVersion,
+      structuralConfidenceScore: bias.confidenceScore,
+      exposureAdjustmentPoints: exposureConfirmation.adjustmentPoints,
+      adjustedConfidenceScore: exposureConfirmation.adjustedConfidenceScore,
+      scope: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" as const,
+    },
+    exposureConfirmation,
     entryCondition: entryCondition(risk, tradePlan, planState),
     structuralInvalidation:
       planState === "UNAVAILABLE" ? EMPTY_INVALIDATION : invalidationSummary(resolved.invalidation),

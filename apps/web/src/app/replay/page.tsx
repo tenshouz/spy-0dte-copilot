@@ -481,7 +481,7 @@ export default function HistoricalReplayPage() {
             </div>
             <p className="mt-2 max-w-4xl text-xs leading-relaxed text-muted-foreground">
               Each run loads persisted journal snapshots, validates the stored
-              ASSEMBLY_V1 payload, verifies every source timestamp is at or before
+              captured Assembly payload, verifies every source timestamp is at or before
               the Assembly boundary, reconstructs the captured state sequence,
               and persists the replay result for later review.
             </p>

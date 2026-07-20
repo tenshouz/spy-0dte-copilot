@@ -11,7 +11,7 @@ export const SPY_TRADE_PLAN_ASSEMBLY_POLL_INTERVAL_MS = 30_000;
  */
 export function useSpyZeroDteTradePlanAssembly() {
   return useQuery({
-    queryKey: ["spy-zero-dte-trade-plan-assembly", "ASSEMBLY_V1"],
+    queryKey: ["spy-zero-dte-trade-plan-assembly", "ASSEMBLY_V2"],
     queryFn: apiClient.getSpyZeroDteTradePlanAssembly,
     refetchInterval: SPY_TRADE_PLAN_ASSEMBLY_POLL_INTERVAL_MS,
     staleTime: SPY_TRADE_PLAN_ASSEMBLY_POLL_INTERVAL_MS,

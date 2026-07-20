@@ -1892,6 +1892,7 @@ export const SpyZeroDteMarketContextResponseSchema = z.object({
   expectedMove: MarketContextExpectedMoveSummarySchema,
   gex: MarketContextGexSummarySchema,
   dex: MarketContextDexSummarySchema,
+  exposureStructure: SpyZeroDteExposureStructureResponseSchema.optional(),
   components: z.array(MarketContextComponentStatusSchema).length(11),
   componentWarnings: z.array(MarketContextComponentWarningSchema),
   warningCode: MarketContextWarningCodeSchema.nullable(),
@@ -2212,6 +2213,7 @@ export const SpyZeroDteDeterministicMarketStateResponseSchema = z
     priceSource: MarketStatePriceSourceSchema.nullable(),
     quoteTimestamp: z.string().datetime().nullable(),
     quoteSourceState: QuoteSourceStateSchema,
+    exposureStructure: SpyZeroDteExposureStructureResponseSchema.optional(),
     features: z.object({
       sessionPhase: SessionPhaseFeatureSchema,
       priceVsVwap: PriceVsVwapFeatureSchema,
@@ -2514,8 +2516,182 @@ export type SpyZeroDteDeterministicBiasResponse = z.infer<
 >;
 
 /** Deterministic, same-snapshot conditional setup-eligibility layer. */
-export const TradePlanMethodologyVersionSchema = z.literal("TRADE_PLAN_V1");
+export const TradePlanMethodologyVersionSchema = z.enum(["TRADE_PLAN_V1", "TRADE_PLAN_V2"]);
 export type TradePlanMethodologyVersion = z.infer<typeof TradePlanMethodologyVersionSchema>;
+
+export const TradePlanExposureConfirmationMethodologyVersionSchema = z.literal(
+  "EXPOSURE_CONFIRMATION_V1",
+);
+export const TradePlanExposureConfirmationStateSchema = z.enum([
+  "SUPPORTIVE",
+  "CONFLICTING",
+  "MIXED",
+  "NEUTRAL",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type TradePlanExposureConfirmationState = z.infer<
+  typeof TradePlanExposureConfirmationStateSchema
+>;
+
+export const TradePlanExposureSourceQualitySchema = z.enum([
+  "COMPLETE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type TradePlanExposureSourceQuality = z.infer<
+  typeof TradePlanExposureSourceQualitySchema
+>;
+
+export const TradePlanExposureComponentIdSchema = z.enum([
+  "GEX_REGIME",
+  "DEX_REGIME",
+  "DIRECTIONAL_WALL",
+]);
+export type TradePlanExposureComponentId = z.infer<
+  typeof TradePlanExposureComponentIdSchema
+>;
+
+export const TradePlanExposureComponentStatusSchema = z.enum([
+  "SUPPORTIVE",
+  "CONFLICTING",
+  "NEUTRAL",
+  "NOT_APPLICABLE",
+  "UNAVAILABLE",
+]);
+export type TradePlanExposureComponentStatus = z.infer<
+  typeof TradePlanExposureComponentStatusSchema
+>;
+
+export const TradePlanExposureComponentReasonCodeSchema = z.enum([
+  "CALL_GEX_SUPPORTS_CALLS",
+  "PUT_GEX_SUPPORTS_PUTS",
+  "CALL_GEX_CONFLICTS_WITH_PUTS",
+  "PUT_GEX_CONFLICTS_WITH_CALLS",
+  "GEX_BALANCED",
+  "GEX_UNAVAILABLE",
+  "POSITIVE_DEX_SUPPORTS_CALLS",
+  "NEGATIVE_DEX_SUPPORTS_PUTS",
+  "POSITIVE_DEX_CONFLICTS_WITH_PUTS",
+  "NEGATIVE_DEX_CONFLICTS_WITH_CALLS",
+  "DEX_BALANCED",
+  "DEX_UNAVAILABLE",
+  "DIRECTIONAL_WALL_NEARBY",
+  "DIRECTIONAL_WALL_OPPOSING_SIDE",
+  "DIRECTIONAL_WALL_NOT_NEARBY",
+  "DIRECTIONAL_WALL_UNAVAILABLE",
+  "NO_DIRECTIONAL_THESIS",
+]);
+export type TradePlanExposureComponentReasonCode = z.infer<
+  typeof TradePlanExposureComponentReasonCodeSchema
+>;
+
+export const TradePlanExposureWarningCodeSchema = z.enum([
+  "EXPOSURE_CONFLICT",
+  "PARTIAL_EXPOSURE_INPUTS",
+  "STALE_EXPOSURE_INPUTS",
+  "EXPOSURE_UNAVAILABLE",
+]);
+export type TradePlanExposureWarningCode = z.infer<
+  typeof TradePlanExposureWarningCodeSchema
+>;
+
+export const TradePlanExposureComponentSchema = z.object({
+  componentId: TradePlanExposureComponentIdSchema,
+  status: TradePlanExposureComponentStatusSchema,
+  rawState: z.string().min(1).nullable(),
+  contributionPoints: z.number().finite().min(-8).max(8),
+  maximumAbsoluteContributionPoints: z.number().finite().positive().max(8),
+  sourceQuality: TradePlanExposureSourceQualitySchema,
+  reasonCode: TradePlanExposureComponentReasonCodeSchema,
+});
+export type TradePlanExposureComponent = z.infer<
+  typeof TradePlanExposureComponentSchema
+>;
+
+export const TradePlanExposureConfirmationSchema = z
+  .object({
+    methodologyVersion: TradePlanExposureConfirmationMethodologyVersionSchema,
+    evaluatedDirection: z.enum(["CALLS", "PUTS", "NONE"]),
+    state: TradePlanExposureConfirmationStateSchema,
+    sourceQuality: TradePlanExposureSourceQualitySchema,
+    baseStructuralConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+    adjustmentPoints: z.number().finite().min(-18).max(18),
+    adjustedConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+    supportiveComponentCount: z.number().int().min(0).max(3),
+    conflictingComponentCount: z.number().int().min(0).max(3),
+    neutralComponentCount: z.number().int().min(0).max(3),
+    unavailableComponentCount: z.number().int().min(0).max(3),
+    nearbyWallThresholdPercent: z.literal(1),
+    primaryDirectionalWall: ExposureWallSchema.nullable(),
+    components: z.array(TradePlanExposureComponentSchema).length(3),
+    warnings: z.array(TradePlanExposureWarningCodeSchema),
+    disclosures: z.object({
+      softConfirmationOnly: z.literal(true),
+      cannotCreateDirection: z.literal(true),
+      cannotBlockEligibility: z.literal(true),
+      returnedWindowOnly: z.literal(true),
+      openInterestMayBeStaleIntraday: z.literal(true),
+      notObservedDealerInventory: z.literal(true),
+      directionalWallIsContextNotTarget: z.literal(true),
+      noPrivateAccountData: z.literal(true),
+      noPositionSizing: z.literal(true),
+      noOrderExecution: z.literal(true),
+    }),
+  })
+  .superRefine((value, ctx) => {
+    const counts = {
+      supportive: value.components.filter((item) => item.status === "SUPPORTIVE").length,
+      conflicting: value.components.filter((item) => item.status === "CONFLICTING").length,
+      neutral: value.components.filter((item) => item.status === "NEUTRAL").length,
+      unavailable: value.components.filter((item) => item.status === "UNAVAILABLE").length,
+    };
+    if (
+      counts.supportive !== value.supportiveComponentCount ||
+      counts.conflicting !== value.conflictingComponentCount ||
+      counts.neutral !== value.neutralComponentCount ||
+      counts.unavailable !== value.unavailableComponentCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exposure confirmation component counts are inconsistent",
+      });
+    }
+    if (value.evaluatedDirection === "NONE") {
+      if (
+        value.state !== "NOT_APPLICABLE" ||
+        value.adjustmentPoints !== 0 ||
+        value.adjustedConfidenceScore !== value.baseStructuralConfidenceScore
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "No-direction exposure confirmation must be non-adjusting and not applicable",
+        });
+      }
+    }
+    if (value.baseStructuralConfidenceScore === null) {
+      if (value.adjustedConfidenceScore !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Exposure-adjusted confidence requires structural confidence",
+        });
+      }
+    } else if (value.adjustedConfidenceScore !== null) {
+      const expected = Math.min(
+        100,
+        Math.max(0, value.baseStructuralConfidenceScore + value.adjustmentPoints),
+      );
+      if (Math.abs(expected - value.adjustedConfidenceScore) > 1e-9) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Exposure-adjusted confidence is inconsistent",
+        });
+      }
+    }
+  });
+export type TradePlanExposureConfirmation = z.infer<
+  typeof TradePlanExposureConfirmationSchema
+>;
 
 export const TradePlanEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
 export type TradePlanEngineState = z.infer<typeof TradePlanEngineStateSchema>;
@@ -2840,6 +3016,10 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
     biasConfidenceScore: z.number().finite().min(0).max(100).nullable(),
     biasConfidenceScope: BiasConfidenceScopeSchema,
     biasSourceQuality: BiasSourceQualityStateSchema,
+    structuralConfidenceScore: z.number().finite().min(0).max(100).nullable().optional(),
+    exposureConfidenceAdjustmentPoints: z.number().finite().min(-18).max(18).optional(),
+    planConfidenceScore: z.number().finite().min(0).max(100).nullable().optional(),
+    exposureConfirmation: TradePlanExposureConfirmationSchema.optional(),
     trigger: TradePlanTriggerSchema,
     gates: z.array(TradePlanGateSchema).length(13),
     supportingBiasEvidenceIds: z.array(MarketStateFeatureIdSchema),
@@ -2847,6 +3027,28 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
     warningCode: TradePlanOverallWarningCodeSchema.nullable(),
   })
   .superRefine((value, ctx) => {
+    if (value.methodologyVersion === "TRADE_PLAN_V2") {
+      if (
+        value.structuralConfidenceScore === undefined ||
+        value.exposureConfidenceAdjustmentPoints === undefined ||
+        value.planConfidenceScore === undefined ||
+        value.exposureConfirmation === undefined
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "TRADE_PLAN_V2 requires exposure-confirmation confidence fields",
+        });
+      } else if (
+        value.structuralConfidenceScore !== value.biasConfidenceScore ||
+        value.exposureConfidenceAdjustmentPoints !== value.exposureConfirmation.adjustmentPoints ||
+        value.planConfidenceScore !== value.exposureConfirmation.adjustedConfidenceScore
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "TRADE_PLAN_V2 confidence fields are inconsistent",
+        });
+      }
+    }
     const expectedGateOrder = [
       "MARKET_STATE_AVAILABLE",
       "SAME_SNAPSHOT_GUARANTEED",
@@ -3652,7 +3854,7 @@ export type SpyZeroDteContractSelectionResponse = z.infer<
 >;
 
 /** Concise deterministic SPY 0DTE Trade Plan assembly and display contract. */
-export const TradePlanAssemblyMethodologyVersionSchema = z.literal("ASSEMBLY_V1");
+export const TradePlanAssemblyMethodologyVersionSchema = z.enum(["ASSEMBLY_V1", "ASSEMBLY_V2"]);
 export type TradePlanAssemblyMethodologyVersion = z.infer<
   typeof TradePlanAssemblyMethodologyVersionSchema
 >;
@@ -3943,12 +4145,26 @@ export type TradePlanAssemblySourceSummary = z.infer<
   typeof TradePlanAssemblySourceSummarySchema
 >;
 
+export const TradePlanAssemblyPlanConfidenceSchema = z.object({
+  methodologyVersion: z.literal("EXPOSURE_CONFIRMATION_V1"),
+  structuralConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+  exposureAdjustmentPoints: z.number().finite().min(-18).max(18),
+  adjustedConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+  scope: z.literal("STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION"),
+});
+export type TradePlanAssemblyPlanConfidence = z.infer<
+  typeof TradePlanAssemblyPlanConfidenceSchema
+>;
+
 export const TradePlanAssemblyDisclosuresSchema = z.object({
   planningReference: z.literal("PLANNING_REFERENCE_ONLY"),
   structuralInvalidation: z.literal("STRUCTURAL_INVALIDATION_REFERENCE_ONLY"),
   underlyingObjective: z.literal("UNDERLYING_OBJECTIVE_REFERENCE_ONLY"),
   premiumReference: z.literal("MIDPOINT_REFERENCE_ONLY"),
-  confidence: z.literal("STRUCTURAL_EVIDENCE_ONLY"),
+  confidence: z.enum([
+    "STRUCTURAL_EVIDENCE_ONLY",
+    "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+  ]),
   noOrderExecution: z.literal(true),
   noPositionSizing: z.literal(true),
   noGuaranteedFill: z.literal(true),
@@ -3970,7 +4186,7 @@ export const TradePlanAssemblyMethodologySchema = z.object({
   sourceMethodologies: z.tuple([
     z.literal("V1"),
     z.literal("BIAS_V1"),
-    z.literal("TRADE_PLAN_V1"),
+    TradePlanMethodologyVersionSchema,
     z.literal("RISK_V1"),
     z.literal("CONTRACT_V1"),
   ]),
@@ -4000,6 +4216,8 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
     quoteTimestamp: z.string().datetime().nullable(),
     sessionPhase: MarketContextSessionWindowSchema.nullable(),
     bias: TradePlanAssemblyBiasSummarySchema,
+    planConfidence: TradePlanAssemblyPlanConfidenceSchema.optional(),
+    exposureConfirmation: TradePlanExposureConfirmationSchema.optional(),
     entryCondition: TradePlanAssemblyEntryConditionSchema,
     structuralInvalidation: TradePlanAssemblyInvalidationSummarySchema,
     primaryObjective: TradePlanAssemblyObjectiveSummarySchema,
@@ -4011,6 +4229,23 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
     methodology: TradePlanAssemblyMethodologySchema,
   })
   .superRefine((value, ctx) => {
+    if (value.methodologyVersion === "ASSEMBLY_V2") {
+      if (value.planConfidence === undefined || value.exposureConfirmation === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "ASSEMBLY_V2 requires plan confidence and exposure confirmation",
+        });
+      } else if (
+        value.planConfidence.structuralConfidenceScore !== value.bias.confidenceScore ||
+        value.planConfidence.exposureAdjustmentPoints !== value.exposureConfirmation.adjustmentPoints ||
+        value.planConfidence.adjustedConfidenceScore !== value.exposureConfirmation.adjustedConfidenceScore
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "ASSEMBLY_V2 confidence fields are inconsistent",
+        });
+      }
+    }
     if (value.engineState === "PARTIAL" && value.planState === "READY") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -5445,10 +5680,11 @@ export type SchwabAssistedPositionSizingOriginErrorResponse = z.infer<
   typeof SchwabAssistedPositionSizingOriginErrorResponseSchema
 >;
 
-/** Deterministic current-snapshot alert-candidate evaluation derived only from ASSEMBLY_V1. */
-export const TradePlanAlertCandidateMethodologyVersionSchema = z.literal(
+/** Deterministic current-snapshot alert-candidate evaluation derived from a supported Assembly snapshot. */
+export const TradePlanAlertCandidateMethodologyVersionSchema = z.enum([
   "TRADE_PLAN_ALERT_CANDIDATE_V1",
-);
+  "TRADE_PLAN_ALERT_CANDIDATE_V2",
+]);
 export type TradePlanAlertCandidateMethodologyVersion = z.infer<
   typeof TradePlanAlertCandidateMethodologyVersionSchema
 >;
@@ -5658,7 +5894,7 @@ export type SpyZeroDteTradePlanAlertCandidateResponse = z.infer<
   typeof SpyZeroDteTradePlanAlertCandidateResponseSchema
 >;
 
-/** Process-local transition and duplicate-suppression evaluation for TRADE_PLAN_ALERT_CANDIDATE_V1. */
+/** Process-local transition and duplicate-suppression evaluation for a supported alert-candidate methodology. */
 export const TradePlanAlertTransitionMethodologyVersionSchema = z.literal(
   "TRADE_PLAN_ALERT_TRANSITION_V1",
 );
@@ -6506,9 +6742,10 @@ export type DeterministicScheduledReportRequest = z.infer<
   typeof DeterministicScheduledReportRequestSchema
 >;
 
-export const DeterministicScheduledReportMethodologyVersionSchema = z.literal(
+export const DeterministicScheduledReportMethodologyVersionSchema = z.enum([
   "SCHEDULED_REPORT_V1",
-);
+  "SCHEDULED_REPORT_V2",
+]);
 export type DeterministicScheduledReportMethodologyVersion = z.infer<
   typeof DeterministicScheduledReportMethodologyVersionSchema
 >;
@@ -6605,6 +6842,8 @@ export const DeterministicScheduledReportPlanSnapshotSchema = z
     underlyingRiskReward: TradePlanAssemblyRiskRewardSummarySchema,
     selectedContract: TradePlanAssemblySelectedContractSummarySchema,
     premiumReference: TradePlanAssemblyPremiumReferenceSchema,
+    planConfidence: TradePlanAssemblyPlanConfidenceSchema.optional(),
+    exposureConfirmation: TradePlanExposureConfirmationSchema.optional(),
   })
   .strict();
 export type DeterministicScheduledReportPlanSnapshot = z.infer<
@@ -6649,7 +6888,7 @@ export const SpyZeroDteDeterministicScheduledReportResponseSchema = z
         sourceProduct: z.literal(
           "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
         ),
-        sourceMethodology: z.literal("ASSEMBLY_V1"),
+        sourceMethodology: TradePlanAssemblyMethodologyVersionSchema,
         reportMethod: z.literal("FIXED_COPY_FROM_CURRENT_ASSEMBLY_SNAPSHOT"),
         scheduleMethod: z.literal("CALLER_SELECTED_REPORT_TYPE_REFERENCE_ONLY"),
         persistenceMethod: z.literal("NONE"),
@@ -6662,6 +6901,23 @@ export const SpyZeroDteDeterministicScheduledReportResponseSchema = z
   .superRefine((value, ctx) => {
     const issue = (message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.methodologyVersion === "SCHEDULED_REPORT_V2") {
+      if (
+        value.sourceAssembly.methodologyVersion !== "ASSEMBLY_V2" ||
+        value.plan.planConfidence === undefined ||
+        value.plan.exposureConfirmation === undefined
+      ) {
+        issue("SCHEDULED_REPORT_V2 requires ASSEMBLY_V2 confidence and exposure context");
+      } else if (
+        value.sourceAssembly.confidenceScore !==
+          value.plan.planConfidence.adjustedConfidenceScore ||
+        value.plan.planConfidence.exposureAdjustmentPoints !==
+          value.plan.exposureConfirmation.adjustmentPoints
+      ) {
+        issue("SCHEDULED_REPORT_V2 confidence and exposure fields are inconsistent");
+      }
+    }
 
     const scheduleByType: Record<DeterministicScheduledReportType, string> = {
       PREMARKET_0925: "09:25",
@@ -6794,7 +7050,7 @@ export const DiscordScheduledReportDeliveryResponseSchema = z
     methodology: z
       .object({
         sourceProduct: z.literal("SPY_ZERO_DTE_DETERMINISTIC_SCHEDULED_REPORT"),
-        sourceMethodology: z.literal("SCHEDULED_REPORT_V1"),
+        sourceMethodology: DeterministicScheduledReportMethodologyVersionSchema,
         deliveryTrigger: z.literal("EXPLICIT_POST_ONLY"),
         providerConfirmationMethod: z.literal("DISCORD_WAIT_TRUE_HTTP_SUCCESS"),
         persistenceMethod: z.literal("NONE"),
@@ -7645,11 +7901,11 @@ export const DeterministicJournalAutomaticCaptureResponseSchema = z
         sourceProduct: z.literal(
           "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
         ),
-        sourceMethodology: z.literal("ASSEMBLY_V1"),
+        sourceMethodology: TradePlanAssemblyMethodologyVersionSchema,
         candidateProduct: z.literal(
           "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE",
         ),
-        candidateMethodology: z.literal("TRADE_PLAN_ALERT_CANDIDATE_V1"),
+        candidateMethodology: TradePlanAlertCandidateMethodologyVersionSchema,
         eligibleCandidateStates: z.tuple([
           z.literal("READY"),
           z.literal("WAITING_FOR_TRIGGER"),
@@ -9155,7 +9411,7 @@ export const SystemReadinessResponseSchema = z
   .object({
     product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
     methodologyVersion: SystemReadinessMethodologyVersionSchema,
-    releaseVersion: z.literal("1.0.0"),
+    releaseVersion: z.literal("1.1.0"),
     calculatedAt: z.string().datetime(),
     engineState: SystemReadinessEngineStateSchema,
     summary: z

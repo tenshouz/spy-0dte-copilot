@@ -1,6 +1,7 @@
 import type {
   AssembledTradePlanDirection,
   DeterministicTradePlanState,
+  TradePlanExposureConfirmationState,
 } from "@spy-copilot/shared";
 
 export type TradePlanViewTone = "default" | "bull" | "bear" | "wait";
@@ -89,4 +90,31 @@ export function formatNullableTimestamp(value: string | null): string {
     second: "2-digit",
     hour12: true,
   });
+}
+
+
+const EXPOSURE_COPY: Record<
+  TradePlanExposureConfirmationState,
+  { label: string; tone: TradePlanViewTone }
+> = {
+  SUPPORTIVE: { label: "Supportive", tone: "bull" },
+  CONFLICTING: { label: "Conflicting", tone: "bear" },
+  MIXED: { label: "Mixed", tone: "wait" },
+  NEUTRAL: { label: "Neutral", tone: "default" },
+  NOT_APPLICABLE: { label: "Not applicable", tone: "default" },
+  UNAVAILABLE: { label: "Unavailable", tone: "default" },
+};
+
+export function getExposureConfirmationView(
+  state: TradePlanExposureConfirmationState,
+) {
+  return EXPOSURE_COPY[state];
+}
+
+export function formatSignedConfidencePoints(value: number): string {
+  const normalized = Object.is(value, -0) ? 0 : value;
+  const sign = normalized > 0 ? "+" : "";
+  return `${sign}${normalized.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })} pts`;
 }

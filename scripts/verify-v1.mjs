@@ -73,15 +73,15 @@ for (const packageFile of [
 ]) {
   const packageJson = JSON.parse(readFileSync(packageFile, "utf8"));
 
-  if (packageJson.version !== "1.0.0") {
-    throw new Error(`${packageFile} version must be 1.0.0.`);
+  if (packageJson.version !== "1.1.0") {
+    throw new Error(`${packageFile} version must be 1.1.0.`);
   }
 }
 
 const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8"));
 
 for (const packagePath of ["", "apps/server", "apps/web", "packages/shared"]) {
-  if (lockfile.packages?.[packagePath]?.version !== "1.0.0") {
+  if (lockfile.packages?.[packagePath]?.version !== "1.1.0") {
     throw new Error(
       `package-lock.json has a non-V1 version for ${packagePath || "root"}.`,
     );

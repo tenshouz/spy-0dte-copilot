@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for ASSEMBLY_V1.
+ * Deterministic tests for ASSEMBLY_V2 with soft GEX/DEX confirmation.
  * Run: npx --no-install tsx apps/server/src/services/trade-plan-assembly.spec.ts
  */
 import assert from "node:assert/strict";
@@ -468,9 +468,9 @@ async function test(name: string, fn: () => void | Promise<void>): Promise<void>
 }
 
 async function main(): Promise<void> {
-  await test("ASSEMBLY_V1 product and response validate", () => {
+  await test("ASSEMBLY_V2 product and response validate", () => {
     const result = assembled().response;
-    assert.equal(ASSEMBLY_METHODOLOGY_VERSION, "ASSEMBLY_V1");
+    assert.equal(ASSEMBLY_METHODOLOGY_VERSION, "ASSEMBLY_V2");
     assert.equal(result.product, "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY");
     assert.equal(SpyZeroDteTradePlanAssemblyResponseSchema.safeParse(result).success, true);
   });
@@ -670,11 +670,32 @@ async function main(): Promise<void> {
     );
   });
 
-  await test("BIAS_V1 confidence is preserved exactly", () => {
+  await test("structural confidence is preserved and soft exposure confidence is explicit", () => {
     const { sources, response } = assembled();
     assert.equal(response.bias.confidenceScore, sources.bias.confidenceScore);
     assert.equal(response.bias.confidenceScope, "STRUCTURAL_EVIDENCE_ONLY");
     assert.equal(response.bias.bullishEvidenceCount, sources.bias.bullishEvidenceCount);
+    assert.equal(
+      response.planConfidence!.structuralConfidenceScore,
+      sources.bias.confidenceScore,
+    );
+    assert.equal(
+      response.planConfidence!.exposureAdjustmentPoints,
+      response.exposureConfirmation!.adjustmentPoints,
+    );
+    assert.equal(
+      response.planConfidence!.adjustedConfidenceScore,
+      response.exposureConfirmation!.adjustedConfidenceScore,
+    );
+    assert.equal(
+      response.planConfidence!.scope,
+      "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    );
+    assert.equal(
+      response.disclosures.confidence,
+      "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    );
+    assert.equal(response.exposureConfirmation!.disclosures.cannotBlockEligibility, true);
   });
 
   await test("Assembly service retrieves Market State and Chain exactly once when applicable", async () => {

@@ -414,6 +414,25 @@ test("healthy RTH inputs create a READY validated context", () => {
   assert.equal(result.components.length, 11);
 });
 
+test("healthy context derives one coherent GEX/DEX exposure structure snapshot", () => {
+  const result = buildSpyZeroDteMarketContext(baseInputs(), NOW);
+  assert.equal(
+    result.exposureStructure?.product,
+    "SPY_ZERO_DTE_DETERMINISTIC_EXPOSURE_STRUCTURE",
+  );
+  assert.equal(result.exposureStructure?.methodologyVersion, "EXPOSURE_STRUCTURE_V1");
+  assert.equal(result.exposureStructure?.currentMarketDate, result.currentMarketDate);
+  assert.equal(result.exposureStructure?.calculatedAt, result.assembledAt);
+  assert.equal(
+    result.exposureStructure?.returnedWindowNetGammaExposureProxy,
+    result.gex.returnedWindowNetGammaExposureProxy,
+  );
+  assert.equal(
+    result.exposureStructure?.returnedWindowNetDeltaExposureProxy,
+    result.dex.returnedWindowNetDeltaExposureProxy,
+  );
+});
+
 test("assembledAt is assembly time and does not replace source timestamps", () => {
   const result = buildSpyZeroDteMarketContext(baseInputs(), NOW);
   assert.equal(result.assembledAt, new Date(NOW).toISOString());

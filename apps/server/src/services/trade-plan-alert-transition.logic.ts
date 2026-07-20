@@ -39,7 +39,7 @@ function methodology(cooldownMs: number) {
   return {
     sourceProduct:
       "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE" as const,
-    sourceMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V1" as const,
+    sourceMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V2" as const,
     evaluationScope: "CURRENT_CANDIDATE_VS_PROCESS_MEMORY" as const,
     duplicateSuppressionMethod: "ACTIVE_CANDIDATE_KEY_EQUALITY" as const,
     reappearanceMethod: "SAME_KEY_AFTER_CLEAR_AND_COOLDOWN" as const,

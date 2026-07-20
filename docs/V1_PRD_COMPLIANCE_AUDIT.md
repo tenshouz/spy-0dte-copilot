@@ -1,8 +1,8 @@
-# SPY 0DTE Copilot V1 PRD Compliance Audit
+# SPY 0DTE Copilot V1.1 PRD Compliance Audit
 
 ## Release conclusion
 
-The local SPY-only V1 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.
+The local SPY-only V1.1 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.
 
 ## Implemented capabilities
 
@@ -11,7 +11,7 @@ The local SPY-only V1 is functionally complete for deterministic decision suppor
 | Market data | Backend-only Schwab OAuth, encrypted tokens, refresh recovery, normalized SPY quote, bounded five-minute candles, current-date options chain, source freshness labels, backoff, timeout, cache, and in-flight deduplication |
 | Session structure | RTH VWAP, previous-session levels, gap, 5/15/30-minute opening ranges, Traditional daily/weekly pivots, NYSE holidays and early closes |
 | Options analytics | ATM implied move, returned-window GEX and DEX proxies, ranked wall proxies, cumulative Gamma-balance proxy, cliffs, and DEX anchor |
-| Deterministic reasoning | Market Context, Market State, bias, Trade Plan, objective risk, contract selection, and concise same-snapshot assembly |
+| Deterministic reasoning | Market Context, Market State, bias, Trade Plan, objective risk, contract selection, and concise same-snapshot assembly; returned-window GEX/DEX structure modifies plan confidence only through a versioned soft-confirmation layer |
 | Risk support | Manual and read-only Schwab-assisted sizing; no order submission |
 | Reporting and alerts | Deterministic scheduled reports, candidate transitions, Discord test/manual/automatic delivery, persistent backend scheduler, lease protection, deduplication, and sanitized delivery audit |
 | Journal | Explicit and opt-in automatic captured snapshots, user-entered outcomes, realized P&L annotations, and performance analytics |
@@ -24,7 +24,7 @@ The local SPY-only V1 is functionally complete for deterministic decision suppor
 - Schwab account access is read-only and only used for bounded risk context when explicitly requested.
 - Discord delivery cannot expose the webhook URL or provider response body.
 - Secrets, tokens, account hashes, database URLs, raw provider responses, and private balances are excluded from readiness, replay, journal, and automation audit payloads.
-- Deterministic calculations remain code-owned and versioned.
+- Deterministic calculations remain code-owned and versioned. GEX/DEX confirmation cannot create a direction, satisfy an eligibility gate, or block a structurally eligible setup.
 - LLM-generated trade decisions are not required for V1 correctness.
 - Every market-data product discloses source state and warning codes instead of silently substituting real and mock data.
 - Historical replay uses persisted captured snapshots only and does not claim to reconstruct raw history that was never stored.

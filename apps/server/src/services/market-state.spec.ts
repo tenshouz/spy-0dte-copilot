@@ -7,6 +7,7 @@ import type {
   MarketContextComponent,
   MarketContextComponentStatus,
   SpyZeroDteMarketContextResponse,
+  SpyZeroDteExposureStructureResponse,
 } from "@spy-copilot/shared";
 import {
   buildSpyZeroDteDeterministicMarketState,
@@ -24,6 +25,58 @@ const ASSEMBLED_AT = "2026-07-16T14:00:00.000Z";
 const CALCULATED_AT = Date.parse("2026-07-16T14:00:01.000Z");
 const FETCHED_AT = "2026-07-16T13:59:45.000Z";
 const QUOTE_AT = "2026-07-16T13:59:44.000Z";
+
+
+function testExposureStructure(): SpyZeroDteExposureStructureResponse {
+  return {
+    symbol: "SPY",
+    product: "SPY_ZERO_DTE_DETERMINISTIC_EXPOSURE_STRUCTURE",
+    methodologyVersion: "EXPOSURE_STRUCTURE_V1",
+    currentMarketDate: MARKET_DATE,
+    calculatedAt: ASSEMBLED_AT,
+    engineState: "AVAILABLE",
+    metricState: "LIVE",
+    coverageState: "COMPLETE",
+    expirationDate: MARKET_DATE,
+    underlyingPrice: 754.5,
+    minimumReturnedStrike: 745,
+    maximumReturnedStrike: 765,
+    eligibleGexStrikeCount: 10,
+    eligibleDexStrikeCount: 10,
+    grossGammaExposure: 1_000_000,
+    returnedWindowNetGammaExposureProxy: 500_000,
+    gammaRegime: "CALL_DOMINANT",
+    gammaRegimeRatioPercent: 50,
+    callWalls: [{ rank: 1, strikePrice: 755, exposureMagnitude: 300_000, shareOfSidePercent: 40, shareOfGrossGammaPercent: 30, distanceFromUnderlyingPoints: 0.5, distanceFromUnderlyingPercent: 0.06626905235255136 }],
+    putWalls: [{ rank: 1, strikePrice: 750, exposureMagnitude: 250_000, shareOfSidePercent: 45, shareOfGrossGammaPercent: 25, distanceFromUnderlyingPoints: -4.5, distanceFromUnderlyingPercent: -0.5964214718356527 }],
+    largestPositiveNetGexStrike: 755,
+    largestNegativeNetGexStrike: 750,
+    gammaFlipProxy: { state: "NO_CROSS", estimatedStrike: null, lowerStrike: null, upperStrike: null, cumulativeNetGammaAtLower: null, cumulativeNetGammaAtUpper: null, distanceFromUnderlyingPoints: null, distanceFromUnderlyingPercent: null },
+    gammaCliffs: [],
+    returnedWindowNetDeltaExposureProxy: 400_000_000,
+    dexRegime: "POSITIVE",
+    dexRegimeRatioPercent: 40,
+    largestAbsoluteDexAnchor: null,
+    sourceGexMetricState: "LIVE",
+    sourceGexCoverageState: "COMPLETE",
+    sourceDexMetricState: "LIVE",
+    sourceDexCoverageState: "COMPLETE",
+    latestOptionQuoteAt: QUOTE_AT,
+    chainFetchedAt: FETCHED_AT,
+    warnings: [],
+    disclosures: {
+      returnedWindowOnly: true,
+      openInterestMayBeStaleIntraday: true,
+      analyticalCallPositivePutNegativeConvention: true,
+      gammaFlipIsCumulativeBalanceProxy: true,
+      notObservedDealerInventory: true,
+      noStandaloneSignal: true,
+      noPrivateAccountData: true,
+      noPositionSizing: true,
+      noOrderExecution: true,
+    },
+  };
+}
 
 function component(
   name: MarketContextComponent,
@@ -378,6 +431,14 @@ test("healthy RTH context produces all nine deterministic V1 features", () => {
   assert.equal(result.featureStatuses.length, 9);
   assert.equal(result.engineState, "AVAILABLE");
   assert.equal(result.warningCode, null);
+});
+
+test("Market State preserves the exact exposure structure used by Trade Plan V2", () => {
+  const context = cloneContext();
+  context.exposureStructure = testExposureStructure();
+  const result = buildSpyZeroDteDeterministicMarketState(context, CALCULATED_AT);
+  assert.deepEqual(result.exposureStructure, context.exposureStructure);
+  assert.equal(result.exposureStructure?.methodologyVersion, "EXPOSURE_STRUCTURE_V1");
 });
 
 test("canonical comparison price is Quote lastPrice for every price feature", () => {

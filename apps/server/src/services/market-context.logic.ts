@@ -24,6 +24,7 @@ import {
   classifyMarketSession,
   getObservedMarketDate,
 } from "./session-data.logic";
+import { deriveSpyZeroDteExposureStructure } from "./spy-exposure-structure.logic";
 
 export interface SpyMarketContextInputs {
   quote: SpyQuote;
@@ -474,6 +475,11 @@ export function buildSpyZeroDteMarketContext(
   const strikes = [...inputs.options.calls, ...inputs.options.puts].map((item) => item.strikePrice);
   const atmStrike = selectAtmStrike(strikes, inputs.options.underlyingPrice);
   const candleSummary = summarizeSpyCandles(inputs.candles);
+  const exposureStructure = deriveSpyZeroDteExposureStructure(
+    inputs.gex,
+    inputs.dex,
+    nowMs,
+  );
 
   return SpyZeroDteMarketContextResponseSchema.parse({
     symbol: "SPY",
@@ -669,6 +675,7 @@ export function buildSpyZeroDteMarketContext(
       dataAgeMs: inputs.dex.dataAgeMs,
       warningCode: inputs.dex.warningCode,
     },
+    exposureStructure,
     components,
     componentWarnings,
     warningCode,

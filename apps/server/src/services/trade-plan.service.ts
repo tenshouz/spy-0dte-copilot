@@ -8,7 +8,7 @@ import { buildSpyZeroDteDeterministicTradePlan } from "./trade-plan.logic";
 
 /**
  * Retrieves exactly one Market-State response, derives BIAS_V1 from that same
- * object, and calculates TRADE_PLAN_V1 without any provider or public-route call.
+ * object, and calculates TRADE_PLAN_V2 without any provider or public-route call.
  */
 export async function getSpyZeroDteDeterministicTradePlan(): Promise<SpyZeroDteDeterministicTradePlanResponse> {
   const marketState = await getSpyZeroDteDeterministicMarketState();

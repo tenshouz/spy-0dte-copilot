@@ -12,7 +12,9 @@ import {
   formatNullablePercent,
   formatNullablePrice,
   formatNullableTimestamp,
+  formatSignedConfidencePoints,
   getDirectionLabel,
+  getExposureConfirmationView,
   getTradePlanStateView,
   type TradePlanViewTone,
 } from "@/lib/trade-plan-assembly-view";
@@ -32,12 +34,16 @@ export default function TradePlanPage() {
   const query = useSpyZeroDteTradePlanAssembly();
   const plan = query.isError ? null : query.data ?? null;
   const view = plan ? getTradePlanStateView(plan.planState) : null;
+  const exposure = plan?.exposureConfirmation ?? null;
+  const exposureView = exposure
+    ? getExposureConfirmationView(exposure.state)
+    : null;
 
   return (
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Trade Plan"
-        description="Deterministic SPY 0DTE structure, contract selection, and read-only sizing references. No order or guaranteed fill."
+        description="Deterministic SPY 0DTE structure with soft GEX/DEX confirmation, contract selection, and read-only sizing references. No order or guaranteed fill."
         action={
           plan && view ? (
             <Badge variant={badgeVariant(view.tone)}>{plan.planState.replaceAll("_", " ")}</Badge>
@@ -72,6 +78,12 @@ export default function TradePlanPage() {
                       A source-quality limitation is active. Details are available below.
                     </p>
                   ) : null}
+                  {exposure && ["CONFLICTING", "MIXED"].includes(exposure.state) ? (
+                    <p className="flex items-start gap-2 pt-1 text-xs text-wait">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      GEX/DEX exposure context is {exposure.state.toLowerCase()} for the structural direction. It changes confidence only and does not block eligibility.
+                    </p>
+                  ) : null}
                 </div>
               </div>
               <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3">
@@ -88,7 +100,7 @@ export default function TradePlanPage() {
               <MetricCard
                 label="Structural Evidence Confidence"
                 value={formatNullablePercent(plan.bias.confidenceScore)}
-                sublabel="Structural evidence only"
+                sublabel="Price-structure evidence only"
               />
               <MetricCard label="Bullish Evidence" value={plan.bias.bullishEvidenceCount} tone="bull" />
               <MetricCard label="Bearish Evidence" value={plan.bias.bearishEvidenceCount} tone="bear" />
@@ -100,7 +112,67 @@ export default function TradePlanPage() {
             </div>
           </Panel>
 
-          <Panel title="Entry Condition" className="min-w-0 lg:col-span-2">
+          <Panel
+            title="GEX / DEX Soft Confirmation"
+            className="min-w-0 lg:col-span-2"
+            action={
+              exposureView ? (
+                <Badge variant={badgeVariant(exposureView.tone)}>
+                  {exposureView.label}
+                </Badge>
+              ) : null
+            }
+          >
+            {!exposure || !exposureView ? (
+              <EmptyState message="Exposure confirmation is unavailable for this snapshot." />
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <MetricCard
+                    label="Adjusted Plan Confidence"
+                    value={formatNullablePercent(plan.planConfidence?.adjustedConfidenceScore ?? null)}
+                    sublabel="Structural confidence plus soft exposure adjustment"
+                    tone={exposureView.tone}
+                  />
+                  <MetricCard
+                    label="Confidence Adjustment"
+                    value={formatSignedConfidencePoints(exposure.adjustmentPoints)}
+                    sublabel="Never an eligibility gate"
+                    tone={exposure.adjustmentPoints > 0 ? "bull" : exposure.adjustmentPoints < 0 ? "bear" : "default"}
+                  />
+                  <MetricCard label="Source Quality" value={exposure.sourceQuality} />
+                  <MetricCard label="Evaluated Direction" value={exposure.evaluatedDirection.replaceAll("_", " ")} />
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {exposure.components.map((component) => (
+                    <div key={component.componentId} className="rounded-md border border-panel-border bg-background/40 p-3">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        {component.componentId.replaceAll("_", " ")}
+                      </p>
+                      <p className="mt-1 font-mono text-sm font-semibold">
+                        {component.rawState ?? "—"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <Badge variant={badgeVariant(component.status === "SUPPORTIVE" ? "bull" : component.status === "CONFLICTING" ? "bear" : component.status === "NEUTRAL" ? "default" : "wait")}>
+                          {component.status.replaceAll("_", " ")}
+                        </Badge>
+                        <span className="font-mono text-muted-foreground">
+                          {formatSignedConfidencePoints(component.contributionPoints)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {exposure.primaryDirectionalWall ? (
+                  <p className="text-xs text-muted-foreground">
+                    Primary directional wall: <span className="font-mono text-foreground">${exposure.primaryDirectionalWall.strikePrice.toFixed(2)}</span> ({exposure.primaryDirectionalWall.distanceFromUnderlyingPercent.toFixed(2)}% from SPY). The wall is context only, not an entry, target, stop, or dealer-position observation.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Entry Condition" className="min-w-0 lg:col-span-3">
             {plan.entryCondition.state === "NOT_APPLICABLE" ? (
               <EmptyState message="No active entry condition applies to the current Plan State." />
             ) : plan.entryCondition.state === "UNAVAILABLE" ? (
@@ -237,6 +309,8 @@ export default function TradePlanPage() {
               <Disclosure text="Planning reference only" />
               <Disclosure text="Structural invalidation reference only" />
               <Disclosure text="Underlying objective reference only" />
+              <Disclosure text="GEX/DEX exposure adjusts confidence only and cannot create a direction or block eligibility" />
+              <Disclosure text="Exposure data is returned-window analytical context, not observed dealer inventory" />
               <Disclosure text="Midpoint reference only" />
               <Disclosure text="No order is generated" />
               <Disclosure text="Sizing quantity is reference only" />
@@ -299,6 +373,8 @@ export default function TradePlanPage() {
                     <Detail label="Contract quote" value={formatNullableTimestamp(plan.sourceSummary.selectedContractQuoteAt)} />
                     <Detail label="Assembly reason" value={plan.primaryReasonCode} />
                     <Detail label="Assembly warning" value={plan.warningCode ?? "None"} />
+                    <Detail label="Exposure state" value={exposure?.state ?? "Unavailable"} />
+                    <Detail label="Plan confidence" value={formatNullablePercent(plan.planConfidence?.adjustedConfidenceScore ?? null)} />
                   </dl>
                 </div>
               </div>

@@ -54,7 +54,7 @@ function methodology() {
   return {
     sourceProduct:
       "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ALERT_CANDIDATE" as const,
-    sourceMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V1" as const,
+    sourceMethodology: "TRADE_PLAN_ALERT_CANDIDATE_V2" as const,
     transitionMethodology: "TRADE_PLAN_ALERT_TRANSITION_V1" as const,
     deliveryTrigger: "EXPLICIT_POST_ONLY" as const,
     deliveryStateIsolation: "DEDICATED_PROCESS_MEMORY" as const,

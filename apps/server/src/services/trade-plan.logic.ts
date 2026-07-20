@@ -13,8 +13,9 @@ import {
   type TradeSetupState,
   type TradeTriggerComparison,
 } from "@spy-copilot/shared";
+import { buildTradePlanExposureConfirmation } from "./trade-plan-exposure.logic";
 
-export const TRADE_PLAN_METHODOLOGY_VERSION = "TRADE_PLAN_V1" as const;
+export const TRADE_PLAN_METHODOLOGY_VERSION = "TRADE_PLAN_V2" as const;
 
 const GATE_ORDER = [
   "MARKET_STATE_AVAILABLE",
@@ -794,6 +795,17 @@ export function buildSpyZeroDteDeterministicTradePlan(
       : bias.biasState === "BEARISH"
         ? bias.bullishEvidence
         : [];
+  const exposureDirection =
+    bias.biasState === "BULLISH"
+      ? ("CALLS" as const)
+      : bias.biasState === "BEARISH"
+        ? ("PUTS" as const)
+        : ("NONE" as const);
+  const exposureConfirmation = buildTradePlanExposureConfirmation(
+    marketState,
+    exposureDirection,
+    bias.confidenceScore,
+  );
 
   return SpyZeroDteDeterministicTradePlanResponseSchema.parse({
     symbol: "SPY",
@@ -822,6 +834,10 @@ export function buildSpyZeroDteDeterministicTradePlan(
     biasConfidenceScore: bias.confidenceScore,
     biasConfidenceScope: bias.confidenceScope,
     biasSourceQuality: bias.sourceQualityState,
+    structuralConfidenceScore: bias.confidenceScore,
+    exposureConfidenceAdjustmentPoints: exposureConfirmation.adjustmentPoints,
+    planConfidenceScore: exposureConfirmation.adjustedConfidenceScore,
+    exposureConfirmation,
     trigger: outcome.trigger,
     gates,
     supportingBiasEvidenceIds: evidenceIds(supporting),

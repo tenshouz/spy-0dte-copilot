@@ -247,7 +247,7 @@ export default function JournalPage() {
               PostgreSQL-backed snapshot history
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Manual save captures the current ASSEMBLY_V1 state and complete
+              Manual save captures the current Assembly state and complete
               structured source snapshot. Outcome review remains explicit and
               user-entered; the dashboard does not infer whether a trade was
               taken or calculate P&amp;L.

@@ -9,7 +9,9 @@ import {
   formatNullableNumber,
   formatNullablePercent,
   formatNullablePrice,
+  formatSignedConfidencePoints,
   getDirectionLabel,
+  getExposureConfirmationView,
   getTradePlanStateView,
 } from "./trade-plan-assembly-view";
 
@@ -61,6 +63,20 @@ test("price and percent formatting are display-only", () => {
   assert.equal(formatNullablePercent(12.345), "12.35%");
 });
 
+
+test("exposure confirmation states have fixed non-order copy", () => {
+  assert.equal(getExposureConfirmationView("SUPPORTIVE").label, "Supportive");
+  assert.equal(getExposureConfirmationView("CONFLICTING").tone, "bear");
+  assert.equal(getExposureConfirmationView("MIXED").tone, "wait");
+  assert.equal(getExposureConfirmationView("UNAVAILABLE").label, "Unavailable");
+});
+
+test("confidence adjustments use explicit signed point formatting", () => {
+  assert.equal(formatSignedConfidencePoints(8), "+8 pts");
+  assert.equal(formatSignedConfidencePoints(-6), "-6 pts");
+  assert.equal(formatSignedConfidencePoints(-0), "0 pts");
+});
+
 test("Trade Plan page consumes only the Assembly hook", () => {
   const page = readFileSync(
     resolve(process.cwd(), "apps/web/src/app/trade-plan/page.tsx"),
@@ -78,6 +94,17 @@ test("Trade Plan page consumes only the Assembly hook", () => {
   ]) {
     assert.equal(page.includes(forbiddenHook), false, `${forbiddenHook} must not be used`);
   }
+});
+
+test("Trade Plan page explains GEX and DEX as soft confirmation rather than a gate", () => {
+  const page = readFileSync(
+    resolve(process.cwd(), "apps/web/src/app/trade-plan/page.tsx"),
+    "utf8",
+  );
+  assert.equal(page.includes("GEX / DEX Soft Confirmation"), true);
+  assert.equal(page.includes("Never an eligibility gate"), true);
+  assert.equal(page.includes("cannot create a direction or block eligibility"), true);
+  assert.equal(page.includes("Adjusted Plan Confidence"), true);
 });
 
 test("Trade Plan page contains no order controls or mock Report fields", () => {

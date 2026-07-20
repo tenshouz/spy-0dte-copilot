@@ -64,7 +64,7 @@ export function SessionTimeline() {
               </Badge>
             </div>
             <p className="mt-2 font-mono text-xs">{formatEasternTime(assembly.calculatedAt)}</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">ASSEMBLY_V1 · no history persisted</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">ASSEMBLY_V2 · no history persisted</p>
           </div>
         )}
       </div>

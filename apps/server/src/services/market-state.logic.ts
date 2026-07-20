@@ -847,6 +847,7 @@ export function buildSpyZeroDteDeterministicMarketState(
     priceSource: price === null ? null : PRICE_SOURCE,
     quoteTimestamp: price === null ? null : context.quote.quoteTimestamp,
     quoteSourceState: context.quote.sourceState,
+    exposureStructure: context.exposureStructure,
     features,
     featureStatuses,
     featureWarnings,

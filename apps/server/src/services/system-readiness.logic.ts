@@ -18,7 +18,7 @@ import type { SchwabConfig } from "../config/env";
 
 export const SYSTEM_READINESS_METHODOLOGY_VERSION = "SYSTEM_READINESS_V1" as const;
 export const SYSTEM_DATA_PROBE_METHODOLOGY_VERSION = "SYSTEM_DATA_PROBE_V1" as const;
-export const V1_RELEASE_VERSION = "1.0.0" as const;
+export const V1_RELEASE_VERSION = "1.1.0" as const;
 
 export interface SystemReadinessInputs {
   calculatedAt: Date;

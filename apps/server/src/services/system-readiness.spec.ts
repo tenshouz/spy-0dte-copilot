@@ -536,7 +536,7 @@ test("release documentation and verification scripts are present", () => {
     resolve(process.cwd(), "scripts/verify-v1.mjs"),
     "utf8",
   );
-  assert.match(readme, /Local V1 complete/i);
+  assert.match(readme, /Local V1(?:\.1)? Complete/i);
   assert.match(runbook, /Backup and restore/i);
   assert.match(runbook, /Schwab recovery/i);
   assert.match(audit, /No order execution/i);
