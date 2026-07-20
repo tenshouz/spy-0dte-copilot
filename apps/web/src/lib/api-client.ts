@@ -62,6 +62,9 @@ import {
   SpyZeroDteSchwabAssistedPositionSizingRequestSchema,
   SpyZeroDteSchwabAssistedPositionSizingResponseSchema,
   StrikeExposureSchema,
+  SystemDataProbeRequestSchema,
+  SystemDataProbeResponseSchema,
+  SystemReadinessResponseSchema,
   type Alert,
   type BackendAutomationDeliveryHistoryResponse,
   type BackendAutomationRunOnceRequest,
@@ -125,6 +128,9 @@ import {
   type SpyZeroDteSchwabAssistedPositionSizingRequest,
   type SpyZeroDteSchwabAssistedPositionSizingResponse,
   type StrikeExposure,
+  type SystemDataProbeRequest,
+  type SystemDataProbeResponse,
+  type SystemReadinessResponse,
 } from "@spy-copilot/shared";
 import { z } from "zod";
 
@@ -198,6 +204,18 @@ async function patchJson<TRequest, TResponse>(
 }
 
 export const apiClient = {
+  getSystemReadiness: (): Promise<SystemReadinessResponse> =>
+    getPrivateNoStoreJson(
+      "/api/system/readiness",
+      SystemReadinessResponseSchema,
+    ),
+  runSystemDataProbe: (): Promise<SystemDataProbeResponse> =>
+    postJson<SystemDataProbeRequest, SystemDataProbeResponse>(
+      "/api/system/probe",
+      {},
+      SystemDataProbeRequestSchema,
+      SystemDataProbeResponseSchema,
+    ),
   getSnapshot: (): Promise<MarketSnapshot> => getJson("/api/snapshot/latest", MarketSnapshotSchema),
   getStrikeExposures: (): Promise<StrikeExposure[]> =>
     getJson("/api/snapshot/strikes", z.array(StrikeExposureSchema)),

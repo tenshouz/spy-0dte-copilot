@@ -1,122 +1,135 @@
-# SPY 0DTE Copilot — Milestone 1: Project Foundation
+# SPY 0DTE Copilot — Local V1 Complete
 
-This is the scaffolded foundation for the SPY 0DTE AI decision-support platform described in the
-PRD. **Milestone 1 only**: layout, navigation, design system, and typed mock data. No Schwab
-connection, no GEX/DEX math, no AI reasoning yet — those are Milestones 2–3.
+SPY 0DTE Copilot is a local, single-user decision-support dashboard for discretionary SPY same-day options trading. It combines backend-only Schwab connectivity, deterministic market structure, 0DTE options analytics, Trade Plan assembly, read-only sizing support, Discord notifications, persistent journaling, performance analytics, and captured-snapshot historical replay.
 
-See `/apps/web/README.md` for frontend specifics and the root PRD (`PRD_SPY_0DTE_Assistant.md`)
-for full product context. This README covers running the whole monorepo.
+**V1 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
 
-## Structure
+## V1 capabilities
 
-```
+- Encrypted Schwab OAuth token storage and refresh recovery
+- Normalized SPY quote, bounded five-minute candles, and current-date options chain
+- RTH VWAP, gaps, session levels, 5/15/30-minute opening ranges, and Traditional daily/weekly pivots
+- ATM straddle-Mark expected move
+- Returned-window GEX/DEX proxies, ranked walls, Gamma-balance proxy, cliffs, and DEX anchor
+- Deterministic Market Context, Market State, bias, Trade Plan, risk, contract selection, and assembly
+- Manual and read-only Schwab-assisted position sizing
+- Deterministic scheduled reports and Discord delivery
+- Persistent backend automation with lease protection, restart-safe deduplication, and sanitized audit history
+- Persistent Journal snapshots, user-entered outcomes, P&L annotations, and performance analytics
+- Captured-snapshot historical replay with no-look-ahead timestamp validation
+- V1 System Readiness page and explicit live-data probe
+
+## Repository structure
+
+```text
 spy-0dte-copilot/
 ├── apps/
-│   ├── web/       Next.js 15 dashboard (the actual Milestone 1 deliverable)
-│   └── server/    Express + Prisma skeleton (routes stubbed, returns mock data)
-└── packages/
-    └── shared/    Zod schemas + TS types shared by web and server
+│   ├── web/       Next.js 15 / React 19 dashboard
+│   └── server/    Express / Prisma deterministic API
+├── packages/
+│   └── shared/    Shared Zod contracts and TypeScript types
+├── docs/
+│   ├── V1_RELEASE_RUNBOOK.md
+│   └── V1_PRD_COMPLIANCE_AUDIT.md
+└── scripts/
+    ├── run-specs.mjs
+    └── verify-v1.mjs
 ```
 
 ## Prerequisites
 
 - Node.js 20+
 - npm 10+
-- Docker Desktop (for the local Postgres database — see Windows quick start below)
-- (Later milestones only) a Schwab developer account, once you're ready to connect real credentials
+- Docker Desktop
+- A Schwab developer application
+- An HTTPS tunnel for the exact Schwab callback during local development
+- Optional Discord incoming webhook
 
-## Windows Quick Start — local database for Schwab OAuth
+## Initial local setup
 
-You only need this if you want the Settings page's Schwab connection card to work end-to-end
-(it will show "Database not configured" without it, which is expected and harmless otherwise).
-
-1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) and start it.
-2. From the repo root, in a terminal (PowerShell, VS Code terminal, etc.), start the database:
-   ```bash
-   npm run db:up
-   ```
-3. Copy the server env file:
-   ```bash
-   copy apps\server\.env.example apps\server\.env
-   ```
-   (On macOS/Linux use `cp apps/server/.env.example apps/server/.env` instead.)
-4. Generate a token-encryption key and paste it into `apps/server/.env` as `SCHWAB_TOKEN_ENCRYPTION_KEY`:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-   ```
-5. Create the database tables:
-   ```bash
-   npm install
-   npm run db:migrate
-   ```
-6. Start the server:
-   ```bash
-   npm run dev:server
-   ```
-
-At this point Settings → Connections will show **"Schwab credentials not configured"** until you
-also fill in real `SCHWAB_CLIENT_ID` / `SCHWAB_CLIENT_SECRET` / `SCHWAB_REDIRECT_URI` from a Schwab
-developer app — that's expected; the database step above is independent of having real Schwab
-credentials. To stop the database later: `npm run db:down` (data persists in a Docker volume).
-
-## HTTPS tunnel for Schwab OAuth (local development only)
-
-Schwab requires an HTTPS callback URL and rejects `http://localhost`. For local development, run an
-HTTPS tunnel that forwards to the backend:
-
-```bash
-ngrok http 4000
-# or
-cloudflared tunnel --url http://localhost:4000
+```powershell
+npm install
+docker compose up -d
+Copy-Item apps\server\.env.example apps\server\.env
 ```
 
-Then set in `apps/server/.env` (and register the **exact** same URL in your Schwab developer app):
+Edit `apps/server/.env` locally. Never commit or upload it.
 
-```
-SCHWAB_REDIRECT_URI="https://<your-tunnel-host>/api/auth/schwab/callback"
-```
+Generate an encryption key:
 
-Important notes:
-- The tunnel must stay running for the entire OAuth flow (Schwab redirects the browser back through it).
-- Free/temporary tunnel hostnames change between runs — when the hostname changes, update both
-  `SCHWAB_REDIRECT_URI` and the callback registered with Schwab, then restart the server.
-- The URL registered with Schwab must match `SCHWAB_REDIRECT_URI` exactly: same host, the path
-  `/api/auth/schwab/callback`, no query string, no fragment.
-- The tunnel approach is for local development only. Production requires a stable HTTPS domain
-  pointing at the backend.
-- ngrok/cloudflared are external tools, not application dependencies.
-
-## Install & run
-
-```bash
-npm install                 # installs all three workspaces
-npm run dev:web             # http://localhost:3000
-npm run dev:server          # http://localhost:4000 (mock API, optional for M1)
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-The web app now fetches its dashboard data from the Express server (see `apps/web/src/lib/api-client.ts`),
-so run both `dev:web` and `dev:server` for the full experience. Only the Schwab OAuth routes need
-the database from the Windows Quick Start above — the rest of the API (`/api/snapshot`, `/api/reports`,
-`/api/journal`, `/api/alerts`) is mock data and needs no database.
+Load `DATABASE_URL` from the ignored backend environment file without displaying it, then deploy migrations and generate Prisma:
 
-## What's real vs. mock in Milestone 1
+```powershell
+$databaseLine = Get-Content apps\server\.env |
+  Where-Object { $_ -match '^\s*DATABASE_URL\s*=' -and $_ -notmatch '^\s*#' } |
+  Select-Object -First 1
 
-| Area | Status |
-|---|---|
-| Layout, navigation, theme | Real, production code |
-| Component library (cards, tables, panels, alerts) | Real, production code |
-| Chart container (TradingView Lightweight Charts) | Real integration, fed mock candles |
-| Market data, GEX/DEX, AI trade plan, alerts, journal | Typed **mock data**, shaped exactly like the PRD's final schemas |
-| Schwab OAuth (login/callback/status, encrypted token storage) | Real, requires local Postgres + real Schwab credentials |
-| Schwab market data retrieval | Not implemented — auth only so far |
-| GEX/DEX/Gamma Flip/Wall math | Not implemented (Milestone 2) |
-| AI scoring + LLM narrative | Not implemented (Milestone 3) |
+if (!$databaseLine) { throw "DATABASE_URL is missing from apps/server/.env." }
 
-## A note on this sandbox
+$databaseValue = ($databaseLine -split '=', 2)[1].Trim()
+if (
+  ($databaseValue.StartsWith('"') -and $databaseValue.EndsWith('"')) -or
+  ($databaseValue.StartsWith("'") -and $databaseValue.EndsWith("'"))
+) {
+  $databaseValue = $databaseValue.Substring(1, $databaseValue.Length - 2)
+}
 
-This code was written and reviewed in an offline sandbox with no package-registry access, so
-`npm install` / `npm run dev` could not be executed here to produce a live preview. Everything
-below is production-shaped code following Next.js 15 / React 19 / shadcn conventions, but please
-run the install + dev server on your machine as the first step and report back anything that
-doesn't compile — see the "What still needs to be built / verified" note at the end of the build
-summary.
+$env:DATABASE_URL = $databaseValue
+Remove-Variable databaseLine, databaseValue
+
+npx prisma migrate deploy --schema apps/server/prisma/schema.prisma
+npx prisma generate --schema apps/server/prisma/schema.prisma
+```
+
+## Run locally
+
+Use separate terminals:
+
+```powershell
+npm run dev:server
+```
+
+```powershell
+npm run dev:web
+```
+
+Open `http://localhost:3000`. The API defaults to `http://localhost:4000`.
+
+For Schwab OAuth, keep the HTTPS tunnel pointed at backend port 4000 and register this exact path:
+
+```text
+https://<stable-tunnel-host>/api/auth/schwab/callback
+```
+
+## V1 readiness and verification
+
+Open:
+
+```text
+http://localhost:3000/system
+```
+
+The page separates configuration/runtime readiness from an explicit provider probe. The probe may call Schwab but never sends Discord messages, writes Journal entries, accesses private account data, sizes a position, or creates an order.
+
+After Prisma generation, run the complete source verification:
+
+```powershell
+npm run verify:v1
+```
+
+This executes every backend and frontend specification, server and frontend TypeScript validation, lint, the production frontend build, tracked-secret checks, route safety checks, and whitespace validation.
+
+## Important operational notes
+
+- Market-data payloads explicitly identify LIVE, STALE, MOCK, or UNAVAILABLE state.
+- A current-date options chain can be legitimately not applicable on weekends, holidays, or dates without a same-day SPY expiration.
+- Persistent automation is safely disabled by default.
+- The backend must remain running for scheduled automation.
+- Keep real Schwab credentials, tokens, the encryption key, Discord webhook URL, database dumps, and account identifiers private.
+- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1 panels.
+
+See [the V1 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations.

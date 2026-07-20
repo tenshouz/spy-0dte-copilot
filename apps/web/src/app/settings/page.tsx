@@ -132,8 +132,7 @@ export default function SettingsPage() {
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                Authenticates with Schwab via OAuth and stores an encrypted token. Market data calls
-                are not made yet (PRD Section 5).
+                Authenticates with Schwab via OAuth, stores encrypted tokens, refreshes them when needed, and powers the read-only SPY market-data pipeline.
               </p>
               {blockedState ? (
                 <Button disabled className="mt-1">
@@ -180,9 +179,7 @@ export default function SettingsPage() {
                 token are never returned to this page.
               </p>
               <p className="text-xs text-muted-foreground">
-                This test is explicit and sends one fixed connection message. Opt-in automatic
-                Trade Plan alert delivery can be started from the Alerts page and runs only while
-                that browser session remains open in the foreground.
+                This test is explicit and sends one fixed connection message. Persistent Trade Plan alerts and scheduled reports are controlled from the Alerts tab and run in the backend without requiring an open browser tab.
               </p>
               <Button
                 disabled={!discordStatus?.canSendTest || discordTest.isPending}
@@ -227,9 +224,7 @@ export default function SettingsPage() {
               </div>
               <Separator />
               <p className="text-xs text-muted-foreground">
-                Per-factor point weights (PRD Section 9) will be editable here once the deterministic
-                scoring layer ships in Milestone 3 — including an aggressiveness profile
-                (conservative / standard / aggressive).
+                The V1 deterministic market-state, bias, Trade Plan, risk, contract-selection, and assembly methodologies are fixed and versioned in code. Runtime weight editing is intentionally disabled so replay and journal results remain reproducible.
               </p>
             </div>
           </Panel>

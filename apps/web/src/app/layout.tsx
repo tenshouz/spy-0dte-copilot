@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "SPY 0DTE Copilot",
   description:
-    "AI-powered decision-support dashboard for discretionary SPY 0DTE options trading. Not investment advice.",
+    "Deterministic decision-support dashboard for discretionary SPY 0DTE options trading. Not investment advice.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

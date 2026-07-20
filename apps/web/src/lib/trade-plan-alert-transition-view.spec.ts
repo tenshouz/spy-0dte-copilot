@@ -233,7 +233,7 @@ test("automatic delivery is session-only and has no background scheduler", () =>
   assert.equal(monitor.includes("does not persist"), true);
 });
 
-test("Settings and Alerts copy accurately describe automatic foreground delivery", () => {
+test("Settings and Alerts copy distinguish persistent and foreground delivery", () => {
   const settings = readFileSync(
     resolve(process.cwd(), "apps/web/src/app/settings/page.tsx"),
     "utf8",
@@ -242,10 +242,13 @@ test("Settings and Alerts copy accurately describe automatic foreground delivery
     resolve(process.cwd(), "apps/web/src/app/alerts/page.tsx"),
     "utf8",
   );
-  assert.equal(settings.includes("can be started from the Alerts page"), true);
-  assert.equal(settings.includes("browser session remains open"), true);
-  assert.equal(page.includes("No Discord delivery"), false);
-  assert.equal(page.includes("Foreground browser sessions only"), true);
+  assert.equal(settings.includes("Persistent Trade Plan alerts"), true);
+  assert.equal(settings.includes("without requiring an open browser tab"), true);
+  assert.equal(page.includes("persistent backend Discord automation"), true);
+  assert.equal(page.includes("explicit foreground-session controls"), true);
+  assert.equal(page.includes("webhook secrets"), true);
+  assert.equal(page.includes("order execution are excluded"), true);
+  assert.equal(page.includes("Foreground browser sessions only"), false);
 });
 
 test("Discord delivery attempts are session-only bounded and clearable", () => {

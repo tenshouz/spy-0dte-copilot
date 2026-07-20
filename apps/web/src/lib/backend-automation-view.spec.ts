@@ -113,7 +113,7 @@ test("Alerts page disables foreground schedulers when persistent automation is e
   );
   assert.match(source, /useBackendAutomationSettings/);
   assert.match(source, /persistentBackendAutomationEnabled/);
-  assert.match(source, /prevent competing\n              schedulers and duplicate messages/);
+  assert.match(source, /prevent competing\r?\n\s+schedulers and duplicate messages/);
 });
 
 test("API client validates all persistent automation endpoints", () => {

@@ -1,37 +1,44 @@
-# apps/web — SPY 0DTE Copilot Dashboard (Milestone 1)
+# SPY 0DTE Copilot Web Application — V1
 
-Next.js 15 (App Router) + React 19 + TypeScript + Tailwind + shadcn/ui-style components.
+The frontend is a Next.js 15 / React 19 / TypeScript dashboard. It consumes the Express API only through `src/lib/api-client.ts`, validates every response with the shared Zod contracts, and uses TanStack Query for bounded refresh behavior.
 
 ## Run
 
-```bash
-npm install        # from the monorepo root
-npm run dev:web    # or: cd apps/web && npm run dev
+From the monorepo root:
+
+```powershell
+npm install
+npm run dev:web
 ```
 
-Visit `http://localhost:3000` — it redirects to `/dashboard`.
+Visit `http://localhost:3000`. The backend must also be running on the configured `NEXT_PUBLIC_API_URL` or the default `http://localhost:4000`.
 
-## Folder guide
+## Primary pages
 
-```
+- Dashboard
+- Market Data
+- Options Chain
+- GEX / DEX
+- Trade Plan
+- Alerts
+- Trade Journal
+- Historical Replay
+- System Readiness
+- Settings
+
+## Architecture
+
+```text
 src/
-├── app/                 Next.js App Router pages (one folder per route)
-├── components/
-│   ├── layout/          Sidebar, header, mobile nav, app shell, page header
-│   ├── ui/               shadcn-style primitives (button, card, badge, table, tabs, tooltip...)
-│   ├── panels/           Reusable data-display building blocks (Panel, MetricCard, DataTable,
-│   │                     AlertCard, ChartContainer)
-│   └── dashboard/        Composed, page-specific widgets (BiasCard, LiveChart, SessionTimeline)
-├── hooks/                TanStack Query hooks — the ONLY place that decides "mock vs. real" data
-├── mocks/                Typed mock data generators (Milestone 1 only)
-├── stores/               Zustand stores for client-only UI state
-├── lib/                  cn(), formatters, the QueryClient provider
-└── types → re-exported from packages/shared
+├── app/          App Router pages
+├── components/   Layout, panels, UI primitives, and feature components
+├── hooks/        TanStack Query and mutation boundaries
+├── lib/          Validated API client and deterministic presentation helpers
+└── stores/       Client-only UI state
 ```
 
-## Swapping mock data for real data (future milestones)
+The primary V1 pages use deterministic backend products. Legacy mock compatibility hooks remain isolated and are not used by the main decision-support panels.
 
-Every hook in `src/hooks` has a one-line `queryFn` that currently calls a mock generator.
-Replacing that line with a `fetch()` call to the Express API is the entire migration — no
-component changes required, because both sides validate against the same Zod schemas in
-`packages/shared`.
+## Safety boundary
+
+The frontend contains no order-entry or execution flow. The System Readiness probe is explicit and may request market data, but it cannot deliver Discord messages, mutate the Journal, access private account balances, calculate sizing, or create orders.

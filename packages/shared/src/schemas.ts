@@ -9080,3 +9080,321 @@ export const HistoricalReplayHistoryResponseSchema = z
 export type HistoricalReplayHistoryResponse = z.infer<
   typeof HistoricalReplayHistoryResponseSchema
 >;
+
+/** Final local V1 operational-readiness and explicit live-data probe contracts. */
+export const SystemReadinessMethodologyVersionSchema = z.literal(
+  "SYSTEM_READINESS_V1",
+);
+export type SystemReadinessMethodologyVersion = z.infer<
+  typeof SystemReadinessMethodologyVersionSchema
+>;
+
+export const SystemReadinessEngineStateSchema = z.enum([
+  "READY",
+  "DEGRADED",
+  "BLOCKED",
+]);
+export type SystemReadinessEngineState = z.infer<
+  typeof SystemReadinessEngineStateSchema
+>;
+
+export const SystemReadinessCheckStateSchema = z.enum([
+  "PASS",
+  "WARNING",
+  "FAIL",
+]);
+export type SystemReadinessCheckState = z.infer<
+  typeof SystemReadinessCheckStateSchema
+>;
+
+export const SystemReadinessCheckIdSchema = z.enum([
+  "DATABASE",
+  "SCHWAB_CONFIGURATION",
+  "SCHWAB_CONNECTION",
+  "DISCORD_DELIVERY",
+  "BACKEND_AUTOMATION",
+  "HTTP_SECURITY",
+  "TRADING_SAFETY",
+  "REPLAY_AND_AUDIT",
+  "RELEASE_DOCUMENTATION",
+]);
+export type SystemReadinessCheckId = z.infer<
+  typeof SystemReadinessCheckIdSchema
+>;
+
+export const SystemReadinessCheckSchema = z
+  .object({
+    id: SystemReadinessCheckIdSchema,
+    label: z.string().min(1).max(120),
+    state: SystemReadinessCheckStateSchema,
+    required: z.boolean(),
+    reasonCode: z.string().regex(/^[A-Z0-9_]+$/).max(100),
+    detail: z.string().min(1).max(500),
+    remediation: z.string().min(1).max(500).nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.state === "PASS" && value.remediation !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passing readiness checks cannot require remediation",
+      });
+    }
+    if (value.state !== "PASS" && value.remediation === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-passing readiness checks require remediation",
+      });
+    }
+  });
+export type SystemReadinessCheck = z.infer<
+  typeof SystemReadinessCheckSchema
+>;
+
+export const SystemReadinessResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
+    methodologyVersion: SystemReadinessMethodologyVersionSchema,
+    releaseVersion: z.literal("1.0.0"),
+    calculatedAt: z.string().datetime(),
+    engineState: SystemReadinessEngineStateSchema,
+    summary: z
+      .object({
+        totalChecks: z.number().int().positive(),
+        passCount: z.number().int().nonnegative(),
+        warningCount: z.number().int().nonnegative(),
+        failCount: z.number().int().nonnegative(),
+        requiredFailureCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+    runtime: z
+      .object({
+        nodeVersion: z.string().min(1).max(50),
+        environment: z.enum([
+          "development",
+          "production",
+          "test",
+          "unknown",
+        ]),
+        uptimeSeconds: z.number().int().nonnegative(),
+      })
+      .strict(),
+    checks: z.array(SystemReadinessCheckSchema).length(9),
+    disclosures: z
+      .object({
+        noSecretsReturned: z.literal(true),
+        noProviderBodiesReturned: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noPositionSizing: z.literal(true),
+        noOrderCreation: z.literal(true),
+        noOrderExecution: z.literal(true),
+        configurationAndRuntimeStatusOnly: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const passCount = value.checks.filter((item) => item.state === "PASS").length;
+    const warningCount = value.checks.filter(
+      (item) => item.state === "WARNING",
+    ).length;
+    const failCount = value.checks.filter((item) => item.state === "FAIL").length;
+    const requiredFailureCount = value.checks.filter(
+      (item) => item.required && item.state === "FAIL",
+    ).length;
+    const uniqueIds = new Set(value.checks.map((item) => item.id));
+
+    if (
+      value.summary.totalChecks !== value.checks.length ||
+      value.summary.passCount !== passCount ||
+      value.summary.warningCount !== warningCount ||
+      value.summary.failCount !== failCount ||
+      value.summary.requiredFailureCount !== requiredFailureCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "System readiness summary is inconsistent",
+      });
+    }
+    if (uniqueIds.size !== value.checks.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "System readiness check IDs must be unique",
+      });
+    }
+    if (requiredFailureCount > 0 && value.engineState !== "BLOCKED") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Required failures require BLOCKED readiness",
+      });
+    }
+    if (
+      requiredFailureCount === 0 &&
+      (warningCount > 0 || failCount > 0) &&
+      value.engineState !== "DEGRADED"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Non-blocking findings require DEGRADED readiness",
+      });
+    }
+    if (
+      requiredFailureCount === 0 &&
+      warningCount === 0 &&
+      failCount === 0 &&
+      value.engineState !== "READY"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "All passing checks require READY readiness",
+      });
+    }
+  });
+export type SystemReadinessResponse = z.infer<
+  typeof SystemReadinessResponseSchema
+>;
+
+export const SystemDataProbeMethodologyVersionSchema = z.literal(
+  "SYSTEM_DATA_PROBE_V1",
+);
+export type SystemDataProbeMethodologyVersion = z.infer<
+  typeof SystemDataProbeMethodologyVersionSchema
+>;
+
+export const SystemDataProbeStateSchema = z.enum([
+  "PASS",
+  "DEGRADED",
+  "FAIL",
+]);
+export type SystemDataProbeState = z.infer<
+  typeof SystemDataProbeStateSchema
+>;
+
+export const SystemDataProbeComponentStateSchema = z.enum([
+  "PASS",
+  "DEGRADED",
+  "FAIL",
+  "NOT_APPLICABLE",
+]);
+export type SystemDataProbeComponentState = z.infer<
+  typeof SystemDataProbeComponentStateSchema
+>;
+
+export const SystemDataProbeComponentIdSchema = z.enum([
+  "QUOTE",
+  "CANDLES",
+  "OPTIONS_CHAIN",
+  "TRADE_PLAN_ASSEMBLY",
+]);
+export type SystemDataProbeComponentId = z.infer<
+  typeof SystemDataProbeComponentIdSchema
+>;
+
+export const SystemDataProbeComponentSchema = z
+  .object({
+    id: SystemDataProbeComponentIdSchema,
+    label: z.string().min(1).max(120),
+    state: SystemDataProbeComponentStateSchema,
+    sourceState: z.string().min(1).max(50),
+    reasonCode: z.string().regex(/^[A-Z0-9_]+$/).max(120),
+    detail: z.string().min(1).max(500),
+  })
+  .strict();
+export type SystemDataProbeComponent = z.infer<
+  typeof SystemDataProbeComponentSchema
+>;
+
+export const SystemDataProbeRequestSchema = z.object({}).strict();
+export type SystemDataProbeRequest = z.infer<
+  typeof SystemDataProbeRequestSchema
+>;
+
+export const SystemDataProbeResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_V1_EXPLICIT_DATA_PROBE"),
+    methodologyVersion: SystemDataProbeMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    probeState: SystemDataProbeStateSchema,
+    summary: z
+      .object({
+        totalComponents: z.literal(4),
+        passCount: z.number().int().nonnegative(),
+        degradedCount: z.number().int().nonnegative(),
+        failCount: z.number().int().nonnegative(),
+        notApplicableCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+    components: z.array(SystemDataProbeComponentSchema).length(4),
+    disclosures: z
+      .object({
+        explicitUserInitiatedProbe: z.literal(true),
+        providerRequestsMayOccur: z.literal(true),
+        noDiscordDelivery: z.literal(true),
+        noJournalMutation: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noPositionSizing: z.literal(true),
+        noOrderCreation: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const passCount = value.components.filter((item) => item.state === "PASS").length;
+    const degradedCount = value.components.filter(
+      (item) => item.state === "DEGRADED",
+    ).length;
+    const failCount = value.components.filter((item) => item.state === "FAIL").length;
+    const notApplicableCount = value.components.filter(
+      (item) => item.state === "NOT_APPLICABLE",
+    ).length;
+    const uniqueIds = new Set(value.components.map((item) => item.id));
+
+    if (
+      value.summary.passCount !== passCount ||
+      value.summary.degradedCount !== degradedCount ||
+      value.summary.failCount !== failCount ||
+      value.summary.notApplicableCount !== notApplicableCount ||
+      passCount + degradedCount + failCount + notApplicableCount !== 4
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "System data probe summary is inconsistent",
+      });
+    }
+    if (uniqueIds.size !== value.components.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "System data probe component IDs must be unique",
+      });
+    }
+    if (failCount > 0 && value.probeState !== "FAIL") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Probe component failures require FAIL state",
+      });
+    }
+    if (
+      failCount === 0 &&
+      degradedCount > 0 &&
+      value.probeState !== "DEGRADED"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Degraded probe components require DEGRADED state",
+      });
+    }
+    if (
+      failCount === 0 &&
+      degradedCount === 0 &&
+      value.probeState !== "PASS"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passing or not-applicable components require PASS state",
+      });
+    }
+  });
+export type SystemDataProbeResponse = z.infer<
+  typeof SystemDataProbeResponseSchema
+>;

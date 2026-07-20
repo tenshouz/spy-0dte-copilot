@@ -1,6 +1,4 @@
-// PRD Section 15 — database schema of record.
-// Milestone 1: schema only, no migrations run against a real database yet.
-// Milestone 2+ will run `prisma migrate dev` once Postgres is provisioned.
+// V1 PostgreSQL schema of record. Migrations under prisma/migrations are the authoritative deployment history.
 
 generator client {
   provider = "prisma-client-js"

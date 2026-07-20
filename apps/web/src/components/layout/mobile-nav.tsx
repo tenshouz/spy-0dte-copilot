@@ -10,6 +10,7 @@ import {
   History,
   Rows3,
   Settings as SettingsIcon,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/replay", label: "Replay", icon: History },
+  { href: "/system", label: "System", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 
