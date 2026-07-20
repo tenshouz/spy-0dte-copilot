@@ -7,6 +7,7 @@ import type {
 } from "@spy-copilot/shared";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import { BackendAutomationPanel } from "@/components/settings/backend-automation-panel";
 import { Panel } from "@/components/panels/panel";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,7 @@ export default function SettingsPage() {
     schwabStatus?.state === "config_invalid";
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Settings"
         description="Manage broker connectivity and explicit notification-channel configuration."
@@ -214,22 +215,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="alerts">
-          <Panel title="Alert Preferences">
-            <div className="space-y-3 text-sm">
-              {[
-                "Premarket report",
-                "Scheduled intraday updates (9:35 / 9:45 / 10:00)",
-                "Bias change alerts",
-                "Trade plan invalidation alerts",
-                "End-of-day summary",
-              ].map((label) => (
-                <div key={label} className="flex items-center justify-between border-b border-panel-border pb-2 last:border-0">
-                  <span>{label}</span>
-                  <Badge variant="default">Toggle — M2</Badge>
-                </div>
-              ))}
-            </div>
-          </Panel>
+          <BackendAutomationPanel />
         </TabsContent>
 
         <TabsContent value="scoring">

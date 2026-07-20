@@ -8306,3 +8306,247 @@ export const SpyDeterministicSessionStructureResponseSchema = z.object({
 export type SpyDeterministicSessionStructureResponse = z.infer<
   typeof SpyDeterministicSessionStructureResponseSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Persistent backend automation and delivery audit.
+// ---------------------------------------------------------------------------
+
+export const BackendAutomationCadenceSecondsSchema = z.union([
+  z.literal(15),
+  z.literal(30),
+  z.literal(60),
+]);
+export type BackendAutomationCadenceSeconds = z.infer<
+  typeof BackendAutomationCadenceSecondsSchema
+>;
+
+export const BackendAutomationSettingsUpdateRequestSchema = z
+  .object({
+    enabled: z.boolean(),
+    tradePlanAlertsEnabled: z.boolean(),
+    scheduledReportsEnabled: z.boolean(),
+    cadenceSeconds: BackendAutomationCadenceSecondsSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.enabled &&
+      !value.tradePlanAlertsEnabled &&
+      !value.scheduledReportsEnabled
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enabled"],
+        message:
+          "Backend automation cannot be enabled when every delivery channel is disabled",
+      });
+    }
+  });
+export type BackendAutomationSettingsUpdateRequest = z.infer<
+  typeof BackendAutomationSettingsUpdateRequestSchema
+>;
+
+export const BackendAutomationSettingsResponseSchema = z.object({
+  product: z.literal("SPY_PERSISTENT_BACKEND_AUTOMATION_SETTINGS"),
+  methodologyVersion: z.literal("BACKEND_AUTOMATION_V1"),
+  calculatedAt: z.string().datetime(),
+  engineState: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  primaryReasonCode: z.enum([
+    "BACKEND_AUTOMATION_SETTINGS_AVAILABLE",
+    "DATABASE_NOT_CONFIGURED",
+    "DATABASE_UNAVAILABLE",
+  ]),
+  settings: z
+    .object({
+      enabled: z.boolean(),
+      tradePlanAlertsEnabled: z.boolean(),
+      scheduledReportsEnabled: z.boolean(),
+      cadenceSeconds: BackendAutomationCadenceSecondsSchema,
+      updatedAt: z.string().datetime().nullable(),
+    })
+    .nullable(),
+  disclosures: z.object({
+    persistentSettings: z.literal(true),
+    backendScheduler: z.literal(true),
+    restartSafeConfiguration: z.literal(true),
+    databaseLeaseRequired: z.literal(true),
+    noWebhookSecretReturned: z.literal(true),
+    noProviderBodyReturned: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  }),
+});
+export type BackendAutomationSettingsResponse = z.infer<
+  typeof BackendAutomationSettingsResponseSchema
+>;
+
+export const BackendAutomationRuntimeStateSchema = z.enum([
+  "STOPPED",
+  "ACTIVE",
+  "STANDBY",
+  "STALE",
+  "UNAVAILABLE",
+]);
+export type BackendAutomationRuntimeState = z.infer<
+  typeof BackendAutomationRuntimeStateSchema
+>;
+
+export const BackendAutomationTaskStatusSchema = z.object({
+  evaluatedAt: z.string().datetime().nullable(),
+  outcome: z.string().min(1).nullable(),
+  reasonCode: z.string().min(1).nullable(),
+});
+export type BackendAutomationTaskStatus = z.infer<
+  typeof BackendAutomationTaskStatusSchema
+>;
+
+export const BackendAutomationStatusResponseSchema = z.object({
+  product: z.literal("SPY_PERSISTENT_BACKEND_AUTOMATION_STATUS"),
+  methodologyVersion: z.literal("BACKEND_AUTOMATION_V1"),
+  calculatedAt: z.string().datetime(),
+  engineState: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  runtimeState: BackendAutomationRuntimeStateSchema,
+  primaryReasonCode: z.enum([
+    "BACKEND_AUTOMATION_ACTIVE",
+    "BACKEND_AUTOMATION_DISABLED",
+    "BACKEND_AUTOMATION_STANDBY",
+    "BACKEND_AUTOMATION_STALE",
+    "DATABASE_NOT_CONFIGURED",
+    "DATABASE_UNAVAILABLE",
+  ]),
+  settings: z
+    .object({
+      enabled: z.boolean(),
+      tradePlanAlertsEnabled: z.boolean(),
+      scheduledReportsEnabled: z.boolean(),
+      cadenceSeconds: BackendAutomationCadenceSecondsSchema,
+    })
+    .nullable(),
+  scheduler: z.object({
+    processSchedulerInstalled: z.literal(true),
+    databaseLeaseHeld: z.boolean(),
+    leaseExpiresAt: z.string().datetime().nullable(),
+    lastHeartbeatAt: z.string().datetime().nullable(),
+    lastTickAt: z.string().datetime().nullable(),
+    heartbeatStaleAfterSeconds: z.literal(45),
+  }),
+  tradePlanAlerts: BackendAutomationTaskStatusSchema,
+  scheduledReports: BackendAutomationTaskStatusSchema,
+  lastErrorCode: z.string().min(1).nullable(),
+  disclosures: z.object({
+    persistentSettings: z.literal(true),
+    persistentDuplicateProtection: z.literal(true),
+    persistentDeliveryAudit: z.literal(true),
+    multiProcessLeaseProtection: z.literal(true),
+    resumesAfterBackendRestartWhenEnabled: z.literal(true),
+    ambiguousProviderOutcomeSuppressed: z.literal(true),
+    noWebhookSecretReturned: z.literal(true),
+    noProviderBodyReturned: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  }),
+});
+export type BackendAutomationStatusResponse = z.infer<
+  typeof BackendAutomationStatusResponseSchema
+>;
+
+export const BackendAutomationDeliveryCategorySchema = z.enum([
+  "TRADE_PLAN_ALERT",
+  "SCHEDULED_REPORT",
+]);
+export type BackendAutomationDeliveryCategory = z.infer<
+  typeof BackendAutomationDeliveryCategorySchema
+>;
+
+export const BackendAutomationDeliveryStateSchema = z.enum([
+  "DELIVERED",
+  "NO_DELIVERY",
+  "SUPPRESSED",
+  "AMBIGUOUS",
+  "FAILED",
+]);
+export type BackendAutomationDeliveryState = z.infer<
+  typeof BackendAutomationDeliveryStateSchema
+>;
+
+export const BackendAutomationDeliveryHistoryEntrySchema = z.object({
+  id: z.string().min(1),
+  category: BackendAutomationDeliveryCategorySchema,
+  triggerMode: z.literal("BACKEND_SCHEDULER"),
+  deliveryKey: z.string().min(1).nullable(),
+  deliveryState: BackendAutomationDeliveryStateSchema,
+  reasonCode: z.string().min(1),
+  providerStatusCode: z.number().int().min(100).max(599).nullable(),
+  providerRequestAttempted: z.boolean(),
+  transitionType: z.string().min(1).nullable(),
+  reportType: DeterministicScheduledReportTypeSchema.nullable(),
+  attemptedAt: z.string().datetime(),
+});
+export type BackendAutomationDeliveryHistoryEntry = z.infer<
+  typeof BackendAutomationDeliveryHistoryEntrySchema
+>;
+
+export const BackendAutomationDeliveryHistoryResponseSchema = z.object({
+  product: z.literal("SPY_PERSISTENT_BACKEND_AUTOMATION_DELIVERY_HISTORY"),
+  methodologyVersion: z.literal("BACKEND_AUTOMATION_V1"),
+  calculatedAt: z.string().datetime(),
+  engineState: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  primaryReasonCode: z.enum([
+    "BACKEND_AUTOMATION_HISTORY_AVAILABLE",
+    "BACKEND_AUTOMATION_HISTORY_EMPTY",
+    "DATABASE_NOT_CONFIGURED",
+    "DATABASE_UNAVAILABLE",
+  ]),
+  maximumEntries: z.literal(50),
+  entries: z.array(BackendAutomationDeliveryHistoryEntrySchema).max(50),
+  disclosures: z.object({
+    persistentDeliveryAudit: z.literal(true),
+    newestFirst: z.literal(true),
+    payloadBodyExcluded: z.literal(true),
+    webhookSecretExcluded: z.literal(true),
+    providerBodyExcluded: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  }),
+});
+export type BackendAutomationDeliveryHistoryResponse = z.infer<
+  typeof BackendAutomationDeliveryHistoryResponseSchema
+>;
+
+export const BackendAutomationRunOnceRequestSchema = z.object({}).strict();
+export type BackendAutomationRunOnceRequest = z.infer<
+  typeof BackendAutomationRunOnceRequestSchema
+>;
+
+export const BackendAutomationRunOnceResponseSchema = z.object({
+  product: z.literal("SPY_PERSISTENT_BACKEND_AUTOMATION_RUN"),
+  methodologyVersion: z.literal("BACKEND_AUTOMATION_V1"),
+  calculatedAt: z.string().datetime(),
+  engineState: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+  primaryReasonCode: z.enum([
+    "BACKEND_AUTOMATION_RUN_COMPLETED",
+    "BACKEND_AUTOMATION_DISABLED",
+    "BACKEND_AUTOMATION_LEASE_NOT_ACQUIRED",
+    "DATABASE_NOT_CONFIGURED",
+    "DATABASE_UNAVAILABLE",
+  ]),
+  tradePlanAlerts: BackendAutomationTaskStatusSchema,
+  scheduledReports: BackendAutomationTaskStatusSchema,
+  disclosures: z.object({
+    explicitRunOnly: z.literal(true),
+    honorsPersistedSettings: z.literal(true),
+    databaseLeaseRequired: z.literal(true),
+    persistentDuplicateProtection: z.literal(true),
+    noWebhookSecretReturned: z.literal(true),
+    noProviderBodyReturned: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  }),
+});
+export type BackendAutomationRunOnceResponse = z.infer<
+  typeof BackendAutomationRunOnceResponseSchema
+>;

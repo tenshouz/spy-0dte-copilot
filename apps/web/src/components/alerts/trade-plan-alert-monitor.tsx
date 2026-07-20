@@ -28,6 +28,7 @@ import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useBackendAutomationSettings } from "@/hooks/use-backend-automation";
 import {
   DISCORD_AUTOMATIC_SCHEDULED_REPORT_CADENCE_OPTIONS,
   DISCORD_AUTOMATIC_TRADE_PLAN_ALERT_CADENCE_OPTIONS,
@@ -93,16 +94,23 @@ export function TradePlanAlertMonitor() {
     DiscordTradePlanAlertDeliveryResponse[]
   >([]);
   const query = useSpyTradePlanAlertTransition(monitoring);
+  const backendAutomationSettings = useBackendAutomationSettings();
+  const persistentBackendAutomationEnabled =
+    backendAutomationSettings.data?.settings?.enabled === true;
   const discordStatus = useDiscordWebhookStatus();
   const discordDelivery = useDiscordTradePlanAlertDelivery();
   const scheduledReportDelivery = useDiscordScheduledReportDelivery();
   const automaticDiscordDelivery = useDiscordAutomaticTradePlanAlertDelivery(
-    automaticDiscordEnabled && discordStatus.data?.state === "READY",
+    automaticDiscordEnabled &&
+      !persistentBackendAutomationEnabled &&
+      discordStatus.data?.state === "READY",
     automaticDiscordCadence,
   );
   const automaticScheduledReportDelivery =
     useDiscordAutomaticScheduledReportDelivery(
-      automaticScheduledReportsEnabled && discordStatus.data?.state === "READY",
+      automaticScheduledReportsEnabled &&
+        !persistentBackendAutomationEnabled &&
+        discordStatus.data?.state === "READY",
       automaticScheduledReportCadence,
     );
   const result = query.data ?? null;
@@ -160,6 +168,12 @@ export function TradePlanAlertMonitor() {
       setAutomaticScheduledReportsEnabled(false);
     }
   }, [automaticScheduledReportsEnabled, discordStatus.data]);
+
+  useEffect(() => {
+    if (!persistentBackendAutomationEnabled) return;
+    setAutomaticDiscordEnabled(false);
+    setAutomaticScheduledReportsEnabled(false);
+  }, [persistentBackendAutomationEnabled]);
 
   const requestScheduledReportDelivery = () => {
     scheduledReportDelivery.mutate({ reportType: scheduledReportType });
@@ -403,7 +417,10 @@ export function TradePlanAlertMonitor() {
                 <Button
                   type="button"
                   size="sm"
-                  disabled={discordStatus.data?.state !== "READY"}
+                  disabled={
+                    discordStatus.data?.state !== "READY" ||
+                    persistentBackendAutomationEnabled
+                  }
                   onClick={() => setAutomaticDiscordEnabled(true)}
                 >
                   <CirclePlay className="h-4 w-4" />
@@ -442,6 +459,15 @@ export function TradePlanAlertMonitor() {
               sublabel="3 sec fixed backoff"
             />
           </div>
+
+          {persistentBackendAutomationEnabled ? (
+            <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 p-3 text-xs text-accent">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Persistent backend automation is enabled in Settings. Foreground
+              automatic Discord delivery is disabled here to prevent competing
+              schedulers and duplicate messages.
+            </div>
+          ) : null}
 
           {discordStatus.data?.state !== "READY" ? (
             <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">
@@ -629,7 +655,10 @@ export function TradePlanAlertMonitor() {
                 <Button
                   type="button"
                   size="sm"
-                  disabled={discordStatus.data?.state !== "READY"}
+                  disabled={
+                    discordStatus.data?.state !== "READY" ||
+                    persistentBackendAutomationEnabled
+                  }
                   onClick={() => setAutomaticScheduledReportsEnabled(true)}
                 >
                   <CirclePlay className="h-4 w-4" />
@@ -679,6 +708,15 @@ export function TradePlanAlertMonitor() {
               }
             />
           </div>
+
+          {persistentBackendAutomationEnabled ? (
+            <div className="flex items-start gap-2 rounded-md border border-accent/30 bg-accent/10 p-3 text-xs text-accent">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              Persistent backend automation is enabled in Settings. Foreground
+              scheduled-report delivery is disabled here to preserve one
+              restart-safe scheduler and one database-backed delivery key.
+            </div>
+          ) : null}
 
           {discordStatus.data?.state !== "READY" ? (
             <div className="flex items-start gap-2 rounded-md border border-dashed border-panel-border p-3 text-xs text-muted-foreground">

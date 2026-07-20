@@ -1,5 +1,11 @@
 import {
   AlertSchema,
+  BackendAutomationDeliveryHistoryResponseSchema,
+  BackendAutomationRunOnceRequestSchema,
+  BackendAutomationRunOnceResponseSchema,
+  BackendAutomationSettingsResponseSchema,
+  BackendAutomationSettingsUpdateRequestSchema,
+  BackendAutomationStatusResponseSchema,
   CandleSchema,
   DiscordAutomaticScheduledReportDeliveryRequestSchema,
   DiscordAutomaticScheduledReportDeliveryResponseSchema,
@@ -54,6 +60,12 @@ import {
   SpyZeroDteSchwabAssistedPositionSizingResponseSchema,
   StrikeExposureSchema,
   type Alert,
+  type BackendAutomationDeliveryHistoryResponse,
+  type BackendAutomationRunOnceRequest,
+  type BackendAutomationRunOnceResponse,
+  type BackendAutomationSettingsResponse,
+  type BackendAutomationSettingsUpdateRequest,
+  type BackendAutomationStatusResponse,
   type Candle,
   type DiscordAutomaticScheduledReportDeliveryRequest,
   type DiscordAutomaticScheduledReportDeliveryResponse,
@@ -227,6 +239,40 @@ export const apiClient = {
       DeterministicJournalOutcomeUpdateResponseSchema,
     ),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
+  getBackendAutomationSettings: (): Promise<BackendAutomationSettingsResponse> =>
+    getPrivateNoStoreJson(
+      "/api/automation/settings",
+      BackendAutomationSettingsResponseSchema,
+    ),
+  updateBackendAutomationSettings: (
+    request: BackendAutomationSettingsUpdateRequest,
+  ): Promise<BackendAutomationSettingsResponse> =>
+    patchJson<
+      BackendAutomationSettingsUpdateRequest,
+      BackendAutomationSettingsResponse
+    >(
+      "/api/automation/settings",
+      request,
+      BackendAutomationSettingsUpdateRequestSchema,
+      BackendAutomationSettingsResponseSchema,
+    ),
+  getBackendAutomationStatus: (): Promise<BackendAutomationStatusResponse> =>
+    getPrivateNoStoreJson(
+      "/api/automation/status",
+      BackendAutomationStatusResponseSchema,
+    ),
+  getBackendAutomationHistory: (): Promise<BackendAutomationDeliveryHistoryResponse> =>
+    getPrivateNoStoreJson(
+      "/api/automation/history",
+      BackendAutomationDeliveryHistoryResponseSchema,
+    ),
+  runBackendAutomationOnce: (): Promise<BackendAutomationRunOnceResponse> =>
+    postJson<BackendAutomationRunOnceRequest, BackendAutomationRunOnceResponse>(
+      "/api/automation/run-once",
+      {},
+      BackendAutomationRunOnceRequestSchema,
+      BackendAutomationRunOnceResponseSchema,
+    ),
   getSpyScheduledReportScheduleEvaluation: (): Promise<SpyZeroDteScheduledReportScheduleEvaluationResponse> =>
     getPrivateNoStoreJson(
       "/api/reports/spy/schedule-evaluation",

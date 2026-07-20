@@ -7,6 +7,7 @@ import {
   setAccountRiskPrivateHeaders,
 } from "./routes/account-risk.routes";
 import { alertsRouter } from "./routes/alerts.routes";
+import { backendAutomationRouter, setBackendAutomationHeaders } from "./routes/backend-automation.routes";
 import { authRouter } from "./routes/auth.routes";
 import { candlesRouter } from "./routes/candles.routes";
 import { expectedMoveRouter } from "./routes/expected-move.routes";
@@ -37,6 +38,7 @@ import {
 } from "./routes/trade-sizing-schwab.routes";
 import { tradeSizingRouter } from "./routes/trade-sizing.routes";
 import { vwapRouter } from "./routes/vwap.routes";
+import { startBackendAutomationScheduler } from "./services/backend-automation.service";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -52,6 +54,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/account-risk", accountRiskRouter);
+app.use("/api/automation", backendAutomationRouter);
 app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
@@ -87,6 +90,15 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
     typeof error === "object" && error !== null && "status" in error
       ? (error as { status?: unknown }).status
       : null;
+  if (
+    req.originalUrl.startsWith("/api/automation/") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setBackendAutomationHeaders(res);
+    res.status(400).json({ error: "INVALID_BACKEND_AUTOMATION_JSON" });
+    return;
+  }
   if (
     req.originalUrl.startsWith("/api/journal/spy/snapshots/automatic") &&
     error instanceof SyntaxError &&
@@ -171,7 +183,9 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
   next(error);
 });
 
-app.listen(PORT, () => {
+const backendAutomationScheduler = startBackendAutomationScheduler();
+
+const server = app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`[server] Dashboard API listening on http://localhost:${PORT}`);
   console.log(
@@ -194,3 +208,12 @@ app.listen(PORT, () => {
     console.log(`[server] Schwab configuration is invalid: ${schwabConfig.reason}`);
   }
 });
+
+
+function shutdown(): void {
+  backendAutomationScheduler.stop();
+  server.close(() => process.exit(0));
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
