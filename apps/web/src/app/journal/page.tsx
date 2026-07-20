@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import { JournalAnalyticsPanel } from "@/components/journal/journal-analytics-panel";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
@@ -425,6 +426,8 @@ export default function JournalPage() {
         </div>
       </Panel>
 
+      <JournalAnalyticsPanel />
+
       <Panel
         title={`Persisted Snapshots (${entries.length})`}
         isLoading={journalQuery.isLoading}
@@ -555,8 +558,8 @@ export default function JournalPage() {
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         Automatic capture records deterministic candidate snapshots only while this
         Journal page remains open. Outcome state, realized P&amp;L, and notes remain
-        explicit user inputs. Performance analytics and expectancy remain separate
-        future milestones.
+        explicit user inputs. Performance analytics are calculated only from
+        persisted, user-reviewed outcomes and never infer whether a trade was taken.
       </p>
     </div>
   );

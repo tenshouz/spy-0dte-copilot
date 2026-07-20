@@ -3,6 +3,7 @@ import {
   DeterministicJournalCaptureRequestSchema,
   DeterministicJournalOutcomeUpdateRequestSchema,
   DeterministicJournalSnapshotIdSchema,
+  type DeterministicJournalAnalyticsResponse,
   type DeterministicJournalAutomaticCaptureResponse,
   type DeterministicJournalCaptureResponse,
   type DeterministicJournalOutcomeUpdateRequest,
@@ -17,9 +18,11 @@ import {
   listDeterministicJournalSnapshots,
   updateDeterministicJournalOutcome,
 } from "../services/deterministic-journal.service";
+import { getDeterministicJournalAnalytics } from "../services/deterministic-journal-analytics.service";
 
 export interface JournalRouterDependencies {
   listSnapshots: () => Promise<DeterministicJournalSnapshotListResponse>;
+  getAnalytics: () => Promise<DeterministicJournalAnalyticsResponse>;
   captureSnapshot: () => Promise<DeterministicJournalCaptureResponse>;
   automaticallyCaptureSnapshot: () => Promise<DeterministicJournalAutomaticCaptureResponse>;
   updateOutcome: (
@@ -32,6 +35,7 @@ export interface JournalRouterDependencies {
 
 const DEFAULT_DEPENDENCIES: JournalRouterDependencies = {
   listSnapshots: listDeterministicJournalSnapshots,
+  getAnalytics: getDeterministicJournalAnalytics,
   captureSnapshot: captureDeterministicJournalSnapshot,
   automaticallyCaptureSnapshot: automaticallyCaptureDeterministicJournalSnapshot,
   updateOutcome: updateDeterministicJournalOutcome,
@@ -81,6 +85,20 @@ export function createJournalRouter(
 ): Router {
   const deps = { ...DEFAULT_DEPENDENCIES, ...dependencies };
   const router = Router();
+
+  // GET /api/journal/spy/analytics — aggregate user-entered journal performance.
+  router.get("/spy/analytics", async (req, res) => {
+    setDeterministicJournalHeaders(res);
+    if (!configureJournalOrigin(req.get("Origin"), deps.frontendUrl(), res)) return;
+    if (rejectUnsupportedQuery(req.query, res)) return;
+
+    try {
+      res.json(await deps.getAnalytics());
+    } catch {
+      deps.log("analytics route unexpected failure");
+      res.status(500).json({ error: "DETERMINISTIC_JOURNAL_UNEXPECTED_FAILURE" });
+    }
+  });
 
   // GET /api/journal/spy/snapshots — persisted deterministic snapshot summaries.
   router.get("/spy/snapshots", async (req, res) => {

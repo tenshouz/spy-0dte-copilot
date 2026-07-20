@@ -8,6 +8,7 @@ import {
   DiscordScheduledReportDeliveryRequestSchema,
   DiscordScheduledReportDeliveryResponseSchema,
   DeterministicScheduledReportRequestSchema,
+  DeterministicJournalAnalyticsResponseSchema,
   DeterministicJournalAutomaticCaptureRequestSchema,
   DeterministicJournalAutomaticCaptureResponseSchema,
   DeterministicJournalCaptureRequestSchema,
@@ -58,6 +59,7 @@ import {
   type DiscordScheduledReportDeliveryRequest,
   type DiscordScheduledReportDeliveryResponse,
   type DeterministicScheduledReportRequest,
+  type DeterministicJournalAnalyticsResponse,
   type DeterministicJournalAutomaticCaptureRequest,
   type DeterministicJournalAutomaticCaptureResponse,
   type DeterministicJournalCaptureRequest,
@@ -180,6 +182,11 @@ export const apiClient = {
   getCandles: (): Promise<Candle[]> => getJson("/api/snapshot/candles", z.array(CandleSchema)),
   getLatestReport: (): Promise<Report> => getJson("/api/reports/latest", ReportSchema),
   getReportHistory: (): Promise<Report[]> => getJson("/api/reports", z.array(ReportSchema)),
+  getDeterministicJournalAnalytics: (): Promise<DeterministicJournalAnalyticsResponse> =>
+    getPrivateNoStoreJson(
+      "/api/journal/spy/analytics",
+      DeterministicJournalAnalyticsResponseSchema,
+    ),
   getDeterministicJournalSnapshots: (): Promise<DeterministicJournalSnapshotListResponse> =>
     getPrivateNoStoreJson(
       "/api/journal/spy/snapshots",

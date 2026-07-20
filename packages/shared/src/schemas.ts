@@ -7210,7 +7210,7 @@ export const DeterministicJournalDisclosuresSchema = z
     noBackgroundScheduler: z.literal(true),
     userEnteredOutcomeOnly: z.literal(true),
     noAutomaticOutcomeInference: z.literal(true),
-    noPerformanceAnalytics: z.literal(true),
+    performanceAnalyticsAvailable: z.literal(true),
     noPrivateAccountData: z.literal(true),
     noPositionSizing: z.literal(true),
     noOrderExecution: z.literal(true),
@@ -7525,4 +7525,229 @@ export const DeterministicJournalOutcomeUpdateResponseSchema = z
   });
 export type DeterministicJournalOutcomeUpdateResponse = z.infer<
   typeof DeterministicJournalOutcomeUpdateResponseSchema
+>;
+
+
+// ---------------------------------------------------------------------------
+// Deterministic Journal Analytics — JOURNAL_ANALYTICS_V1
+// ---------------------------------------------------------------------------
+
+export const DeterministicJournalAnalyticsMethodologyVersionSchema = z.literal(
+  "JOURNAL_ANALYTICS_V1",
+);
+export type DeterministicJournalAnalyticsMethodologyVersion = z.infer<
+  typeof DeterministicJournalAnalyticsMethodologyVersionSchema
+>;
+
+export const DeterministicJournalAnalyticsPrimaryReasonCodeSchema = z.enum([
+  "JOURNAL_ANALYTICS_AVAILABLE",
+  "JOURNAL_ANALYTICS_EMPTY",
+  "DATABASE_NOT_CONFIGURED",
+  "DATABASE_UNAVAILABLE",
+]);
+export type DeterministicJournalAnalyticsPrimaryReasonCode = z.infer<
+  typeof DeterministicJournalAnalyticsPrimaryReasonCodeSchema
+>;
+
+export const DeterministicJournalConfidenceBandSchema = z.enum([
+  "UNAVAILABLE",
+  "LOW_0_49",
+  "MODERATE_50_69",
+  "HIGH_70_84",
+  "VERY_HIGH_85_100",
+]);
+export type DeterministicJournalConfidenceBand = z.infer<
+  typeof DeterministicJournalConfidenceBandSchema
+>;
+
+export const DeterministicJournalAnalyticsCountsSchema = z
+  .object({
+    totalSnapshots: z.number().int().nonnegative(),
+    manualSnapshots: z.number().int().nonnegative(),
+    automaticSnapshots: z.number().int().nonnegative(),
+    reviewedSnapshots: z.number().int().nonnegative(),
+    unreviewedSnapshots: z.number().int().nonnegative(),
+    noTradeSnapshots: z.number().int().nonnegative(),
+    tradeOutcomes: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.manualSnapshots + value.automaticSnapshots !== value.totalSnapshots) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Capture-mode counts must equal total snapshots" });
+    }
+    if (value.reviewedSnapshots + value.unreviewedSnapshots !== value.totalSnapshots) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Review-state counts must equal total snapshots" });
+    }
+    if (value.noTradeSnapshots + value.tradeOutcomes !== value.reviewedSnapshots) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Reviewed snapshots must equal no-trade plus trade outcomes" });
+    }
+    if (value.wins + value.losses + value.breakevens !== value.tradeOutcomes) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Trade outcomes must equal wins, losses, and breakevens" });
+    }
+  });
+export type DeterministicJournalAnalyticsCounts = z.infer<
+  typeof DeterministicJournalAnalyticsCountsSchema
+>;
+
+const NullableAnalyticsMoneySchema = z.number().finite().min(-1_000_000_000).max(1_000_000_000).nullable();
+
+export const DeterministicJournalAnalyticsPerformanceSchema = z
+  .object({
+    reviewCoveragePercent: z.number().finite().min(0).max(100),
+    tradeParticipationPercent: z.number().finite().min(0).max(100),
+    winRatePercent: z.number().finite().min(0).max(100).nullable(),
+    totalPnlDollars: NullableAnalyticsMoneySchema,
+    averagePnlDollars: NullableAnalyticsMoneySchema,
+    expectancyDollars: NullableAnalyticsMoneySchema,
+    averageWinDollars: NullableAnalyticsMoneySchema,
+    averageLossDollars: NullableAnalyticsMoneySchema,
+    grossProfitDollars: NullableAnalyticsMoneySchema,
+    grossLossMagnitudeDollars: z.number().finite().min(0).max(1_000_000_000).nullable(),
+    profitFactor: z.number().finite().min(0).max(1_000_000).nullable(),
+    largestWinDollars: NullableAnalyticsMoneySchema,
+    largestLossDollars: NullableAnalyticsMoneySchema,
+  })
+  .strict();
+export type DeterministicJournalAnalyticsPerformance = z.infer<
+  typeof DeterministicJournalAnalyticsPerformanceSchema
+>;
+
+export const DeterministicJournalAnalyticsBreakdownEntrySchema = z
+  .object({
+    key: z.string().min(1).max(64),
+    label: z.string().min(1).max(96),
+    snapshotCount: z.number().int().nonnegative(),
+    reviewedCount: z.number().int().nonnegative(),
+    noTradeCount: z.number().int().nonnegative(),
+    tradeCount: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+    winRatePercent: z.number().finite().min(0).max(100).nullable(),
+    totalPnlDollars: NullableAnalyticsMoneySchema,
+    averagePnlDollars: NullableAnalyticsMoneySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.noTradeCount + value.tradeCount !== value.reviewedCount) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Breakdown reviewed count is inconsistent" });
+    }
+    if (value.wins + value.losses + value.breakevens !== value.tradeCount) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Breakdown trade count is inconsistent" });
+    }
+    if (value.reviewedCount > value.snapshotCount) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Breakdown reviewed count cannot exceed snapshot count" });
+    }
+  });
+export type DeterministicJournalAnalyticsBreakdownEntry = z.infer<
+  typeof DeterministicJournalAnalyticsBreakdownEntrySchema
+>;
+
+export const DeterministicJournalAnalyticsDailyEntrySchema = z
+  .object({
+    marketDate: MarketDateSchema,
+    snapshotCount: z.number().int().nonnegative(),
+    reviewedCount: z.number().int().nonnegative(),
+    noTradeCount: z.number().int().nonnegative(),
+    tradeCount: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+    totalPnlDollars: NullableAnalyticsMoneySchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.noTradeCount + value.tradeCount !== value.reviewedCount) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Daily reviewed count is inconsistent" });
+    }
+    if (value.wins + value.losses + value.breakevens !== value.tradeCount) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Daily trade count is inconsistent" });
+    }
+  });
+export type DeterministicJournalAnalyticsDailyEntry = z.infer<
+  typeof DeterministicJournalAnalyticsDailyEntrySchema
+>;
+
+export const DeterministicJournalAnalyticsPayloadSchema = z
+  .object({
+    dataStartMarketDate: MarketDateSchema.nullable(),
+    dataEndMarketDate: MarketDateSchema.nullable(),
+    counts: DeterministicJournalAnalyticsCountsSchema,
+    performance: DeterministicJournalAnalyticsPerformanceSchema,
+    byDirection: z.array(DeterministicJournalAnalyticsBreakdownEntrySchema).length(3),
+    byPlanState: z.array(DeterministicJournalAnalyticsBreakdownEntrySchema).length(7),
+    byCaptureMode: z.array(DeterministicJournalAnalyticsBreakdownEntrySchema).length(2),
+    byConfidenceBand: z.array(DeterministicJournalAnalyticsBreakdownEntrySchema).length(5),
+    dailyPerformance: z.array(DeterministicJournalAnalyticsDailyEntrySchema).max(30),
+    sample: z.object({
+      aggregationScope: z.literal("ALL_PERSISTED_USER_SNAPSHOTS"),
+      dailyMarketDateLimit: z.literal(30),
+    }).strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const total = value.counts.totalSnapshots;
+    if (total === 0) {
+      if (value.dataStartMarketDate !== null || value.dataEndMarketDate !== null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Empty analytics cannot expose a date range" });
+      }
+    } else if (value.dataStartMarketDate === null || value.dataEndMarketDate === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Populated analytics requires a date range" });
+    }
+  });
+export type DeterministicJournalAnalyticsPayload = z.infer<
+  typeof DeterministicJournalAnalyticsPayloadSchema
+>;
+
+export const DeterministicJournalAnalyticsDisclosuresSchema = z.object({
+  allPersistedUserSnapshots: z.literal(true),
+  databaseAggregateOnly: z.literal(true),
+  userEnteredOutcomeOnly: z.literal(true),
+  unreviewedExcludedFromPerformance: z.literal(true),
+  noTradeExcludedFromPnl: z.literal(true),
+  breakevenIncludedInExpectancy: z.literal(true),
+  winRateExcludesBreakeven: z.literal(true),
+  noAutomaticOutcomeInference: z.literal(true),
+  noPrivateAccountData: z.literal(true),
+  noPositionSizing: z.literal(true),
+  noOrderExecution: z.literal(true),
+}).strict();
+export type DeterministicJournalAnalyticsDisclosures = z.infer<
+  typeof DeterministicJournalAnalyticsDisclosuresSchema
+>;
+
+export const DeterministicJournalAnalyticsResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_ANALYTICS"),
+    methodologyVersion: DeterministicJournalAnalyticsMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: DeterministicJournalEngineStateSchema,
+    primaryReasonCode: DeterministicJournalAnalyticsPrimaryReasonCodeSchema,
+    analytics: DeterministicJournalAnalyticsPayloadSchema.nullable(),
+    disclosures: DeterministicJournalAnalyticsDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.engineState === "AVAILABLE") {
+      if (value.analytics === null) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Available analytics requires a payload", path: ["analytics"] });
+        return;
+      }
+      const empty = value.analytics.counts.totalSnapshots === 0;
+      if ((empty && value.primaryReasonCode !== "JOURNAL_ANALYTICS_EMPTY") ||
+          (!empty && value.primaryReasonCode !== "JOURNAL_ANALYTICS_AVAILABLE")) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Analytics reason code does not match payload population" });
+      }
+      return;
+    }
+    if (value.analytics !== null ||
+        !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(value.primaryReasonCode)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unavailable analytics must be database-related and payload-free" });
+    }
+  });
+export type DeterministicJournalAnalyticsResponse = z.infer<
+  typeof DeterministicJournalAnalyticsResponseSchema
 >;

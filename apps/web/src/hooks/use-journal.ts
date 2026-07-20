@@ -2,9 +2,19 @@
 
 import type { DeterministicJournalOutcomeUpdateRequest } from "@spy-copilot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { apiClient } from "@/lib/api-client";
 
 const JOURNAL_QUERY_KEY = ["deterministic-journal", "spy"] as const;
+const JOURNAL_ANALYTICS_QUERY_KEY = ["deterministic-journal-analytics", "spy"] as const;
+
+export function useDeterministicJournalAnalytics() {
+  return useQuery({
+    queryKey: JOURNAL_ANALYTICS_QUERY_KEY,
+    queryFn: apiClient.getDeterministicJournalAnalytics,
+    refetchOnWindowFocus: false,
+  });
+}
 
 export function useDeterministicJournalSnapshots() {
   return useQuery({
@@ -20,7 +30,10 @@ export function useCaptureDeterministicJournalSnapshot() {
   return useMutation({
     mutationFn: apiClient.captureDeterministicJournalSnapshot,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: JOURNAL_ANALYTICS_QUERY_KEY }),
+      ]);
     },
   });
 }
@@ -37,7 +50,10 @@ export function useUpdateDeterministicJournalOutcome() {
       request: DeterministicJournalOutcomeUpdateRequest;
     }) => apiClient.updateDeterministicJournalOutcome(snapshotId, request),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: JOURNAL_ANALYTICS_QUERY_KEY }),
+      ]);
     },
   });
 }
@@ -50,7 +66,8 @@ export function useAutomaticDeterministicJournalCapture(
   enabled: boolean,
   cadenceMilliseconds: AutomaticJournalCaptureCadence,
 ) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: [
       "deterministic-journal-automatic-capture",
       "JOURNAL_SNAPSHOT_V3",
@@ -65,4 +82,18 @@ export function useAutomaticDeterministicJournalCapture(
     retry: false,
     staleTime: 0,
   });
+
+  useEffect(() => {
+    if (query.data?.automaticCaptureState !== "CAPTURED") return;
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: JOURNAL_ANALYTICS_QUERY_KEY }),
+    ]);
+  }, [
+    query.data?.automaticCaptureState,
+    query.data?.entry?.id,
+    queryClient,
+  ]);
+
+  return query;
 }

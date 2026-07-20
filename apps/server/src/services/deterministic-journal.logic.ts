@@ -49,7 +49,7 @@ const DISCLOSURES = {
   noBackgroundScheduler: true,
   userEnteredOutcomeOnly: true,
   noAutomaticOutcomeInference: true,
-  noPerformanceAnalytics: true,
+  performanceAnalyticsAvailable: true,
   noPrivateAccountData: true,
   noPositionSizing: true,
   noOrderExecution: true,
