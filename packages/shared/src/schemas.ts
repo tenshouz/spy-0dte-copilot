@@ -7026,9 +7026,9 @@ export type DiscordAutomaticScheduledReportDeliveryResponse = z.infer<
   typeof DiscordAutomaticScheduledReportDeliveryResponseSchema
 >;
 
-/** Explicit, persistent capture of one current deterministic Trade Plan Assembly snapshot. */
+/** Explicit, persistent capture and user-entered outcome annotation for one current deterministic Trade Plan Assembly snapshot. */
 export const DeterministicJournalMethodologyVersionSchema = z.literal(
-  "JOURNAL_SNAPSHOT_V1",
+  "JOURNAL_SNAPSHOT_V2",
 );
 export type DeterministicJournalMethodologyVersion = z.infer<
   typeof DeterministicJournalMethodologyVersionSchema
@@ -7042,10 +7042,23 @@ export type DeterministicJournalEngineState = z.infer<
   typeof DeterministicJournalEngineStateSchema
 >;
 
+export const DeterministicJournalOutcomeStateSchema = z.enum([
+  "UNREVIEWED",
+  "NO_TRADE",
+  "WIN",
+  "LOSS",
+  "BREAKEVEN",
+]);
+export type DeterministicJournalOutcomeState = z.infer<
+  typeof DeterministicJournalOutcomeStateSchema
+>;
+
 export const DeterministicJournalPrimaryReasonCodeSchema = z.enum([
   "JOURNAL_ENTRIES_AVAILABLE",
   "JOURNAL_EMPTY",
   "JOURNAL_SNAPSHOT_CAPTURED",
+  "JOURNAL_OUTCOME_UPDATED",
+  "JOURNAL_SNAPSHOT_NOT_FOUND",
   "SOURCE_ASSEMBLY_UNAVAILABLE",
   "DATABASE_NOT_CONFIGURED",
   "DATABASE_UNAVAILABLE",
@@ -7062,9 +7075,49 @@ export type DeterministicJournalWarningCode = z.infer<
   typeof DeterministicJournalWarningCodeSchema
 >;
 
+function validateJournalOutcome(
+  value: {
+    outcomeState: DeterministicJournalOutcomeState;
+    realizedPnlDollars: number | null;
+  },
+  issue: (message: string, path: Array<string | number>) => void,
+): void {
+  if (["UNREVIEWED", "NO_TRADE"].includes(value.outcomeState)) {
+    if (value.realizedPnlDollars !== null) {
+      issue(`${value.outcomeState} must not include realized P&L`, [
+        "realizedPnlDollars",
+      ]);
+    }
+    return;
+  }
+
+  if (value.outcomeState === "WIN") {
+    if (value.realizedPnlDollars === null || value.realizedPnlDollars <= 0) {
+      issue("WIN requires positive realized P&L", ["realizedPnlDollars"]);
+    }
+    return;
+  }
+
+  if (value.outcomeState === "LOSS") {
+    if (value.realizedPnlDollars === null || value.realizedPnlDollars >= 0) {
+      issue("LOSS requires negative realized P&L", ["realizedPnlDollars"]);
+    }
+    return;
+  }
+
+  if (value.realizedPnlDollars !== 0) {
+    issue("BREAKEVEN requires realized P&L of zero", ["realizedPnlDollars"]);
+  }
+}
+
+export const DeterministicJournalSnapshotIdSchema = z.string().min(1).max(128);
+export type DeterministicJournalSnapshotId = z.infer<
+  typeof DeterministicJournalSnapshotIdSchema
+>;
+
 export const DeterministicJournalSnapshotEntrySchema = z
   .object({
-    id: z.string().min(1),
+    id: DeterministicJournalSnapshotIdSchema,
     symbol: z.literal("SPY"),
     product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_SNAPSHOT"),
     methodologyVersion: DeterministicJournalMethodologyVersionSchema,
@@ -7079,8 +7132,31 @@ export const DeterministicJournalSnapshotEntrySchema = z
     warningCode: TradePlanAssemblyWarningCodeSchema.nullable(),
     entryConditionState: TradePlanAssemblyEntryConditionStateSchema,
     selectedContractSymbol: z.string().min(1).nullable(),
+    outcomeState: DeterministicJournalOutcomeStateSchema,
+    realizedPnlDollars: z.number().finite().min(-10_000_000).max(10_000_000).nullable(),
+    outcomeNotes: z.string().min(1).max(2000).nullable(),
+    outcomeUpdatedAt: z.string().datetime().nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    validateJournalOutcome(value, (message, path) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path }),
+    );
+    if (value.outcomeState === "UNREVIEWED") {
+      if (value.outcomeNotes !== null || value.outcomeUpdatedAt !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unreviewed snapshot cannot contain outcome metadata",
+        });
+      }
+    } else if (value.outcomeUpdatedAt === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Reviewed snapshot requires outcomeUpdatedAt",
+        path: ["outcomeUpdatedAt"],
+      });
+    }
+  });
 export type DeterministicJournalSnapshotEntry = z.infer<
   typeof DeterministicJournalSnapshotEntrySchema
 >;
@@ -7092,6 +7168,9 @@ export const DeterministicJournalDisclosuresSchema = z
     deterministicSourceOnly: z.literal(true),
     databasePersistence: z.literal(true),
     noAutomaticCapture: z.literal(true),
+    userEnteredOutcomeOnly: z.literal(true),
+    noAutomaticOutcomeInference: z.literal(true),
+    noPerformanceAnalytics: z.literal(true),
     noPrivateAccountData: z.literal(true),
     noPositionSizing: z.literal(true),
     noOrderExecution: z.literal(true),
@@ -7180,4 +7259,75 @@ export const DeterministicJournalCaptureResponseSchema = z
   });
 export type DeterministicJournalCaptureResponse = z.infer<
   typeof DeterministicJournalCaptureResponseSchema
+>;
+
+export const DeterministicJournalOutcomeUpdateRequestSchema = z
+  .object({
+    outcomeState: DeterministicJournalOutcomeStateSchema,
+    realizedPnlDollars: z
+      .number()
+      .finite()
+      .min(-10_000_000)
+      .max(10_000_000)
+      .nullable(),
+    notes: z.string().trim().min(1).max(2000).nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    validateJournalOutcome(value, (message, path) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message, path }),
+    );
+    if (value.outcomeState === "UNREVIEWED" && value.notes !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "UNREVIEWED must not include outcome notes",
+        path: ["notes"],
+      });
+    }
+  });
+export type DeterministicJournalOutcomeUpdateRequest = z.infer<
+  typeof DeterministicJournalOutcomeUpdateRequestSchema
+>;
+
+export const DeterministicJournalOutcomeUpdateResponseSchema = z
+  .object({
+    product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_OUTCOME"),
+    methodologyVersion: DeterministicJournalMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: DeterministicJournalEngineStateSchema,
+    primaryReasonCode: DeterministicJournalPrimaryReasonCodeSchema,
+    entry: DeterministicJournalSnapshotEntrySchema.nullable(),
+    disclosures: DeterministicJournalDisclosuresSchema,
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const issue = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+
+    if (value.primaryReasonCode === "JOURNAL_OUTCOME_UPDATED") {
+      if (value.engineState !== "AVAILABLE" || value.entry === null) {
+        issue("Updated outcome response requires an available entry");
+      }
+      return;
+    }
+
+    if (value.primaryReasonCode === "JOURNAL_SNAPSHOT_NOT_FOUND") {
+      if (value.engineState !== "AVAILABLE" || value.entry !== null) {
+        issue("Not-found outcome response must be available and entry-free");
+      }
+      return;
+    }
+
+    if (
+      value.engineState !== "UNAVAILABLE" ||
+      value.entry !== null ||
+      !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(
+        value.primaryReasonCode,
+      )
+    ) {
+      issue("Unavailable outcome response must be database-related and entry-free");
+    }
+  });
+export type DeterministicJournalOutcomeUpdateResponse = z.infer<
+  typeof DeterministicJournalOutcomeUpdateResponseSchema
 >;

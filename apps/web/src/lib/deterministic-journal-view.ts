@@ -1,7 +1,12 @@
-import type {
-  DeterministicJournalCaptureResponse,
-  DeterministicJournalPrimaryReasonCode,
-  DeterministicTradePlanState,
+import {
+  DeterministicJournalOutcomeUpdateRequestSchema,
+  type DeterministicJournalCaptureResponse,
+  type DeterministicJournalOutcomeState,
+  type DeterministicJournalOutcomeUpdateRequest,
+  type DeterministicJournalOutcomeUpdateResponse,
+  type DeterministicJournalPrimaryReasonCode,
+  type DeterministicJournalSnapshotEntry,
+  type DeterministicTradePlanState,
 } from "@spy-copilot/shared";
 
 export const JOURNAL_PLAN_STATE_LABEL: Record<DeterministicTradePlanState, string> = {
@@ -14,6 +19,68 @@ export const JOURNAL_PLAN_STATE_LABEL: Record<DeterministicTradePlanState, strin
   UNAVAILABLE: "Unavailable",
 };
 
+export const JOURNAL_OUTCOME_LABEL: Record<DeterministicJournalOutcomeState, string> = {
+  UNREVIEWED: "Unreviewed",
+  NO_TRADE: "No trade",
+  WIN: "Win",
+  LOSS: "Loss",
+  BREAKEVEN: "Breakeven",
+};
+
+export const JOURNAL_OUTCOME_OPTIONS: readonly DeterministicJournalOutcomeState[] = [
+  "UNREVIEWED",
+  "NO_TRADE",
+  "WIN",
+  "LOSS",
+  "BREAKEVEN",
+];
+
+export interface JournalOutcomeDraft {
+  outcomeState: DeterministicJournalOutcomeState;
+  realizedPnlDollars: string;
+  notes: string;
+}
+
+export interface JournalOutcomeDraftValidation {
+  request: DeterministicJournalOutcomeUpdateRequest | null;
+  error: string | null;
+}
+
+export function journalOutcomeDraftFromEntry(
+  entry: DeterministicJournalSnapshotEntry,
+): JournalOutcomeDraft {
+  return {
+    outcomeState: entry.outcomeState,
+    realizedPnlDollars:
+      entry.realizedPnlDollars === null ? "" : String(entry.realizedPnlDollars),
+    notes: entry.outcomeNotes ?? "",
+  };
+}
+
+export function validateJournalOutcomeDraft(
+  draft: JournalOutcomeDraft,
+): JournalOutcomeDraftValidation {
+  const trimmedAmount = draft.realizedPnlDollars.trim();
+  const amount = trimmedAmount === "" ? null : Number(trimmedAmount);
+  if (amount !== null && !Number.isFinite(amount)) {
+    return { request: null, error: "Realized P&L must be a finite dollar amount." };
+  }
+
+  const parsed = DeterministicJournalOutcomeUpdateRequestSchema.safeParse({
+    outcomeState: draft.outcomeState,
+    realizedPnlDollars: amount,
+    notes: draft.notes.trim() === "" ? null : draft.notes.trim(),
+  });
+  if (!parsed.success) {
+    return {
+      request: null,
+      error: parsed.error.issues[0]?.message ?? "Outcome values are invalid.",
+    };
+  }
+
+  return { request: parsed.data, error: null };
+}
+
 export function journalReasonCopy(
   reason: DeterministicJournalPrimaryReasonCode,
 ): string {
@@ -24,6 +91,10 @@ export function journalReasonCopy(
       return "No deterministic snapshots have been saved yet.";
     case "JOURNAL_SNAPSHOT_CAPTURED":
       return "The current deterministic Trade Plan snapshot was saved.";
+    case "JOURNAL_OUTCOME_UPDATED":
+      return "The user-entered outcome annotation was saved.";
+    case "JOURNAL_SNAPSHOT_NOT_FOUND":
+      return "The selected snapshot no longer exists.";
     case "SOURCE_ASSEMBLY_UNAVAILABLE":
       return "The current Trade Plan Assembly is unavailable, so nothing was saved.";
     case "DATABASE_NOT_CONFIGURED":
@@ -35,6 +106,12 @@ export function journalReasonCopy(
 
 export function captureResultCopy(
   response: DeterministicJournalCaptureResponse,
+): string {
+  return journalReasonCopy(response.primaryReasonCode);
+}
+
+export function outcomeUpdateResultCopy(
+  response: DeterministicJournalOutcomeUpdateResponse,
 ): string {
   return journalReasonCopy(response.primaryReasonCode);
 }

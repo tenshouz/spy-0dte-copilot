@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type {
   DeterministicJournalCaptureResponse,
+  DeterministicJournalOutcomeUpdateRequest,
+  DeterministicJournalOutcomeUpdateResponse,
   DeterministicJournalSnapshotListResponse,
   SpyZeroDteTradePlanAssemblyResponse,
 } from "@spy-copilot/shared";
@@ -10,6 +12,9 @@ import {
   buildCapturedJournalResponse,
   buildJournalCaptureUnavailableResponse,
   buildJournalListResponse,
+  buildJournalOutcomeNotFoundResponse,
+  buildJournalOutcomeUnavailableResponse,
+  buildJournalOutcomeUpdatedResponse,
   buildJournalUnavailableListResponse,
   type DeterministicJournalSnapshotRow,
 } from "./deterministic-journal.logic";
@@ -27,6 +32,12 @@ export interface DeterministicJournalRepository {
     capturedAt: Date,
     assembly: SpyZeroDteTradePlanAssemblyResponse,
   ): Promise<DeterministicJournalSnapshotRow>;
+  updateOutcome(
+    userId: string,
+    snapshotId: string,
+    request: DeterministicJournalOutcomeUpdateRequest,
+    updatedAt: Date,
+  ): Promise<DeterministicJournalSnapshotRow | null>;
 }
 
 export interface DeterministicJournalServiceDependencies {
@@ -61,7 +72,11 @@ const prismaRepository: DeterministicJournalRepository = {
         "primaryReasonCode",
         "warningCode",
         "entryConditionState",
-        "selectedContractSymbol"
+        "selectedContractSymbol",
+        "outcomeState",
+        "realizedPnlDollars",
+        "outcomeNotes",
+        "outcomeUpdatedAt"
       FROM "DeterministicJournalSnapshot"
       WHERE "userId" = ${userId}
       ORDER BY "capturedAt" DESC
@@ -118,9 +133,47 @@ const prismaRepository: DeterministicJournalRepository = {
       warningCode: assembly.warningCode,
       entryConditionState: assembly.entryCondition.state,
       selectedContractSymbol: assembly.selectedContract.contractSymbol,
+      outcomeState: "UNREVIEWED",
+      realizedPnlDollars: null,
+      outcomeNotes: null,
+      outcomeUpdatedAt: null,
     };
   },
+
+  async updateOutcome(userId, snapshotId, request, updatedAt) {
+    const persistedUpdatedAt =
+      request.outcomeState === "UNREVIEWED" ? null : updatedAt;
+    const rows = await rawPrisma.$queryRaw<DeterministicJournalSnapshotRow[]>`
+      UPDATE "DeterministicJournalSnapshot"
+      SET
+        "outcomeState" = ${request.outcomeState},
+        "realizedPnlDollars" = ${request.realizedPnlDollars},
+        "outcomeNotes" = ${request.notes},
+        "outcomeUpdatedAt" = ${persistedUpdatedAt}
+      WHERE "id" = ${snapshotId} AND "userId" = ${userId}
+      RETURNING
+        "id",
+        "currentMarketDate",
+        "sourceCalculatedAt",
+        "capturedAt",
+        "engineState",
+        "planState",
+        "direction",
+        "confidenceScore",
+        "primaryReasonCode",
+        "warningCode",
+        "entryConditionState",
+        "selectedContractSymbol",
+        "outcomeState",
+        "realizedPnlDollars",
+        "outcomeNotes",
+        "outcomeUpdatedAt"
+    `;
+
+    return rows[0] ?? null;
+  },
 };
+
 
 const defaultDependencies: DeterministicJournalServiceDependencies = {
   databaseConfigured: () => hasDatabaseUrl,
@@ -207,10 +260,54 @@ export async function captureDeterministicJournalSnapshotWithDependencies(
   }
 }
 
+export async function updateDeterministicJournalOutcomeWithDependencies(
+  dependencies: DeterministicJournalServiceDependencies,
+  snapshotId: string,
+  request: DeterministicJournalOutcomeUpdateRequest,
+): Promise<DeterministicJournalOutcomeUpdateResponse> {
+  const calculatedAt = dependencies.now();
+  if (!dependencies.databaseConfigured()) {
+    return buildJournalOutcomeUnavailableResponse(
+      "DATABASE_NOT_CONFIGURED",
+      calculatedAt,
+    );
+  }
+
+  try {
+    const userId = await dependencies.getUserId();
+    const row = await dependencies.repository.updateOutcome(
+      userId,
+      snapshotId,
+      request,
+      dependencies.now(),
+    );
+    return row === null
+      ? buildJournalOutcomeNotFoundResponse(calculatedAt)
+      : buildJournalOutcomeUpdatedResponse(row, calculatedAt);
+  } catch {
+    dependencies.log("outcome update failed");
+    return buildJournalOutcomeUnavailableResponse(
+      "DATABASE_UNAVAILABLE",
+      calculatedAt,
+    );
+  }
+}
+
 export function listDeterministicJournalSnapshots(): Promise<DeterministicJournalSnapshotListResponse> {
   return listDeterministicJournalSnapshotsWithDependencies(defaultDependencies);
 }
 
 export function captureDeterministicJournalSnapshot(): Promise<DeterministicJournalCaptureResponse> {
   return captureDeterministicJournalSnapshotWithDependencies(defaultDependencies);
+}
+
+export function updateDeterministicJournalOutcome(
+  snapshotId: string,
+  request: DeterministicJournalOutcomeUpdateRequest,
+): Promise<DeterministicJournalOutcomeUpdateResponse> {
+  return updateDeterministicJournalOutcomeWithDependencies(
+    defaultDependencies,
+    snapshotId,
+    request,
+  );
 }

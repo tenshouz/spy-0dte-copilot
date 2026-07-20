@@ -1,5 +1,6 @@
 "use client";
 
+import type { DeterministicJournalOutcomeUpdateRequest } from "@spy-copilot/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 
@@ -18,6 +19,23 @@ export function useCaptureDeterministicJournalSnapshot() {
 
   return useMutation({
     mutationFn: apiClient.captureDeterministicJournalSnapshot,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY });
+    },
+  });
+}
+
+export function useUpdateDeterministicJournalOutcome() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      snapshotId,
+      request,
+    }: {
+      snapshotId: string;
+      request: DeterministicJournalOutcomeUpdateRequest;
+    }) => apiClient.updateDeterministicJournalOutcome(snapshotId, request),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY });
     },

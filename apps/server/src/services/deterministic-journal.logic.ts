@@ -1,8 +1,11 @@
 import {
   DeterministicJournalCaptureResponseSchema,
+  DeterministicJournalOutcomeUpdateResponseSchema,
   DeterministicJournalSnapshotEntrySchema,
   DeterministicJournalSnapshotListResponseSchema,
   type DeterministicJournalCaptureResponse,
+  type DeterministicJournalOutcomeState,
+  type DeterministicJournalOutcomeUpdateResponse,
   type DeterministicJournalSnapshotEntry,
   type DeterministicJournalSnapshotListResponse,
   type SpyZeroDteTradePlanAssemblyResponse,
@@ -21,6 +24,10 @@ export interface DeterministicJournalSnapshotRow {
   warningCode: SpyZeroDteTradePlanAssemblyResponse["warningCode"];
   entryConditionState: SpyZeroDteTradePlanAssemblyResponse["entryCondition"]["state"];
   selectedContractSymbol: string | null;
+  outcomeState: DeterministicJournalOutcomeState;
+  realizedPnlDollars: number | null;
+  outcomeNotes: string | null;
+  outcomeUpdatedAt: Date | null;
 }
 
 const DISCLOSURES = {
@@ -29,6 +36,9 @@ const DISCLOSURES = {
   deterministicSourceOnly: true,
   databasePersistence: true,
   noAutomaticCapture: true,
+  userEnteredOutcomeOnly: true,
+  noAutomaticOutcomeInference: true,
+  noPerformanceAnalytics: true,
   noPrivateAccountData: true,
   noPositionSizing: true,
   noOrderExecution: true,
@@ -41,7 +51,7 @@ export function mapJournalRowToEntry(
     id: row.id,
     symbol: "SPY",
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_SNAPSHOT",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V1",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
     currentMarketDate: row.currentMarketDate,
     sourceCalculatedAt: row.sourceCalculatedAt.toISOString(),
     capturedAt: row.capturedAt.toISOString(),
@@ -53,6 +63,10 @@ export function mapJournalRowToEntry(
     warningCode: row.warningCode,
     entryConditionState: row.entryConditionState,
     selectedContractSymbol: row.selectedContractSymbol,
+    outcomeState: row.outcomeState,
+    realizedPnlDollars: row.realizedPnlDollars,
+    outcomeNotes: row.outcomeNotes,
+    outcomeUpdatedAt: row.outcomeUpdatedAt?.toISOString() ?? null,
   });
 }
 
@@ -63,7 +77,7 @@ export function buildJournalListResponse(
   const entries = rows.slice(0, 200).map(mapJournalRowToEntry);
   return DeterministicJournalSnapshotListResponseSchema.parse({
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V1",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
     calculatedAt: calculatedAt.toISOString(),
     engineState: "AVAILABLE",
     primaryReasonCode:
@@ -79,7 +93,7 @@ export function buildJournalUnavailableListResponse(
 ): DeterministicJournalSnapshotListResponse {
   return DeterministicJournalSnapshotListResponseSchema.parse({
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V1",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
     calculatedAt: calculatedAt.toISOString(),
     engineState: "UNAVAILABLE",
     primaryReasonCode: reason,
@@ -102,7 +116,7 @@ export function buildCapturedJournalResponse(
 
   return DeterministicJournalCaptureResponseSchema.parse({
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_CAPTURE",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V1",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
     calculatedAt: calculatedAt.toISOString(),
     engineState: "AVAILABLE",
     primaryReasonCode: "JOURNAL_SNAPSHOT_CAPTURED",
@@ -121,11 +135,55 @@ export function buildJournalCaptureUnavailableResponse(
 ): DeterministicJournalCaptureResponse {
   return DeterministicJournalCaptureResponseSchema.parse({
     product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_CAPTURE",
-    methodologyVersion: "JOURNAL_SNAPSHOT_V1",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
     calculatedAt: calculatedAt.toISOString(),
     engineState: "UNAVAILABLE",
     primaryReasonCode: reason,
     warningCode: null,
+    entry: null,
+    disclosures: DISCLOSURES,
+  });
+}
+
+export function buildJournalOutcomeUpdatedResponse(
+  row: DeterministicJournalSnapshotRow,
+  calculatedAt: Date,
+): DeterministicJournalOutcomeUpdateResponse {
+  return DeterministicJournalOutcomeUpdateResponseSchema.parse({
+    product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_OUTCOME",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
+    calculatedAt: calculatedAt.toISOString(),
+    engineState: "AVAILABLE",
+    primaryReasonCode: "JOURNAL_OUTCOME_UPDATED",
+    entry: mapJournalRowToEntry(row),
+    disclosures: DISCLOSURES,
+  });
+}
+
+export function buildJournalOutcomeNotFoundResponse(
+  calculatedAt: Date,
+): DeterministicJournalOutcomeUpdateResponse {
+  return DeterministicJournalOutcomeUpdateResponseSchema.parse({
+    product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_OUTCOME",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
+    calculatedAt: calculatedAt.toISOString(),
+    engineState: "AVAILABLE",
+    primaryReasonCode: "JOURNAL_SNAPSHOT_NOT_FOUND",
+    entry: null,
+    disclosures: DISCLOSURES,
+  });
+}
+
+export function buildJournalOutcomeUnavailableResponse(
+  reason: "DATABASE_NOT_CONFIGURED" | "DATABASE_UNAVAILABLE",
+  calculatedAt: Date,
+): DeterministicJournalOutcomeUpdateResponse {
+  return DeterministicJournalOutcomeUpdateResponseSchema.parse({
+    product: "SPY_ZERO_DTE_DETERMINISTIC_JOURNAL_OUTCOME",
+    methodologyVersion: "JOURNAL_SNAPSHOT_V2",
+    calculatedAt: calculatedAt.toISOString(),
+    engineState: "UNAVAILABLE",
+    primaryReasonCode: reason,
     entry: null,
     disclosures: DISCLOSURES,
   });

@@ -116,9 +116,14 @@ model DeterministicJournalSnapshot {
   entryConditionState    String
   selectedContractSymbol String?
   sourceAssembly         Json
+  outcomeState           String   @default("UNREVIEWED")
+  realizedPnlDollars     Float?
+  outcomeNotes           String?
+  outcomeUpdatedAt       DateTime?
 
   @@index([userId, capturedAt])
   @@index([userId, currentMarketDate])
+  @@index([userId, outcomeState])
 }
 
 model DiscordLog {

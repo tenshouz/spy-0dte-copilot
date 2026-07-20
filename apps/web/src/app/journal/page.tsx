@@ -1,7 +1,11 @@
 "use client";
 
-import type { DeterministicJournalSnapshotEntry } from "@spy-copilot/shared";
-import { Camera, Database } from "lucide-react";
+import type {
+  DeterministicJournalOutcomeState,
+  DeterministicJournalSnapshotEntry,
+} from "@spy-copilot/shared";
+import { Camera, Database, PencilLine, Save } from "lucide-react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { Panel } from "@/components/panels/panel";
@@ -10,12 +14,19 @@ import { Button } from "@/components/ui/button";
 import {
   useCaptureDeterministicJournalSnapshot,
   useDeterministicJournalSnapshots,
+  useUpdateDeterministicJournalOutcome,
 } from "@/hooks/use-journal";
 import { formatEasternTime } from "@/lib/format";
 import {
   captureResultCopy,
+  JOURNAL_OUTCOME_LABEL,
+  JOURNAL_OUTCOME_OPTIONS,
   JOURNAL_PLAN_STATE_LABEL,
+  journalOutcomeDraftFromEntry,
   journalReasonCopy,
+  outcomeUpdateResultCopy,
+  validateJournalOutcomeDraft,
+  type JournalOutcomeDraft,
 } from "@/lib/deterministic-journal-view";
 
 function stateVariant(
@@ -35,11 +46,56 @@ function directionVariant(
   return "default";
 }
 
+function outcomeVariant(
+  outcome: DeterministicJournalOutcomeState,
+): "bull" | "bear" | "wait" | "default" {
+  if (outcome === "WIN") return "bull";
+  if (outcome === "LOSS") return "bear";
+  if (outcome === "NO_TRADE") return "wait";
+  return "default";
+}
+
+const EMPTY_DRAFT: JournalOutcomeDraft = {
+  outcomeState: "UNREVIEWED",
+  realizedPnlDollars: "",
+  notes: "",
+};
+const EMPTY_ENTRIES: DeterministicJournalSnapshotEntry[] = [];
+
 export default function JournalPage() {
   const journalQuery = useDeterministicJournalSnapshots();
   const captureMutation = useCaptureDeterministicJournalSnapshot();
+  const outcomeMutation = useUpdateDeterministicJournalOutcome();
   const journal = journalQuery.data ?? null;
-  const entries = journal?.entries ?? [];
+  const entries = journal?.entries ?? EMPTY_ENTRIES;
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+  const [outcomeDraft, setOutcomeDraft] = useState<JournalOutcomeDraft>(EMPTY_DRAFT);
+
+  const selectedEntry = useMemo(
+    () => entries.find((entry) => entry.id === selectedSnapshotId) ?? null,
+    [entries, selectedSnapshotId],
+  );
+  const outcomeValidation = validateJournalOutcomeDraft(outcomeDraft);
+
+  function beginOutcomeReview(entry: DeterministicJournalSnapshotEntry): void {
+    setSelectedSnapshotId(entry.id);
+    setOutcomeDraft(journalOutcomeDraftFromEntry(entry));
+    outcomeMutation.reset();
+  }
+
+  function changeOutcomeState(outcomeState: DeterministicJournalOutcomeState): void {
+    setOutcomeDraft((current) => ({
+      ...current,
+      outcomeState,
+      realizedPnlDollars:
+        outcomeState === "BREAKEVEN"
+          ? "0"
+          : ["UNREVIEWED", "NO_TRADE"].includes(outcomeState)
+            ? ""
+            : current.realizedPnlDollars,
+      notes: outcomeState === "UNREVIEWED" ? "" : current.notes,
+    }));
+  }
 
   const columns: DataTableColumn<DeterministicJournalSnapshotEntry>[] = [
     {
@@ -78,9 +134,23 @@ export default function JournalPage() {
           : `${row.structuralConfidenceScore.toFixed(0)} / 100`,
     },
     {
-      key: "entry",
-      header: "Entry State",
-      render: (row) => row.entryConditionState.replaceAll("_", " "),
+      key: "outcome",
+      header: "Outcome",
+      render: (row) => (
+        <div className="space-y-1">
+          <Badge variant={outcomeVariant(row.outcomeState)}>
+            {JOURNAL_OUTCOME_LABEL[row.outcomeState]}
+          </Badge>
+          {row.realizedPnlDollars !== null ? (
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {row.realizedPnlDollars.toLocaleString("en-US", {
+                style: "currency",
+                currency: "USD",
+              })}
+            </div>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: "contract",
@@ -92,12 +162,18 @@ export default function JournalPage() {
       ),
     },
     {
-      key: "reason",
-      header: "Reason",
+      key: "review",
+      header: "Review",
       render: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.primaryReasonCode.replaceAll("_", " ")}
-        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => beginOutcomeReview(row)}
+        >
+          <PencilLine className="h-3.5 w-3.5" />
+          Review
+        </Button>
       ),
     },
   ];
@@ -106,7 +182,7 @@ export default function JournalPage() {
     <div className="mx-auto max-w-[1500px]">
       <PageHeader
         title="Trade Journal"
-        description="Explicitly persist the current deterministic Trade Plan Assembly for later outcome tracking and analysis. No trade is created or executed."
+        description="Persist deterministic Trade Plan snapshots and explicitly annotate outcomes for later analysis. Nothing is inferred and no trade is created or executed."
       />
 
       <Panel title="Deterministic Journal Snapshot" className="mb-3">
@@ -117,9 +193,9 @@ export default function JournalPage() {
               PostgreSQL-backed snapshot history
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Save captures the current ASSEMBLY_V1 state, direction, confidence,
-              entry state, selected contract reference, and the complete structured
-              source snapshot for auditability. Capture is manual in this milestone.
+              Save captures the current ASSEMBLY_V1 state and complete structured
+              source snapshot. Outcome review is explicit and user-entered; the
+              dashboard does not infer whether a trade was taken or calculate P&amp;L.
             </p>
           </div>
           <Button
@@ -143,8 +219,8 @@ export default function JournalPage() {
             <div className="mt-1 font-mono text-lg font-semibold">{entries.length}</div>
           </div>
           <div className="rounded-md border border-panel-border bg-background/30 p-3">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Capture Mode</div>
-            <div className="mt-1 font-mono font-semibold">EXPLICIT ONLY</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Outcome Mode</div>
+            <div className="mt-1 font-mono font-semibold">USER ENTERED</div>
           </div>
         </div>
 
@@ -167,12 +243,6 @@ export default function JournalPage() {
             {captureResultCopy(captureMutation.data)}
           </div>
         )}
-
-        {captureMutation.isError && (
-          <div className="mt-3 rounded-md border border-bear/30 bg-bear-muted px-3 py-2 text-xs text-bear">
-            The snapshot request failed before a validated journal response was received.
-          </div>
-        )}
       </Panel>
 
       <Panel
@@ -180,6 +250,7 @@ export default function JournalPage() {
         isLoading={journalQuery.isLoading}
         isError={journalQuery.isError}
         noPadding
+        className="mb-3"
       >
         <DataTable
           columns={columns}
@@ -189,10 +260,122 @@ export default function JournalPage() {
         />
       </Panel>
 
+      <Panel title="Outcome Review" className="mb-3">
+        {selectedEntry === null ? (
+          <p className="text-xs text-muted-foreground">
+            Select Review on a persisted snapshot to add or update a user-entered outcome.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">
+                  {selectedEntry.currentMarketDate} · {JOURNAL_PLAN_STATE_LABEL[selectedEntry.planState]}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Captured {formatEasternTime(selectedEntry.capturedAt)} · Snapshot ID {selectedEntry.id}
+                </p>
+              </div>
+              <Badge variant={outcomeVariant(selectedEntry.outcomeState)}>
+                Current: {JOURNAL_OUTCOME_LABEL[selectedEntry.outcomeState]}
+              </Badge>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[220px_220px_1fr]">
+              <label className="space-y-1.5 text-xs">
+                <span className="block font-medium text-muted-foreground">Outcome</span>
+                <select
+                  aria-label="Journal outcome"
+                  value={outcomeDraft.outcomeState}
+                  onChange={(event) =>
+                    changeOutcomeState(event.target.value as DeterministicJournalOutcomeState)
+                  }
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm"
+                >
+                  {JOURNAL_OUTCOME_OPTIONS.map((outcome) => (
+                    <option key={outcome} value={outcome}>
+                      {JOURNAL_OUTCOME_LABEL[outcome]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5 text-xs">
+                <span className="block font-medium text-muted-foreground">Realized P&amp;L ($)</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={outcomeDraft.realizedPnlDollars}
+                  disabled={["UNREVIEWED", "NO_TRADE"].includes(outcomeDraft.outcomeState)}
+                  onChange={(event) =>
+                    setOutcomeDraft((current) => ({
+                      ...current,
+                      realizedPnlDollars: event.target.value,
+                    }))
+                  }
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </label>
+
+              <label className="space-y-1.5 text-xs">
+                <span className="block font-medium text-muted-foreground">Notes</span>
+                <textarea
+                  value={outcomeDraft.notes}
+                  disabled={outcomeDraft.outcomeState === "UNREVIEWED"}
+                  maxLength={2000}
+                  rows={3}
+                  onChange={(event) =>
+                    setOutcomeDraft((current) => ({ ...current, notes: event.target.value }))
+                  }
+                  className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Optional user-entered context."
+                />
+              </label>
+            </div>
+
+            {outcomeValidation.error ? (
+              <div className="rounded-md border border-bear/30 bg-bear-muted px-3 py-2 text-xs text-bear">
+                {outcomeValidation.error}
+              </div>
+            ) : null}
+
+            {outcomeMutation.data ? (
+              <div
+                className={`rounded-md border px-3 py-2 text-xs ${
+                  outcomeMutation.data.primaryReasonCode === "JOURNAL_OUTCOME_UPDATED"
+                    ? "border-bull/30 bg-bull-muted text-bull"
+                    : "border-wait/30 bg-wait-muted text-wait"
+                }`}
+              >
+                {outcomeUpdateResultCopy(outcomeMutation.data)}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                disabled={outcomeMutation.isPending || outcomeValidation.request === null}
+                onClick={() => {
+                  if (outcomeValidation.request === null) return;
+                  outcomeMutation.mutate({
+                    snapshotId: selectedEntry.id,
+                    request: outcomeValidation.request,
+                  });
+                }}
+              >
+                <Save className="h-4 w-4" />
+                {outcomeMutation.isPending ? "Saving outcome…" : "Save outcome"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Panel>
+
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        This foundation stores deterministic decision-support snapshots only. Trade
-        outcome editing, P&amp;L fields, automatic report capture, and performance
-        analytics remain separate future milestones.
+        Outcome state, realized P&amp;L, and notes are explicit user inputs. Automatic
+        capture, performance analytics, expectancy, and setup-level statistics remain
+        separate future milestones.
       </p>
     </div>
   );

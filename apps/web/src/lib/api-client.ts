@@ -10,6 +10,8 @@ import {
   DeterministicScheduledReportRequestSchema,
   DeterministicJournalCaptureRequestSchema,
   DeterministicJournalCaptureResponseSchema,
+  DeterministicJournalOutcomeUpdateRequestSchema,
+  DeterministicJournalOutcomeUpdateResponseSchema,
   DeterministicJournalSnapshotListResponseSchema,
   SpyZeroDteDeterministicScheduledReportResponseSchema,
   SpyZeroDteScheduledReportScheduleEvaluationResponseSchema,
@@ -56,6 +58,8 @@ import {
   type DeterministicScheduledReportRequest,
   type DeterministicJournalCaptureRequest,
   type DeterministicJournalCaptureResponse,
+  type DeterministicJournalOutcomeUpdateRequest,
+  type DeterministicJournalOutcomeUpdateResponse,
   type DeterministicJournalSnapshotListResponse,
   type SpyZeroDteDeterministicScheduledReportResponse,
   type SpyZeroDteScheduledReportScheduleEvaluationResponse,
@@ -146,6 +150,25 @@ async function postJson<TRequest, TResponse>(
   return responseSchema.parse(await res.json());
 }
 
+async function patchJson<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  requestSchema: z.ZodType<TRequest>,
+  responseSchema: z.ZodType<TResponse>,
+): Promise<TResponse> {
+  const validatedBody = requestSchema.parse(body);
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(validatedBody),
+  });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
+  return responseSchema.parse(await res.json());
+}
+
 export const apiClient = {
   getSnapshot: (): Promise<MarketSnapshot> => getJson("/api/snapshot/latest", MarketSnapshotSchema),
   getStrikeExposures: (): Promise<StrikeExposure[]> =>
@@ -164,6 +187,19 @@ export const apiClient = {
       {},
       DeterministicJournalCaptureRequestSchema,
       DeterministicJournalCaptureResponseSchema,
+    ),
+  updateDeterministicJournalOutcome: (
+    snapshotId: string,
+    request: DeterministicJournalOutcomeUpdateRequest,
+  ): Promise<DeterministicJournalOutcomeUpdateResponse> =>
+    patchJson<
+      DeterministicJournalOutcomeUpdateRequest,
+      DeterministicJournalOutcomeUpdateResponse
+    >(
+      `/api/journal/spy/snapshots/${encodeURIComponent(snapshotId)}/outcome`,
+      request,
+      DeterministicJournalOutcomeUpdateRequestSchema,
+      DeterministicJournalOutcomeUpdateResponseSchema,
     ),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getSpyScheduledReportScheduleEvaluation: (): Promise<SpyZeroDteScheduledReportScheduleEvaluationResponse> =>
