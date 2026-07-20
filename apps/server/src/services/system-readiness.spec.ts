@@ -540,11 +540,15 @@ test("release documentation and verification scripts are present", () => {
     resolve(process.cwd(), "docs/V1_2_LIVE_MARKET_REFRESH.md"),
     "utf8",
   );
+  const guideMethodology = readFileSync(
+    resolve(process.cwd(), "docs/V1_3_DASHBOARD_GUIDE.md"),
+    "utf8",
+  );
   const verifier = readFileSync(
     resolve(process.cwd(), "scripts/verify-v1.mjs"),
     "utf8",
   );
-  assert.match(readme, /Local V1\.2\.0 Complete/i);
+  assert.match(readme, /Local V1\.3\.0 Complete/i);
   assert.match(runbook, /Backup and restore/i);
   assert.match(runbook, /Schwab recovery/i);
   assert.match(audit, /No order execution/i);
@@ -552,6 +556,8 @@ test("release documentation and verification scripts are present", () => {
   assert.match(premarketMethodology, /missing 04:00–07:00 ET data does not produce `PARTIAL`/i);
   assert.match(refreshMethodology, /5 seconds/);
   assert.match(refreshMethodology, /does not modify, synthesize, or extend candle OHLC values/i);
+  assert.match(guideMethodology, /Dashboard Guide/i);
+  assert.match(guideMethodology, /public deployment warning/i);
   assert.match(verifier, /V1 verification passed/);
 });
 

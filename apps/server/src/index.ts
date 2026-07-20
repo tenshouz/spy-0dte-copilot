@@ -85,7 +85,7 @@ app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "spy-0dte-copilot-api",
-    releaseVersion: "1.2.0",
+    releaseVersion: "1.3.0",
     uptimeSeconds: Math.max(0, Math.floor(process.uptime())),
   });
 });

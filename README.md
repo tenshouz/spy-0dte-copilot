@@ -1,14 +1,15 @@
-# SPY 0DTE Copilot — Local V1.2.0 Complete
+# SPY 0DTE Copilot — Local V1.3.0 Complete
 
 SPY 0DTE Copilot is a local, single-user decision-support dashboard for discretionary SPY same-day options trading. It combines backend-only Schwab connectivity, deterministic market structure, 0DTE options analytics, Trade Plan assembly, read-only sizing support, Discord notifications, persistent journaling, performance analytics, and captured-snapshot historical replay.
 
-**V1.2.0 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
+**V1.3.0 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
 
-## V1.2.0 capabilities
+## V1.3.0 capabilities
 
 - Encrypted Schwab OAuth token storage and refresh recovery
 - Normalized SPY quote, bounded five-minute candles, and current-date options chain
 - Fast live refresh policy: 5-second quotes, 10-second official candle refresh, 15-second derived Trade Plan refresh, focus/reconnect refetch, and an independent live quote chart marker
+- Built-in searchable Dashboard Guide with first-time workflow, page-by-page explanations, status dictionary, Trade Plan flow, alert checklist, glossary, and safe-sharing guidance
 - Provider-aligned 07:00–09:30 ET premarket levels, RTH VWAP, gaps, 5/15/30-minute opening ranges, and Traditional daily/weekly pivots
 - ATM straddle-Mark expected move
 - Returned-window GEX/DEX proxies, ranked walls, Gamma-balance proxy, cliffs, and DEX anchor
@@ -35,7 +36,8 @@ spy-0dte-copilot/
 │   ├── V1_PRD_COMPLIANCE_AUDIT.md
 │   ├── V1_1_GEX_DEX_SOFT_CONFIRMATION.md
 │   ├── V1_1_1_PROVIDER_ALIGNED_PREMARKET.md
-│   └── V1_2_LIVE_MARKET_REFRESH.md
+│   ├── V1_2_LIVE_MARKET_REFRESH.md
+│   └── V1_3_DASHBOARD_GUIDE.md
 └── scripts/
     ├── run-specs.mjs
     └── verify-v1.mjs
@@ -110,7 +112,7 @@ For Schwab OAuth, keep the HTTPS tunnel pointed at backend port 4000 and registe
 https://<stable-tunnel-host>/api/auth/schwab/callback
 ```
 
-## V1.2.0 readiness and verification
+## V1.3.0 readiness and verification
 
 Open:
 
@@ -135,6 +137,6 @@ This executes every backend and frontend specification, server and frontend Type
 - Persistent automation is safely disabled by default.
 - The backend must remain running for scheduled automation.
 - Keep real Schwab credentials, tokens, the encryption key, Discord webhook URL, database dumps, and account identifiers private.
-- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1.2.0 panels.
+- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1.3.0 panels.
 
-See [the V1.2.0 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1.2.0 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations, and [the GEX/DEX soft-confirmation methodology](docs/V1_1_GEX_DEX_SOFT_CONFIRMATION.md) for the fixed weights and safety boundaries. See [the provider-aligned premarket methodology](docs/V1_1_1_PROVIDER_ALIGNED_PREMARKET.md) for the 07:00 ET coverage policy and [the V1.2.0 live refresh policy](docs/V1_2_LIVE_MARKET_REFRESH.md) for polling, cache, chart-marker, and data-age behavior.
+See [the V1.3.0 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1.3.0 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations, and [the GEX/DEX soft-confirmation methodology](docs/V1_1_GEX_DEX_SOFT_CONFIRMATION.md) for the fixed weights and safety boundaries. See [the provider-aligned premarket methodology](docs/V1_1_1_PROVIDER_ALIGNED_PREMARKET.md) for the 07:00 ET coverage policy and [the V1.2.0 live refresh policy](docs/V1_2_LIVE_MARKET_REFRESH.md) for polling, cache, chart-marker, and data-age behavior. See [the V1.3.0 Dashboard Guide methodology](docs/V1_3_DASHBOARD_GUIDE.md) for onboarding scope and public-sharing boundaries.

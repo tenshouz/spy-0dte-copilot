@@ -1,8 +1,8 @@
-# SPY 0DTE Copilot V1.2.0 Release Runbook
+# SPY 0DTE Copilot V1.3.0 Release Runbook
 
 ## Scope
 
-V1.2.0 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It does not create, modify, route, or execute orders.
+V1.3.0 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It includes an in-app Dashboard Guide for first-time users and does not create, modify, route, or execute orders.
 
 ## Required services
 

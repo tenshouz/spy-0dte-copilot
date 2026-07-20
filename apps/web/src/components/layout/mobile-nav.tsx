@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BarChart3,
   BookOpen,
+  CircleHelp,
   LayoutDashboard,
   LineChart,
   History,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/journal", label: "Journal", icon: BookOpen },
   { href: "/replay", label: "Replay", icon: History },
   { href: "/system", label: "System", icon: ShieldCheck },
+  { href: "/guide", label: "Guide", icon: CircleHelp },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ] as const;
 

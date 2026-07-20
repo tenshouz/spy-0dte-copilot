@@ -73,15 +73,15 @@ for (const packageFile of [
 ]) {
   const packageJson = JSON.parse(readFileSync(packageFile, "utf8"));
 
-  if (packageJson.version !== "1.2.0") {
-    throw new Error(`${packageFile} version must be 1.2.0.`);
+  if (packageJson.version !== "1.3.0") {
+    throw new Error(`${packageFile} version must be 1.3.0.`);
   }
 }
 
 const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8"));
 
 for (const packagePath of ["", "apps/server", "apps/web", "packages/shared"]) {
-  if (lockfile.packages?.[packagePath]?.version !== "1.2.0") {
+  if (lockfile.packages?.[packagePath]?.version !== "1.3.0") {
     throw new Error(
       `package-lock.json has a non-V1 version for ${packagePath || "root"}.`,
     );
@@ -93,8 +93,11 @@ for (const file of [
   "docs/V1_PRD_COMPLIANCE_AUDIT.md",
   "docs/V1_1_1_PROVIDER_ALIGNED_PREMARKET.md",
   "docs/V1_2_LIVE_MARKET_REFRESH.md",
+  "docs/V1_3_DASHBOARD_GUIDE.md",
   "apps/server/src/routes/system-readiness.routes.ts",
   "apps/web/src/app/system/page.tsx",
+  "apps/web/src/app/guide/page.tsx",
+  "apps/web/src/lib/dashboard-guide-view.spec.ts",
 ]) {
   if (!existsSync(file)) {
     throw new Error(`Required V1 artifact is missing: ${file}`);
