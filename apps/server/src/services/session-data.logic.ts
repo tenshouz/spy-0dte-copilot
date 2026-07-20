@@ -10,7 +10,7 @@ import {
 } from "@spy-copilot/shared";
 import { decideCandleState, type CachedCandleDataset } from "./schwab-candles.logic";
 
-export const SESSION_DATA_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_DATA_LOOKBACK_MS = 21 * 24 * 60 * 60 * 1000;
 export const SESSION_DATA_SHORT_CACHE_MS = 60_000;
 export const FIVE_MINUTES_MS = 5 * 60 * 1000;
 export const MARKET_TIME_ZONE = "America/New_York";

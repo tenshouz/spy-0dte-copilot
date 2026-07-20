@@ -88,7 +88,7 @@ test("bounded request rejects invalid date ranges", () => {
   assert.throws(() => buildSpyPriceHistoryUrl({ kind: "chart", startDateMs: 1000, endDateMs: 1000 }));
 });
 
-test("foundation request window is exactly seven calendar days", () => {
+test("foundation request window is exactly twenty-one calendar days", () => {
   const nowMs = Date.parse("2026-07-15T05:00:00.000Z");
   const window = buildSessionDataRequestWindow(nowMs);
   assert.equal(window.endDateMs, nowMs);

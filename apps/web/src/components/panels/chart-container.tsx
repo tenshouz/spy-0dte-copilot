@@ -28,6 +28,13 @@ interface ChartVwapPoint {
   value: number;
 }
 
+export interface ChartReferenceLine {
+  price: number;
+  title: string;
+  color: string;
+  lineStyle?: number;
+}
+
 interface ChartContainerProps {
   candles: Candle[];
   /** Legacy scalar overlay retained only for explicitly mocked fallback data. */
@@ -42,6 +49,8 @@ interface ChartContainerProps {
   previousClose?: number;
   previousHigh?: number;
   previousLow?: number;
+  /** Additional deterministic reference levels such as pivots and alternate opening ranges. */
+  additionalPriceLines?: readonly ChartReferenceLine[];
   /** Legacy mock-only derived extrema. Disable for LIVE/STALE provider candles. */
   showDerivedSessionExtremes?: boolean;
   height?: number;
@@ -63,6 +72,7 @@ export function ChartContainer({
   previousClose,
   previousHigh,
   previousLow,
+  additionalPriceLines,
   showDerivedSessionExtremes = true,
   height = 360,
 }: ChartContainerProps) {
@@ -214,6 +224,17 @@ export function ChartContainer({
       });
     }
 
+    for (const reference of additionalPriceLines ?? []) {
+      if (!Number.isFinite(reference.price) || reference.price <= 0) continue;
+      candleSeries.createPriceLine({
+        price: reference.price,
+        color: reference.color,
+        lineWidth: 1,
+        lineStyle: reference.lineStyle ?? 2,
+        title: reference.title,
+      });
+    }
+
     chart.timeScale().fitContent();
 
     const handleResize = () => {
@@ -240,6 +261,7 @@ export function ChartContainer({
     previousClose,
     previousHigh,
     previousLow,
+    additionalPriceLines,
     showDerivedSessionExtremes,
     height,
   ]);

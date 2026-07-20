@@ -24,6 +24,7 @@ import { quoteRouter } from "./routes/quote.routes";
 import { reportRouter, setDeterministicReportHeaders } from "./routes/report.routes";
 import { sessionDataRouter } from "./routes/session-data.routes";
 import { sessionLevelsRouter } from "./routes/session-levels.routes";
+import { sessionStructureRouter } from "./routes/session-structure.routes";
 import { snapshotRouter } from "./routes/snapshot.routes";
 import { tradePlanRouter } from "./routes/trade-plan.routes";
 import { tradePlanAssemblyRouter } from "./routes/trade-plan-assembly.routes";
@@ -74,6 +75,7 @@ app.use("/api/gap", gapRouter);
 app.use("/api/gex", gexRouter);
 app.use("/api/session-data", sessionDataRouter);
 app.use("/api/session-levels", sessionLevelsRouter);
+app.use("/api/session-structure", sessionStructureRouter);
 app.use("/api/vwap", vwapRouter);
 app.use("/api/alerts", alertsRouter);
 app.use("/api/auth", authRouter);
@@ -174,7 +176,7 @@ app.listen(PORT, () => {
     `[server] SPY quote endpoint (/api/quote/spy) uses Schwab when an authenticated connection is available; every quote is labeled LIVE, STALE, or MOCK.`,
   );
   console.log(
-    `[server] RTH VWAP, core session levels, RTH gap metrics, and the 15-minute Opening Range are derived deterministically from normalized SPY candles. The SPY current-date Options Chain, deterministic ATM straddle-Mark implied move, and returned-window 0DTE GEX and DEX proxies are live when Schwab returns eligible inputs; remaining advanced options analytics remain mock.`,
+    `[server] RTH VWAP, core session levels, RTH gap metrics, fixed 5/15/30-minute Opening Ranges, and Traditional daily/weekly pivots are derived deterministically from normalized SPY candles. The SPY current-date Options Chain, deterministic ATM straddle-Mark implied move, and returned-window 0DTE GEX and DEX proxies are live when Schwab returns eligible inputs; remaining advanced options analytics remain mock.`,
   );
   if (!hasDatabaseUrl) {
     console.log(

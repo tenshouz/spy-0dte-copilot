@@ -9,6 +9,7 @@ import type {
   SpyRthGapResponse,
   VwapMetricState,
 } from "@spy-copilot/shared";
+import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
@@ -38,6 +39,10 @@ import {
   useDisplaySpySessionLevels,
 } from "@/hooks/use-spy-session-levels";
 import {
+  SESSION_STRUCTURE_TRANSPORT_WARNING,
+  useDisplaySpyDeterministicSessionStructure,
+} from "@/hooks/use-spy-session-structure";
+import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
@@ -48,6 +53,10 @@ import {
   formatOptionalPoints,
   summarizeMarketContextCoverage,
 } from "@/lib/market-data-deterministic-view";
+import {
+  getEasternMarketDate,
+  getSessionStructureReferenceLines,
+} from "@/lib/session-structure-view";
 
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
   LIVE: { variant: "bull", label: "SPY LIVE" },
@@ -133,6 +142,7 @@ export default function MarketDataPage() {
   const levelsQuery = useDisplaySpySessionLevels();
   const contextQuery = useDisplaySpyZeroDteMarketContext();
   const marketStateQuery = useDisplaySpyZeroDteDeterministicMarketState();
+  const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
 
   const quote = quoteQuery.display?.quote ?? null;
   const candleDisplay = candleQuery.display;
@@ -143,6 +153,7 @@ export default function MarketDataPage() {
   const levelsDisplay = levelsQuery.display;
   const context = contextQuery.display?.response ?? null;
   const marketState = marketStateQuery.display?.response ?? null;
+  const sessionStructure = sessionStructureQuery.display?.response ?? null;
 
   const isMockCandles = candleResponse?.sourceState === "MOCK";
   const vwapSeries =
@@ -170,6 +181,15 @@ export default function MarketDataPage() {
       openingRangeDisplay.response.metricState === "STALE")
       ? openingRangeDisplay.response
       : null;
+
+  const chartMarketDate = getEasternMarketDate(candleResponse?.latestCandleAt ?? null);
+  const additionalPriceLines =
+    candleDisplay &&
+    !isMockCandles &&
+    sessionStructure &&
+    chartMarketDate === sessionStructure.currentMarketDate
+      ? getSessionStructureReferenceLines(sessionStructure)
+      : [];
 
   const structureColumns: DataTableColumn<StructureLevelRow>[] = [
     { key: "label", header: "Level", render: (row) => row.label },
@@ -361,6 +381,7 @@ export default function MarketDataPage() {
                 previousClose={levels ? renderableLevel(levels.previousDayClose) : undefined}
                 previousHigh={levels ? renderableLevel(levels.previousDayHigh) : undefined}
                 previousLow={levels ? renderableLevel(levels.previousDayLow) : undefined}
+                additionalPriceLines={additionalPriceLines}
                 showDerivedSessionExtremes={false}
                 height={420}
               />
@@ -375,6 +396,11 @@ export default function MarketDataPage() {
               )}
               {openingRangeDisplay?.transportFailed && (
                 <p className="px-4 pb-3 text-xs text-wait">{OPENING_RANGE_TRANSPORT_WARNING}</p>
+              )}
+              {sessionStructureQuery.display?.transportFailed && (
+                <p className="px-4 pb-3 text-xs text-wait">
+                  {SESSION_STRUCTURE_TRANSPORT_WARNING}
+                </p>
               )}
             </div>
           )}
@@ -406,6 +432,8 @@ export default function MarketDataPage() {
             )}
           </div>
         </Panel>
+
+        <SessionStructurePanel className="lg:col-span-4" />
 
         <Panel
           title="Quote & Candle Context"

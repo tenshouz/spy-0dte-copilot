@@ -7751,3 +7751,289 @@ export const DeterministicJournalAnalyticsResponseSchema = z
 export type DeterministicJournalAnalyticsResponse = z.infer<
   typeof DeterministicJournalAnalyticsResponseSchema
 >;
+
+/**
+ * Complete deterministic session-structure product: Traditional daily/weekly
+ * pivots plus fixed 5m/15m/30m opening ranges. This product is supplemental
+ * decision support and never creates signals or orders.
+ */
+export const SessionStructureMethodologySchema = z.literal("SESSION_STRUCTURE_V1");
+export type SessionStructureMethodology = z.infer<typeof SessionStructureMethodologySchema>;
+
+export const SessionStructureEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "PARTIAL",
+  "UNAVAILABLE",
+]);
+export type SessionStructureEngineState = z.infer<typeof SessionStructureEngineStateSchema>;
+
+export const SessionStructureMetricStateSchema = z.enum([
+  "LIVE",
+  "STALE",
+  "UNAVAILABLE",
+]);
+export type SessionStructureMetricState = z.infer<typeof SessionStructureMetricStateSchema>;
+
+export const TraditionalPivotPeriodSchema = z.enum(["DAILY", "WEEKLY"]);
+export type TraditionalPivotPeriod = z.infer<typeof TraditionalPivotPeriodSchema>;
+
+export const TraditionalPivotWarningCodeSchema = z.enum([
+  "SOURCE_DATA_UNAVAILABLE",
+  "SOURCE_SESSION_INCOMPLETE",
+  "SOURCE_WEEK_INCOMPLETE",
+  "CALENDAR_UNSUPPORTED",
+  "INVALID_PIVOT_INPUTS",
+]);
+export type TraditionalPivotWarningCode = z.infer<typeof TraditionalPivotWarningCodeSchema>;
+
+export const TraditionalPivotSetSchema = z
+  .object({
+    period: TraditionalPivotPeriodSchema,
+    metricState: SessionStructureMetricStateSchema,
+    sourceCoverageState: CoverageStateSchema,
+    sourceMarketDateStart: MarketDateSchema.nullable(),
+    sourceMarketDateEnd: MarketDateSchema.nullable(),
+    expectedTradingSessionCount: z.number().int().nonnegative(),
+    observedTradingSessionCount: z.number().int().nonnegative(),
+    sourceHigh: z.number().finite().positive().nullable(),
+    sourceLow: z.number().finite().positive().nullable(),
+    sourceClose: z.number().finite().positive().nullable(),
+    pivot: z.number().finite().positive().nullable(),
+    resistance1: z.number().finite().positive().nullable(),
+    support1: z.number().finite().positive().nullable(),
+    resistance2: z.number().finite().positive().nullable(),
+    support2: z.number().finite().positive().nullable(),
+    warningCode: TraditionalPivotWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const fields = [
+      value.sourceHigh,
+      value.sourceLow,
+      value.sourceClose,
+      value.pivot,
+      value.resistance1,
+      value.support1,
+      value.resistance2,
+      value.support2,
+    ];
+    const available = value.metricState !== "UNAVAILABLE";
+    if (available && fields.some((item) => item === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available Traditional pivots require complete source and calculated values",
+      });
+    }
+    if (!available && fields.some((item) => item !== null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable Traditional pivots cannot expose calculated values",
+      });
+    }
+    if (available && value.sourceCoverageState !== "COMPLETE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available Traditional pivots require COMPLETE source coverage",
+      });
+    }
+    if (
+      value.sourceMarketDateStart === null !==
+      (value.sourceMarketDateEnd === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pivot source date boundaries must be jointly available or unavailable",
+      });
+    }
+  });
+export type TraditionalPivotSet = z.infer<typeof TraditionalPivotSetSchema>;
+
+export const SessionOpeningRangeDurationSchema = z.union([
+  z.literal(5),
+  z.literal(15),
+  z.literal(30),
+]);
+export type SessionOpeningRangeDuration = z.infer<
+  typeof SessionOpeningRangeDurationSchema
+>;
+
+export const SessionOpeningRangePricePositionSchema = z.enum([
+  "NOT_STARTED",
+  "FORMING",
+  "ABOVE",
+  "BELOW",
+  "INSIDE",
+  "AT_HIGH",
+  "AT_LOW",
+  "UNAVAILABLE",
+]);
+export type SessionOpeningRangePricePosition = z.infer<
+  typeof SessionOpeningRangePricePositionSchema
+>;
+
+export const SessionOpeningRangeInteractionStateSchema = z.enum([
+  "NOT_STARTED",
+  "FORMING",
+  "INSIDE",
+  "BREAKOUT_PENDING",
+  "BREAKDOWN_PENDING",
+  "BREAKOUT_ACCEPTED",
+  "BREAKDOWN_ACCEPTED",
+  "FALSE_BREAK_HIGH",
+  "FALSE_BREAK_LOW",
+  "TWO_SIDED_FALSE_BREAK",
+  "UNAVAILABLE",
+]);
+export type SessionOpeningRangeInteractionState = z.infer<
+  typeof SessionOpeningRangeInteractionStateSchema
+>;
+
+export const SessionOpeningRangeWarningCodeSchema = z.enum([
+  "SOURCE_DATA_UNAVAILABLE",
+  "OPENING_CANDLE_MISSING",
+  "OPENING_RANGE_INCOMPLETE",
+  "QUOTE_UNAVAILABLE",
+]);
+export type SessionOpeningRangeWarningCode = z.infer<
+  typeof SessionOpeningRangeWarningCodeSchema
+>;
+
+export const SessionOpeningRangeWindowSchema = z
+  .object({
+    durationMinutes: SessionOpeningRangeDurationSchema,
+    metricState: SessionStructureMetricStateSchema,
+    phase: OpeningRangePhaseSchema,
+    coverageState: CoverageStateSchema,
+    isComplete: z.boolean(),
+    openingRangeStartAt: z.string().datetime().nullable(),
+    openingRangeEndAt: z.string().datetime().nullable(),
+    expectedCandleCount: z.number().int().positive().max(6),
+    observedCandleCount: z.number().int().nonnegative().max(6),
+    high: z.number().finite().positive().nullable(),
+    low: z.number().finite().positive().nullable(),
+    midpoint: z.number().finite().positive().nullable(),
+    pricePosition: SessionOpeningRangePricePositionSchema,
+    interactionState: SessionOpeningRangeInteractionStateSchema,
+    acceptedBreakoutAt: z.string().datetime().nullable(),
+    acceptedBreakdownAt: z.string().datetime().nullable(),
+    warningCode: SessionOpeningRangeWarningCodeSchema.nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const hasRange = value.high !== null || value.low !== null || value.midpoint !== null;
+    if (hasRange && (value.high === null || value.low === null || value.midpoint === null)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Opening-range High, Low, and Midpoint must be exposed together",
+      });
+    }
+    if (value.metricState !== "UNAVAILABLE" && !hasRange) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Available opening range requires calculated values",
+      });
+    }
+    if (value.metricState === "UNAVAILABLE" && hasRange) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable opening range cannot expose calculated values",
+      });
+    }
+    if (value.isComplete && value.observedCandleCount !== value.expectedCandleCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Complete opening range requires every expected candle",
+      });
+    }
+    if (value.isComplete && value.phase !== "COMPLETE") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Complete opening range requires COMPLETE phase",
+      });
+    }
+    if (
+      (value.openingRangeStartAt === null) !==
+      (value.openingRangeEndAt === null)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Opening-range boundaries must be jointly available or unavailable",
+      });
+    }
+    if (
+      value.interactionState === "BREAKOUT_ACCEPTED" &&
+      value.acceptedBreakoutAt === null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Accepted breakout requires its acceptance timestamp",
+      });
+    }
+    if (
+      value.interactionState === "BREAKDOWN_ACCEPTED" &&
+      value.acceptedBreakdownAt === null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Accepted breakdown requires its acceptance timestamp",
+      });
+    }
+  });
+export type SessionOpeningRangeWindow = z.infer<
+  typeof SessionOpeningRangeWindowSchema
+>;
+
+export const SpyDeterministicSessionStructureResponseSchema = z.object({
+  symbol: z.literal("SPY"),
+  product: z.literal("SPY_DETERMINISTIC_SESSION_STRUCTURE"),
+  methodologyVersion: SessionStructureMethodologySchema,
+  currentMarketDate: MarketDateSchema,
+  calculatedAt: z.string().datetime(),
+  engineState: SessionStructureEngineStateSchema,
+  candleSourceState: QuoteSourceStateSchema,
+  quoteSourceState: QuoteSourceStateSchema,
+  price: z.number().finite().positive().nullable(),
+  quoteTimestamp: z.string().datetime().nullable(),
+  dailyPivots: TraditionalPivotSetSchema,
+  weeklyPivots: TraditionalPivotSetSchema,
+  openingRanges: z.object({
+    fiveMinute: SessionOpeningRangeWindowSchema,
+    fifteenMinute: SessionOpeningRangeWindowSchema,
+    thirtyMinute: SessionOpeningRangeWindowSchema,
+  }),
+  warnings: z.array(z.string().min(1)),
+  methodology: z.object({
+    pivotFamily: z.literal("TRADITIONAL"),
+    pivotLevels: z.tuple([
+      z.literal("P"),
+      z.literal("R1"),
+      z.literal("S1"),
+      z.literal("R2"),
+      z.literal("S2"),
+    ]),
+    dailyPivotSource: z.literal("IMMEDIATE_PREVIOUS_COMPLETE_RTH"),
+    weeklyPivotSource: z.literal("PREVIOUS_COMPLETE_NYSE_TRADING_WEEK"),
+    openingRangeDurationsMinutes: z.tuple([
+      z.literal(5),
+      z.literal(15),
+      z.literal(30),
+    ]),
+    openingRangeAcceptanceRule: z.literal("TWO_CONSECUTIVE_COMPLETED_5M_CLOSES"),
+    boundedCandleLookbackCalendarDays: z.literal(21),
+    exchangeCalendarMethod: z.literal(
+      "NYSE_OFFICIAL_PUBLISHED_FULL_DAY_AND_EARLY_CLOSES_2026_2028",
+    ),
+  }),
+  disclosures: z.object({
+    deterministicOnly: z.literal(true),
+    currentSnapshotOnly: z.literal(true),
+    noFutureCandles: z.literal(true),
+    traditionalPivotsOnly: z.literal(true),
+    supplementalContextOnly: z.literal(true),
+    noStandaloneSignals: z.literal(true),
+    noPrivateAccountData: z.literal(true),
+    noPositionSizing: z.literal(true),
+    noOrderExecution: z.literal(true),
+  }),
+});
+export type SpyDeterministicSessionStructureResponse = z.infer<
+  typeof SpyDeterministicSessionStructureResponseSchema
+>;

@@ -29,6 +29,7 @@ import {
   SchwabReadOnlyAccountRiskSnapshotResponseSchema,
   SpyCandleResponseSchema,
   SpyOpeningRangeResponseSchema,
+  SpyDeterministicSessionStructureResponseSchema,
   SpyZeroDteExpectedMoveResponseSchema,
   SpyZeroDteDexProxyResponseSchema,
   SpyZeroDteGexProxyResponseSchema,
@@ -81,6 +82,7 @@ import {
   type SchwabReadOnlyAccountRiskSnapshotResponse,
   type SpyCandleResponse,
   type SpyOpeningRangeResponse,
+  type SpyDeterministicSessionStructureResponse,
   type SpyZeroDteExpectedMoveResponse,
   type SpyZeroDteDexProxyResponse,
   type SpyZeroDteGexProxyResponse,
@@ -307,6 +309,11 @@ export const apiClient = {
     ),
   getSpyOpeningRange: (): Promise<SpyOpeningRangeResponse> =>
     getJson("/api/opening-range/spy", SpyOpeningRangeResponseSchema),
+  getSpyDeterministicSessionStructure: (): Promise<SpyDeterministicSessionStructureResponse> =>
+    getPrivateNoStoreJson(
+      "/api/session-structure/spy",
+      SpyDeterministicSessionStructureResponseSchema,
+    ),
   getSpyZeroDteOptionsChain: (): Promise<SpyZeroDteOptionsChainResponse> =>
     getJson("/api/options-chain/spy", SpyZeroDteOptionsChainResponseSchema),
   getSpyZeroDteExpectedMove: (): Promise<SpyZeroDteExpectedMoveResponse> =>

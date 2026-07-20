@@ -5,6 +5,7 @@ import { ConfidenceCard } from "@/components/dashboard/confidence-card";
 import { CurrentPriceCard } from "@/components/dashboard/current-price-card";
 import { LiveChart } from "@/components/dashboard/live-chart";
 import { MarketRegimeCard } from "@/components/dashboard/market-regime-card";
+import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
 import { SessionTimeline } from "@/components/dashboard/session-timeline";
 import { TodaysLevelsCard } from "@/components/dashboard/todays-levels-card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -167,6 +168,8 @@ export default function DashboardPage() {
             </div>
           )}
         </Panel>
+
+        <SessionStructurePanel className="lg:col-span-4" />
 
         <LiveChart />
 

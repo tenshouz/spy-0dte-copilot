@@ -18,9 +18,17 @@ import {
   useDisplaySpySessionLevels,
 } from "@/hooks/use-spy-session-levels";
 import {
+  SESSION_STRUCTURE_TRANSPORT_WARNING,
+  useDisplaySpyDeterministicSessionStructure,
+} from "@/hooks/use-spy-session-structure";
+import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import {
+  getEasternMarketDate,
+  getSessionStructureReferenceLines,
+} from "@/lib/session-structure-view";
 
 /** Candle-dataset-scoped labels — never a bare LIVE that could describe the whole dashboard. */
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
@@ -47,6 +55,7 @@ export function LiveChart() {
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
   const { display: levelsDisplay } = useDisplaySpySessionLevels();
   const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
+  const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
   // Never draw a MOCK VWAP over LIVE/STALE provider candles, or a provider
@@ -82,6 +91,19 @@ export function LiveChart() {
       ? openingRangeDisplay.response
       : null;
 
+  // Pivots and alternate opening ranges are current-market-date references.
+  // Do not overlay them when the chart has fallen back to a prior session
+  // (weekends, holidays, or before current-date candles exist).
+  const sessionStructure = sessionStructureQuery.display?.response ?? null;
+  const chartMarketDate = getEasternMarketDate(display?.response.latestCandleAt ?? null);
+  const additionalPriceLines =
+    display &&
+    !isMockCandles &&
+    sessionStructure &&
+    chartMarketDate === sessionStructure.currentMarketDate
+      ? getSessionStructureReferenceLines(sessionStructure)
+      : [];
+
   return (
     <Panel
       title="Live Chart · 5m"
@@ -116,6 +138,7 @@ export function LiveChart() {
             previousClose={levels ? renderableLevel(levels.previousDayClose) : undefined}
             previousHigh={levels ? renderableLevel(levels.previousDayHigh) : undefined}
             previousLow={levels ? renderableLevel(levels.previousDayLow) : undefined}
+            additionalPriceLines={additionalPriceLines}
             showDerivedSessionExtremes={false}
           />
           {display.transportFailed && (
@@ -129,6 +152,11 @@ export function LiveChart() {
           )}
           {openingRangeDisplay?.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">{OPENING_RANGE_TRANSPORT_WARNING}</p>
+          )}
+          {sessionStructureQuery.display?.transportFailed && (
+            <p className="px-4 pb-3 text-xs text-wait">
+              {SESSION_STRUCTURE_TRANSPORT_WARNING}
+            </p>
           )}
         </div>
       )}
