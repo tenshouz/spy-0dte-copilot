@@ -1,53 +1,72 @@
 "use client";
 
-import type { ReportType } from "@spy-copilot/shared";
 import { Panel } from "@/components/panels/panel";
-import { useReportHistory } from "@/hooks/use-report";
-import { cn } from "@/lib/utils";
-import { useUiStore } from "@/stores/ui-store";
-
-const REPORT_LABELS: Record<ReportType, string> = {
-  premarket: "9:25 Premarket",
-  "0935": "9:35 Update",
-  "0945": "9:45 Update",
-  "1000": "10:00 Update",
-  continuous: "Live",
-  manual: "Manual refresh",
-};
+import { Badge } from "@/components/ui/badge";
+import { useDisplaySpyZeroDteDeterministicBias } from "@/hooks/use-spy-market-bias";
+import { useDisplaySpyZeroDteDeterministicMarketState } from "@/hooks/use-spy-market-state";
+import { useSpyZeroDteTradePlanAssembly } from "@/hooks/use-spy-trade-plan-assembly";
+import { formatEasternTime } from "@/lib/format";
 
 export function SessionTimeline() {
-  const { data: reports, isLoading, isError } = useReportHistory();
-  const activeReportId = useUiStore((s) => s.activeReportId);
-  const setActiveReportId = useUiStore((s) => s.setActiveReportId);
+  const marketState = useDisplaySpyZeroDteDeterministicMarketState();
+  const bias = useDisplaySpyZeroDteDeterministicBias();
+  const assemblyQuery = useSpyZeroDteTradePlanAssembly();
+  const assembly = assemblyQuery.isError ? null : assemblyQuery.data ?? null;
+
+  const isLoading = marketState.isLoading || bias.isLoading || assemblyQuery.isLoading;
+  const isError = marketState.isError || bias.isError || assemblyQuery.isError;
 
   return (
-    <Panel title="Session Timeline" isLoading={isLoading} isError={isError}>
-      <div className="flex flex-wrap items-center gap-2">
-        {[...(reports ?? [])].reverse().map((report) => {
-          const active = activeReportId ? activeReportId === report.id : report === reports?.[0];
-          return (
-            <button
-              key={report.id}
-              onClick={() => setActiveReportId(report.id)}
-              className={cn(
-                "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors",
-                active
-                  ? "border-accent/40 bg-accent/10 text-foreground"
-                  : "border-panel-border text-muted-foreground hover:bg-panel-hover",
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  report.bias === "CALLS" && "bg-bull",
-                  report.bias === "PUTS" && "bg-bear",
-                  report.bias === "WAIT" && "bg-wait",
-                )}
-              />
-              {REPORT_LABELS[report.type]}
-            </button>
-          );
-        })}
+    <Panel title="Deterministic Pipeline" isLoading={isLoading} isError={isError}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {marketState.display && (
+          <div className="rounded-md border border-panel-border bg-background/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Market State
+              </span>
+              <Badge variant={marketState.display.response.engineState === "AVAILABLE" ? "bull" : "wait"}>
+                {marketState.display.response.engineState}
+              </Badge>
+            </div>
+            <p className="mt-2 font-mono text-xs">
+              {formatEasternTime(marketState.display.response.calculatedAt)}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">V1 · current snapshot</p>
+          </div>
+        )}
+
+        {bias.display && (
+          <div className="rounded-md border border-panel-border bg-background/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Bias & Confidence
+              </span>
+              <Badge variant={bias.display.response.engineState === "AVAILABLE" ? "bull" : "wait"}>
+                {bias.display.response.engineState}
+              </Badge>
+            </div>
+            <p className="mt-2 font-mono text-xs">
+              {formatEasternTime(bias.display.response.calculatedAt)}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">BIAS_V1 · structural evidence</p>
+          </div>
+        )}
+
+        {assembly && (
+          <div className="rounded-md border border-panel-border bg-background/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Trade Plan Assembly
+              </span>
+              <Badge variant={assembly.engineState === "AVAILABLE" ? "bull" : "wait"}>
+                {assembly.engineState}
+              </Badge>
+            </div>
+            <p className="mt-2 font-mono text-xs">{formatEasternTime(assembly.calculatedAt)}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">ASSEMBLY_V1 · no history persisted</p>
+          </div>
+        )}
       </div>
     </Panel>
   );

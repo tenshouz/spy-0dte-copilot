@@ -1,38 +1,44 @@
 "use client";
 
 import { Panel } from "@/components/panels/panel";
-import { useLatestReport } from "@/hooks/use-report";
+import {
+  MARKET_BIAS_TRANSPORT_WARNING,
+  useDisplaySpyZeroDteDeterministicBias,
+} from "@/hooks/use-spy-market-bias";
 import { cn } from "@/lib/utils";
 
 export function ConfidenceCard() {
-  const { data: report, isLoading, isError } = useLatestReport();
-
-  const topFactor = report?.factorScores.slice().sort((a, b) => b.points - a.points)[0];
+  const { display, isLoading, isError } = useDisplaySpyZeroDteDeterministicBias();
+  const bias = display?.response;
+  const confidence = bias?.confidenceScore ?? null;
+  const filledSegments = confidence === null ? 0 : Math.round(confidence / 10);
 
   return (
-    <Panel title="Confidence" isLoading={isLoading} isError={isError} className="lg:col-span-1">
-      {report && (
+    <Panel title="Structural Confidence" isLoading={isLoading} isError={isError} className="lg:col-span-1">
+      {bias && (
         <div className="flex h-full flex-col justify-between gap-3">
           <div className="flex items-baseline justify-between">
-            <span className="font-mono text-3xl font-bold tabular">{report.confidence}</span>
-            <span className="text-xs text-muted-foreground">/ 10</span>
+            <span className="font-mono text-3xl font-bold tabular">
+              {confidence === null ? "—" : confidence.toFixed(0)}
+            </span>
+            <span className="text-xs text-muted-foreground">/ 100</span>
           </div>
           <div className="flex gap-0.5">
-            {Array.from({ length: 10 }).map((_, i) => (
+            {Array.from({ length: 10 }).map((_, index) => (
               <span
-                key={i}
+                key={index}
                 className={cn(
                   "h-1.5 flex-1 rounded-sm",
-                  i < report.confidence ? "bg-accent" : "bg-muted",
+                  index < filledSegments ? "bg-accent" : "bg-muted",
                 )}
               />
             ))}
           </div>
-          {topFactor && (
-            <p className="text-xs text-muted-foreground">
-              Top factor: <span className="text-foreground">{topFactor.factor}</span> ({topFactor.points > 0 ? "+" : ""}
-              {topFactor.points})
-            </p>
+          <p className="text-xs text-muted-foreground">
+            {bias.bullishEvidenceCount} bullish · {bias.bearishEvidenceCount} bearish · {bias.neutralEvidenceCount} neutral
+          </p>
+          {display?.transportFailed && (
+            <p className="text-xs text-wait">{MARKET_BIAS_TRANSPORT_WARNING}</p>
           )}
         </div>
       )}

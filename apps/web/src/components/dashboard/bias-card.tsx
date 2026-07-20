@@ -1,45 +1,54 @@
 "use client";
 
-import type { Bias } from "@spy-copilot/shared";
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { Panel } from "@/components/panels/panel";
-import { useLatestReport } from "@/hooks/use-report";
+import {
+  MARKET_BIAS_TRANSPORT_WARNING,
+  useDisplaySpyZeroDteDeterministicBias,
+} from "@/hooks/use-spy-market-bias";
+import { getDashboardBiasView } from "@/lib/dashboard-deterministic-view";
 import { cn } from "@/lib/utils";
 
-const biasConfig: Record<Bias, { label: string; icon: typeof TrendingUp; className: string }> = {
-  CALLS: { label: "CALLS", icon: TrendingUp, className: "text-bull border-bull/40 bg-bull-muted" },
-  PUTS: { label: "PUTS", icon: TrendingDown, className: "text-bear border-bear/40 bg-bear-muted" },
-  WAIT: { label: "WAIT", icon: Minus, className: "text-wait border-wait/40 bg-wait-muted" },
-};
+const ICONS = {
+  BULLISH: TrendingUp,
+  BEARISH: TrendingDown,
+  NEUTRAL: Minus,
+  UNAVAILABLE: Minus,
+} as const;
+
+const TONE_CLASSES = {
+  bull: "text-bull border-bull/40 bg-bull-muted",
+  bear: "text-bear border-bear/40 bg-bear-muted",
+  wait: "text-wait border-wait/40 bg-wait-muted",
+  default: "text-muted-foreground border-panel-border bg-background/40",
+} as const;
 
 export function BiasCard() {
-  const { data: report, isLoading, isError } = useLatestReport();
+  const { display, isLoading, isError } = useDisplaySpyZeroDteDeterministicBias();
+  const bias = display?.response;
+  const view = bias ? getDashboardBiasView(bias.biasState) : null;
+  const Icon = bias ? ICONS[bias.biasState] : Minus;
 
   return (
-    <Panel title="Current Bias" isLoading={isLoading} isError={isError} className="lg:col-span-1">
-      {report && (
+    <Panel title="Structural Bias" isLoading={isLoading} isError={isError} className="lg:col-span-1">
+      {bias && view && (
         <div className="flex h-full flex-col justify-between gap-3">
           <div
             className={cn(
               "flex items-center gap-2 rounded-md border px-4 py-3",
-              biasConfig[report.bias].className,
+              TONE_CLASSES[view.tone],
             )}
           >
-            {(() => {
-              const Icon = biasConfig[report.bias].icon;
-              return <Icon className="h-5 w-5" />;
-            })()}
-            <span className="font-mono text-2xl font-bold tracking-tight">
-              {biasConfig[report.bias].label}
-            </span>
+            <Icon className="h-5 w-5" />
+            <span className="font-mono text-xl font-bold tracking-tight">{view.label}</span>
           </div>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {report.factorScores
-              .slice(0, 3)
-              .map((f) => f.factor)
-              .join(" · ")}
+            {bias.usableDirectionalEvidenceCount} usable directional inputs · {bias.sourceQualityState.toLowerCase()} source quality
           </p>
+          {display.transportFailed && (
+            <p className="text-xs text-wait">{MARKET_BIAS_TRANSPORT_WARNING}</p>
+          )}
         </div>
       )}
     </Panel>

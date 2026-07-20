@@ -8,7 +8,6 @@ import type {
 } from "@spy-copilot/shared";
 import { MetricCard } from "@/components/panels/metric-card";
 import { Panel } from "@/components/panels/panel";
-import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
 import {
   OPENING_RANGE_TRANSPORT_WARNING,
   useDisplaySpyOpeningRange,
@@ -65,7 +64,6 @@ function formatFillSublabel(gap: SpyRthGapResponse): string | undefined {
 }
 
 export function TodaysLevelsCard() {
-  const { data: snapshot } = useMarketSnapshot();
   const {
     display: levelsDisplay,
     isLoading: levelsLoading,
@@ -99,18 +97,6 @@ export function TodaysLevelsCard() {
             {levels?.previousRthMarketDate ?? gap?.previousRthMarketDate ?? "Unavailable"}
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {snapshot && (
-              <>
-                <MetricCard
-                  label="Overnight High · MOCK"
-                  value={`$${formatPrice(snapshot.overnightHigh ?? 0)}`}
-                />
-                <MetricCard
-                  label="Overnight Low · MOCK"
-                  value={`$${formatPrice(snapshot.overnightLow ?? 0)}`}
-                />
-              </>
-            )}
             {levels && (
               <>
                 <MetricCard

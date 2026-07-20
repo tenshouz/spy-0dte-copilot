@@ -21,7 +21,6 @@ import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
-import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
 
 /** Candle-dataset-scoped labels — never a bare LIVE that could describe the whole dashboard. */
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
@@ -48,7 +47,6 @@ export function LiveChart() {
   const { display: vwapDisplay } = useDisplaySpyRthVwap();
   const { display: levelsDisplay } = useDisplaySpySessionLevels();
   const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
-  const { data: snapshot } = useMarketSnapshot();
   const isMockCandles = display?.response.sourceState === "MOCK";
 
   // Never draw a MOCK VWAP over LIVE/STALE provider candles, or a provider
@@ -111,38 +109,14 @@ export function LiveChart() {
           <ChartContainer
             candles={display.chartCandles}
             vwapSeries={vwapSeries}
-            openingRangeHigh={
-              openingRange?.openingRangeHigh ??
-              (isMockCandles ? snapshot?.openingRangeHigh : undefined)
-            }
-            openingRangeLow={
-              openingRange?.openingRangeLow ??
-              (isMockCandles ? snapshot?.openingRangeLow : undefined)
-            }
+            openingRangeHigh={openingRange?.openingRangeHigh ?? undefined}
+            openingRangeLow={openingRange?.openingRangeLow ?? undefined}
             premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
             premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
-            previousClose={
-              levels
-                ? renderableLevel(levels.previousDayClose)
-                : isMockCandles && snapshot
-                  ? snapshot.spotPrice - 2.1
-                  : undefined
-            }
-            previousHigh={
-              levels
-                ? renderableLevel(levels.previousDayHigh)
-                : isMockCandles && snapshot
-                  ? snapshot.spotPrice + 1.4
-                  : undefined
-            }
-            previousLow={
-              levels
-                ? renderableLevel(levels.previousDayLow)
-                : isMockCandles && snapshot
-                  ? snapshot.spotPrice - 4.8
-                  : undefined
-            }
-            showDerivedSessionExtremes={isMockCandles}
+            previousClose={levels ? renderableLevel(levels.previousDayClose) : undefined}
+            previousHigh={levels ? renderableLevel(levels.previousDayHigh) : undefined}
+            previousLow={levels ? renderableLevel(levels.previousDayLow) : undefined}
+            showDerivedSessionExtremes={false}
           />
           {display.transportFailed && (
             <p className="px-4 pb-3 text-xs text-wait">{CANDLE_TRANSPORT_WARNING}</p>

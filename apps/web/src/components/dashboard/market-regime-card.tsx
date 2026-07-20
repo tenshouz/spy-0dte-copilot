@@ -1,53 +1,39 @@
 "use client";
 
 import { Panel } from "@/components/panels/panel";
-import { useMarketSnapshot } from "@/hooks/use-market-snapshot";
-import { useDisplaySpyRthVwap } from "@/hooks/use-spy-rth-vwap";
-import { formatPrice } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import {
+  MARKET_STATE_TRANSPORT_WARNING,
+  useDisplaySpyZeroDteDeterministicMarketState,
+} from "@/hooks/use-spy-market-state";
+
+function displayState(value: string | null): string {
+  return value === null ? "Unavailable" : value.replace(/_/g, " ");
+}
 
 export function MarketRegimeCard() {
-  const { data: snapshot, isLoading, isError } = useMarketSnapshot();
-  const { display: vwapDisplay } = useDisplaySpyRthVwap();
-
-  const regime =
-    snapshot &&
-    (snapshot.trend5m === "UP" && snapshot.emaTrend === "UP"
-      ? "Trending Up"
-      : snapshot.trend5m === "DOWN" && snapshot.emaTrend === "DOWN"
-        ? "Trending Down"
-        : "Range-Bound");
-
-  const vwapText = !vwapDisplay
-    ? "Loading"
-    : vwapDisplay.response.latestVwap === null
-      ? "Unavailable"
-      : `$${formatPrice(vwapDisplay.response.latestVwap)} · ${vwapDisplay.response.metricState}`;
+  const { display, isLoading, isError } = useDisplaySpyZeroDteDeterministicMarketState();
+  const state = display?.response;
 
   return (
-    <Panel title="Market Regime" isLoading={isLoading} isError={isError} className="lg:col-span-1">
-      {snapshot && (
+    <Panel title="Market Structure" isLoading={isLoading} isError={isError} className="lg:col-span-1">
+      {state && (
         <div className="flex h-full flex-col justify-between gap-2">
-          <span
-            className={cn(
-              "font-mono text-xl font-bold tracking-tight",
-              regime === "Trending Up" && "text-bull",
-              regime === "Trending Down" && "text-bear",
-              regime === "Range-Bound" && "text-wait",
-            )}
-          >
-            {regime}
+          <span className="font-mono text-xl font-bold tracking-tight">
+            {displayState(state.features.sessionPhase.state)}
           </span>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
-            <span className="text-muted-foreground">RTH VWAP</span>
-            <span className="text-right font-mono">{vwapText}</span>
-            <span className="text-muted-foreground">5m Trend</span>
-            <span className="text-right font-mono">{snapshot.trend5m}</span>
-            <span className="text-muted-foreground">EMA Trend</span>
-            <span className="text-right font-mono">{snapshot.emaTrend}</span>
-            <span className="text-muted-foreground">Rel. Volume</span>
-            <span className="text-right font-mono">{snapshot.relativeVolume.toFixed(2)}x</span>
+            <span className="text-muted-foreground">Vs. VWAP</span>
+            <span className="text-right font-mono">{displayState(state.features.priceVsVwap.state)}</span>
+            <span className="text-muted-foreground">Prior Range</span>
+            <span className="text-right font-mono">{displayState(state.features.priceVsPriorDayRange.state)}</span>
+            <span className="text-muted-foreground">Premarket</span>
+            <span className="text-right font-mono">{displayState(state.features.priceVsPremarketRange.state)}</span>
+            <span className="text-muted-foreground">Opening Range</span>
+            <span className="text-right font-mono">{displayState(state.features.priceVsOpeningRange.state)}</span>
           </div>
+          {display.transportFailed && (
+            <p className="text-xs text-wait">{MARKET_STATE_TRANSPORT_WARNING}</p>
+          )}
         </div>
       )}
     </Panel>
