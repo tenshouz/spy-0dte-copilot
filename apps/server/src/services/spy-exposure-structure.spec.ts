@@ -20,6 +20,7 @@ import {
   deriveSpyZeroDteExposureStructure,
   rankExposureWalls,
   rankGammaCliffs,
+  rankGammaSignTransitions,
 } from "./spy-exposure-structure.logic";
 
 const MARKET_DATE = "2026-07-20";
@@ -296,6 +297,28 @@ test("Gamma cliffs rank the largest adjacent net-GEX changes", () => {
   assert.equal(cliffs[0]?.absoluteGammaChange, 70_000);
 });
 
+test("Gamma sign transitions capture strict adjacent sign crossings", () => {
+  const transitions = rankGammaSignTransitions(gexRows, 100, 480_000);
+  assert.equal(transitions.length, 1);
+  const transition = transitions[0]!;
+  assert.equal(transition.direction, "NEGATIVE_TO_POSITIVE");
+  assert.equal(transition.lowerStrike, 99);
+  assert.equal(transition.upperStrike, 100);
+  assert.ok(transition.estimatedStrike > 99);
+  assert.ok(transition.estimatedStrike < 100);
+  assert.equal(transition.absoluteGammaChange, 70_000);
+  assert.ok(Math.abs(transition.shareOfGrossGammaPercent - 14.5833) < 0.0001);
+});
+
+test("Gamma sign transitions exclude zero touches and same-sign neighbors", () => {
+  const rows = [
+    { ...gexRows[0]!, strikePrice: 99, netGammaExposureProxy: -10 },
+    { ...gexRows[1]!, strikePrice: 100, netGammaExposureProxy: 0 },
+    { ...gexRows[2]!, strikePrice: 101, netGammaExposureProxy: 10 },
+  ];
+  assert.deepEqual(rankGammaSignTransitions(rows, 100, 20), []);
+});
+
 test("Largest absolute DEX anchor is deterministic", () => {
   const anchor = deriveLargestAbsoluteDexAnchor(dexRows, 100);
   assert.equal(anchor?.strikePrice, 101);
@@ -309,8 +332,11 @@ test("Available structure includes walls, cliffs, DEX anchor, and disclosures", 
   assert.equal(response.callWalls[0]?.strikePrice, 101);
   assert.equal(response.putWalls[0]?.strikePrice, 98);
   assert.equal(response.gammaCliffs.length, 3);
+  assert.equal(response.gammaSignTransitions.length, 1);
+  assert.equal(response.gammaSignTransitions[0]?.direction, "NEGATIVE_TO_POSITIVE");
   assert.equal(response.largestAbsoluteDexAnchor?.strikePrice, 101);
   assert.equal(response.disclosures.gammaFlipIsCumulativeBalanceProxy, true);
+  assert.equal(response.disclosures.gammaSignTransitionsAreAdjacentStrictCrossings, true);
   assert.equal(response.disclosures.notObservedDealerInventory, true);
 });
 

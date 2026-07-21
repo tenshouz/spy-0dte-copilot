@@ -7,6 +7,7 @@ import { apiClient } from "@/lib/api-client";
 
 const JOURNAL_QUERY_KEY = ["deterministic-journal", "spy"] as const;
 const JOURNAL_ANALYTICS_QUERY_KEY = ["deterministic-journal-analytics", "spy"] as const;
+const GAMMA_RESEARCH_QUERY_KEY = ["empirical-gamma-research", "spy"] as const;
 
 export function useDeterministicJournalAnalytics() {
   return useQuery({
@@ -33,6 +34,7 @@ export function useCaptureDeterministicJournalSnapshot() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: JOURNAL_ANALYTICS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: GAMMA_RESEARCH_QUERY_KEY }),
       ]);
     },
   });
@@ -53,6 +55,7 @@ export function useUpdateDeterministicJournalOutcome() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: JOURNAL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: JOURNAL_ANALYTICS_QUERY_KEY }),
+        queryClient.invalidateQueries({ queryKey: GAMMA_RESEARCH_QUERY_KEY }),
       ]);
     },
   });

@@ -736,6 +736,8 @@ export const NormalizedOptionContractSchema = z.object({
   openInterest: z.number().int().nonnegative().nullable(),
   impliedVolatilityPercent: z.number().finite().nonnegative().nullable(),
   delta: z.number().finite().nullable(),
+  absoluteDelta: z.number().finite().min(0).max(1).nullable().optional(),
+  deltaDistanceFromTarget: z.number().finite().nonnegative().nullable().optional(),
   gamma: z.number().finite().nonnegative().nullable(),
   theta: z.number().finite().nullable(),
   vega: z.number().finite().nullable(),
@@ -1446,6 +1448,65 @@ export const GammaCliffSchema = z.object({
 });
 export type GammaCliff = z.infer<typeof GammaCliffSchema>;
 
+export const GammaSignTransitionDirectionSchema = z.enum([
+  "NEGATIVE_TO_POSITIVE",
+  "POSITIVE_TO_NEGATIVE",
+]);
+export type GammaSignTransitionDirection = z.infer<
+  typeof GammaSignTransitionDirectionSchema
+>;
+
+export const GammaSignTransitionSchema = z
+  .object({
+    rank: z.number().int().min(1).max(3),
+    lowerStrike: z.number().finite().positive(),
+    upperStrike: z.number().finite().positive(),
+    estimatedStrike: z.number().finite().positive(),
+    netGammaAtLower: z.number().finite(),
+    netGammaAtUpper: z.number().finite(),
+    absoluteGammaChange: z.number().finite().positive(),
+    shareOfGrossGammaPercent: z.number().finite().nonnegative(),
+    direction: GammaSignTransitionDirectionSchema,
+    distanceFromUnderlyingPoints: z.number().finite(),
+    distanceFromUnderlyingPercent: z.number().finite(),
+  })
+  .superRefine((value, ctx) => {
+    const strictCross =
+      (value.netGammaAtLower < 0 && value.netGammaAtUpper > 0) ||
+      (value.netGammaAtLower > 0 && value.netGammaAtUpper < 0);
+    if (
+      value.upperStrike <= value.lowerStrike ||
+      value.estimatedStrike <= value.lowerStrike ||
+      value.estimatedStrike >= value.upperStrike ||
+      !strictCross
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma sign transition requires a strict adjacent crossing and interpolated strike",
+      });
+    }
+    const expectedDirection =
+      value.netGammaAtLower < 0
+        ? "NEGATIVE_TO_POSITIVE"
+        : "POSITIVE_TO_NEGATIVE";
+    if (value.direction !== expectedDirection) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma sign-transition direction is inconsistent with endpoint signs",
+      });
+    }
+    const expectedChange = Math.abs(
+      value.netGammaAtUpper - value.netGammaAtLower,
+    );
+    if (Math.abs(value.absoluteGammaChange - expectedChange) > 0.000001) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma sign-transition magnitude is inconsistent with endpoint values",
+      });
+    }
+  });
+export type GammaSignTransition = z.infer<typeof GammaSignTransitionSchema>;
+
 export const DexAnchorSchema = z.object({
   strikePrice: z.number().finite().positive(),
   netDeltaExposureProxy: z.number().finite(),
@@ -1481,6 +1542,7 @@ export const SpyZeroDteExposureStructureResponseSchema = z
     largestNegativeNetGexStrike: z.number().finite().positive().nullable(),
     gammaFlipProxy: GammaFlipProxySchema,
     gammaCliffs: z.array(GammaCliffSchema).max(3),
+    gammaSignTransitions: z.array(GammaSignTransitionSchema).max(3),
     returnedWindowNetDeltaExposureProxy: z.number().finite().nullable(),
     dexRegime: ExposureStructureDexRegimeSchema,
     dexRegimeRatioPercent: z.number().finite().min(-100).max(100).nullable(),
@@ -1497,6 +1559,7 @@ export const SpyZeroDteExposureStructureResponseSchema = z
       openInterestMayBeStaleIntraday: z.literal(true),
       analyticalCallPositivePutNegativeConvention: z.literal(true),
       gammaFlipIsCumulativeBalanceProxy: z.literal(true),
+      gammaSignTransitionsAreAdjacentStrictCrossings: z.literal(true),
       notObservedDealerInventory: z.literal(true),
       noStandaloneSignal: z.literal(true),
       noPrivateAccountData: z.literal(true),
@@ -1534,6 +1597,7 @@ export const SpyZeroDteExposureStructureResponseSchema = z
       value.callWalls.length > 0 ||
       value.putWalls.length > 0 ||
       value.gammaCliffs.length > 0 ||
+      value.gammaSignTransitions.length > 0 ||
       value.largestAbsoluteDexAnchor !== null
     ) {
       ctx.addIssue({
@@ -1551,13 +1615,17 @@ export const SpyZeroDteExposureStructureResponseSchema = z
 
     const callRanks = value.callWalls.map((wall) => wall.rank);
     const putRanks = value.putWalls.map((wall) => wall.rank);
+    const signTransitionRanks = value.gammaSignTransitions.map(
+      (transition) => transition.rank,
+    );
     if (
       callRanks.some((rank, index) => rank !== index + 1) ||
-      putRanks.some((rank, index) => rank !== index + 1)
+      putRanks.some((rank, index) => rank !== index + 1) ||
+      signTransitionRanks.some((rank, index) => rank !== index + 1)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Exposure walls must use contiguous deterministic ranks",
+        message: "Exposure walls and Gamma sign transitions must use contiguous deterministic ranks",
       });
     }
 
@@ -1691,6 +1759,7 @@ export const MarketContextCandleSummarySchema = z.object({
   latestCandle: SpyCandleSchema.nullable(),
   previousCandle: SpyCandleSchema.nullable(),
   latestCandleAt: z.string().datetime().nullable(),
+  recentCompletedRthCandles: z.array(SpyCandleSchema).max(12).optional(),
   fetchedAt: z.string().datetime(),
   dataAgeMs: z.number().nonnegative(),
   warningCode: CandleWarningCodeSchema.nullable(),
@@ -1893,12 +1962,50 @@ export const MarketContextDexSummarySchema = z.object({
 });
 export type MarketContextDexSummary = z.infer<typeof MarketContextDexSummarySchema>;
 
+export const MarketContextSnapshotIntegrityStateSchema = z.enum([
+  "COHERENT",
+  "SKEWED",
+  "UNAVAILABLE",
+]);
+export type MarketContextSnapshotIntegrityState = z.infer<
+  typeof MarketContextSnapshotIntegrityStateSchema
+>;
+
+export const MarketContextSnapshotIntegritySchema = z.object({
+  methodologyVersion: z.literal("SNAPSHOT_INTEGRITY_V1"),
+  snapshotId: z.string().min(1),
+  assembledAt: z.string().datetime(),
+  quoteFetchedAt: z.string().datetime().nullable(),
+  candlesFetchedAt: z.string().datetime().nullable(),
+  optionsChainFetchedAt: z.string().datetime().nullable(),
+  marketStructureSkewMilliseconds: z.number().finite().nonnegative().nullable().optional(),
+  maximumMarketStructureSkewMilliseconds: z.literal(30_000),
+  executionSkewMilliseconds: z.number().finite().nonnegative().nullable(),
+  maximumExecutionSkewMilliseconds: z.literal(45_000),
+  optionsIncludedInExecutionSkew: z.boolean(),
+  state: MarketContextSnapshotIntegrityStateSchema,
+  warningCodes: z.array(
+    z.enum([
+      "QUOTE_TIMESTAMP_UNAVAILABLE",
+      "CANDLE_TIMESTAMP_UNAVAILABLE",
+      "OPTIONS_TIMESTAMP_UNAVAILABLE",
+      "MARKET_STRUCTURE_SKEW_EXCEEDED",
+      "EXECUTION_SKEW_EXCEEDED",
+      "MOCK_SOURCE_PRESENT",
+    ]),
+  ),
+});
+export type MarketContextSnapshotIntegrity = z.infer<
+  typeof MarketContextSnapshotIntegritySchema
+>;
+
 export const SpyZeroDteMarketContextResponseSchema = z.object({
   symbol: z.literal("SPY"),
   product: z.literal("SPY_ZERO_DTE_MARKET_CONTEXT"),
   currentMarketDate: MarketDateSchema,
   mostRecentRthSessionDate: MarketDateSchema.nullable(),
   assembledAt: z.string().datetime(),
+  snapshotIntegrity: MarketContextSnapshotIntegritySchema.optional(),
   contextState: MarketContextStateSchema,
   quote: MarketContextQuoteSchema,
   candles: MarketContextCandleSummarySchema,
@@ -2217,6 +2324,21 @@ export const MarketStateFeatureWarningSchema = z.object({
 });
 export type MarketStateFeatureWarning = z.infer<typeof MarketStateFeatureWarningSchema>;
 
+export const MarketStateExecutionContextSchema = z.object({
+  methodologyVersion: z.literal("EXECUTION_CONTEXT_V1"),
+  timeframe: z.literal("5m"),
+  recentCompletedCandles: z.array(SpyCandleSchema).max(12),
+  completedCandleCount: z.number().int().nonnegative().max(12),
+  latestCompletedCandleAt: z.string().datetime().nullable(),
+  medianRangePoints: z.number().finite().nonnegative().nullable(),
+  medianVolume: z.number().finite().nonnegative().nullable(),
+  sourceCandleFetchedAt: z.string().datetime().nullable(),
+  sourceState: QuoteSourceStateSchema,
+});
+export type MarketStateExecutionContext = z.infer<
+  typeof MarketStateExecutionContextSchema
+>;
+
 export const SpyZeroDteDeterministicMarketStateResponseSchema = z
   .object({
     symbol: z.literal("SPY"),
@@ -2232,6 +2354,8 @@ export const SpyZeroDteDeterministicMarketStateResponseSchema = z
     priceSource: MarketStatePriceSourceSchema.nullable(),
     quoteTimestamp: z.string().datetime().nullable(),
     quoteSourceState: QuoteSourceStateSchema,
+    snapshotIntegrity: MarketContextSnapshotIntegritySchema.optional(),
+    executionContext: MarketStateExecutionContextSchema.optional(),
     exposureStructure: SpyZeroDteExposureStructureResponseSchema.optional(),
     features: z.object({
       sessionPhase: SessionPhaseFeatureSchema,
@@ -2535,12 +2659,13 @@ export type SpyZeroDteDeterministicBiasResponse = z.infer<
 >;
 
 /** Deterministic, same-snapshot conditional setup-eligibility layer. */
-export const TradePlanMethodologyVersionSchema = z.enum(["TRADE_PLAN_V1", "TRADE_PLAN_V2"]);
+export const TradePlanMethodologyVersionSchema = z.enum(["TRADE_PLAN_V1", "TRADE_PLAN_V2", "TRADE_PLAN_V3"]);
 export type TradePlanMethodologyVersion = z.infer<typeof TradePlanMethodologyVersionSchema>;
 
-export const TradePlanExposureConfirmationMethodologyVersionSchema = z.literal(
+export const TradePlanExposureConfirmationMethodologyVersionSchema = z.enum([
   "EXPOSURE_CONFIRMATION_V1",
-);
+  "EXPOSURE_CONFIRMATION_V2",
+]);
 export const TradePlanExposureConfirmationStateSchema = z.enum([
   "SUPPORTIVE",
   "CONFLICTING",
@@ -2599,6 +2724,9 @@ export const TradePlanExposureComponentReasonCodeSchema = z.enum([
   "DIRECTIONAL_WALL_OPPOSING_SIDE",
   "DIRECTIONAL_WALL_NOT_NEARBY",
   "DIRECTIONAL_WALL_UNAVAILABLE",
+  "GEX_REGIME_CONTEXT_ONLY",
+  "DEX_REGIME_CONTEXT_ONLY",
+  "DIRECTIONAL_WALL_CONTEXT_ONLY",
   "NO_DIRECTIONAL_THESIS",
 ]);
 export type TradePlanExposureComponentReasonCode = z.infer<
@@ -2656,6 +2784,7 @@ export const TradePlanExposureConfirmationSchema = z
       noPrivateAccountData: z.literal(true),
       noPositionSizing: z.literal(true),
       noOrderExecution: z.literal(true),
+      confidenceAdjustmentDisabledUntilCalibrated: z.literal(true).optional(),
     }),
   })
   .superRefine((value, ctx) => {
@@ -2711,6 +2840,93 @@ export const TradePlanExposureConfirmationSchema = z
 export type TradePlanExposureConfirmation = z.infer<
   typeof TradePlanExposureConfirmationSchema
 >;
+
+export const TradeSetupTypeSchema = z.enum([
+  "OPENING_RANGE_BREAKOUT",
+  "VWAP_RECLAIM_BREAKOUT",
+  "VWAP_LOSS_BREAKDOWN",
+  "CONFLUENCE_BREAKOUT",
+  "UNAVAILABLE",
+]);
+export type TradeSetupType = z.infer<typeof TradeSetupTypeSchema>;
+
+export const TradeTriggerLifecycleStateSchema = z.enum([
+  "NOT_APPLICABLE",
+  "ARMED",
+  "DETECTED",
+  "CONFIRMED",
+  "RETESTED",
+  "READY",
+  "INVALIDATED",
+  "UNAVAILABLE",
+]);
+export type TradeTriggerLifecycleState = z.infer<
+  typeof TradeTriggerLifecycleStateSchema
+>;
+
+export const TradeTriggerConfirmationModeSchema = z.enum([
+  "COMPLETED_5M_CANDLE",
+  "LEGACY_FALLBACK",
+  "UNAVAILABLE",
+]);
+
+export const TradeTriggerConfirmationSchema = z.object({
+  methodologyVersion: z.literal("TRIGGER_CONFIRMATION_V1"),
+  mode: TradeTriggerConfirmationModeSchema,
+  lifecycleState: TradeTriggerLifecycleStateSchema,
+  rawCrossSatisfied: z.boolean().nullable(),
+  dynamicBufferPoints: z.number().finite().nonnegative().nullable(),
+  bufferedTriggerLevel: z.number().finite().positive().nullable(),
+  latestCompletedClose: z.number().finite().positive().nullable(),
+  previousCompletedClose: z.number().finite().positive().nullable(),
+  completedCloseConfirmed: z.boolean().nullable(),
+  currentPriceMaintained: z.boolean().nullable(),
+  retestObserved: z.boolean().nullable(),
+  recrossCount: z.number().int().nonnegative().nullable(),
+  maximumAllowedRecrosses: z.literal(2),
+  medianRangePoints: z.number().finite().nonnegative().nullable(),
+  latestVolumeRatio: z.number().finite().nonnegative().nullable(),
+  minimumVolumeRatio: z.literal(0.8),
+  volumeConfirmed: z.boolean().nullable(),
+  chaseDistancePoints: z.number().finite().nonnegative().nullable(),
+  maximumChaseDistancePoints: z.number().finite().positive().nullable(),
+  chasePassed: z.boolean().nullable(),
+  confirmationPassed: z.boolean().nullable(),
+  warningCodes: z.array(
+    z.enum([
+      "EXECUTION_CONTEXT_UNAVAILABLE",
+      "TRIGGER_CROSS_NOT_DETECTED",
+      "COMPLETED_CLOSE_NOT_CONFIRMED",
+      "CURRENT_PRICE_NOT_MAINTAINED",
+      "EXCESSIVE_LEVEL_RECROSSES",
+      "BREAKOUT_VOLUME_INSUFFICIENT",
+      "MAXIMUM_CHASE_DISTANCE_EXCEEDED",
+    ]),
+  ),
+});
+export type TradeTriggerConfirmation = z.infer<
+  typeof TradeTriggerConfirmationSchema
+>;
+
+export const TradeQualityScoreSchema = z.object({
+  methodologyVersion: z.literal("TRADE_QUALITY_V1"),
+  scope: z.literal("UNCALIBRATED_ALIGNMENT_SCORE_NOT_WIN_PROBABILITY"),
+  baseStructuralScore: z.number().finite().min(0).max(100).nullable(),
+  familyScores: z.object({
+    vwapBehavior: z.number().finite().min(0).max(20),
+    sessionStructure: z.number().finite().min(0).max(20),
+    triggerConfirmation: z.number().finite().min(0).max(30),
+    participation: z.number().finite().min(0).max(15),
+    dataIntegrity: z.number().finite().min(0).max(15),
+  }),
+  familyScoreTotal: z.number().finite().min(0).max(100),
+  minorCounterevidencePenaltyPoints: z.number().finite().min(0).max(30),
+  materialCounterevidencePenaltyPoints: z.number().finite().min(0).max(60),
+  snapshotPenaltyPoints: z.number().finite().min(0).max(40),
+  confirmationAdjustmentPoints: z.number().finite().min(-30).max(15),
+  finalAlignmentScore: z.number().finite().min(0).max(100).nullable(),
+});
+export type TradeQualityScore = z.infer<typeof TradeQualityScoreSchema>;
 
 export const TradePlanEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
 export type TradePlanEngineState = z.infer<typeof TradePlanEngineStateSchema>;
@@ -2773,6 +2989,8 @@ export const TradePlanPrimaryReasonCodeSchema = z.enum([
   "ELIGIBLE_PUTS_SETUP",
   "WAITING_FOR_CALLS_TRIGGER",
   "WAITING_FOR_PUTS_TRIGGER",
+  "WAITING_FOR_CALLS_CONFIRMATION",
+  "WAITING_FOR_PUTS_CONFIRMATION",
   "SESSION_NOT_RTH",
   "OPENING_RANGE_NOT_STARTED",
   "OPENING_RANGE_FORMING",
@@ -2787,6 +3005,7 @@ export const TradePlanPrimaryReasonCodeSchema = z.enum([
   "TRIGGER_INPUT_INVALID",
   "MARKET_STATE_UNAVAILABLE",
   "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "RAW_SOURCE_SKEW_EXCEEDED",
 ]);
 export type TradePlanPrimaryReasonCode = z.infer<
   typeof TradePlanPrimaryReasonCodeSchema
@@ -2797,6 +3016,8 @@ export const TradePlanGateReasonCodeSchema = z.enum([
   "MARKET_STATE_UNAVAILABLE",
   "SAME_SNAPSHOT_GUARANTEED",
   "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "RAW_SOURCE_COHERENCE_CONFIRMED",
+  "RAW_SOURCE_SKEW_EXCEEDED",
   "SESSION_RTH",
   "SESSION_NOT_RTH",
   "SESSION_UNAVAILABLE",
@@ -2814,6 +3035,7 @@ export const TradePlanGateReasonCodeSchema = z.enum([
   "REQUIRED_INPUT_PARTIAL",
   "REQUIRED_INPUT_UNAVAILABLE",
   "COUNTEREVIDENCE_POLICY_PASSED",
+  "MINOR_COUNTEREVIDENCE_TOLERATED",
   "CALLS_COUNTEREVIDENCE_PRESENT",
   "PUTS_COUNTEREVIDENCE_PRESENT",
   "TRIGGER_INPUTS_VALID",
@@ -2830,6 +3052,11 @@ export const TradePlanGateReasonCodeSchema = z.enum([
   "PUTS_TRIGGER_SATISFIED",
   "CALLS_TRIGGER_NOT_SATISFIED",
   "PUTS_TRIGGER_NOT_SATISFIED",
+  "CALLS_TRIGGER_CONFIRMATION_PENDING",
+  "PUTS_TRIGGER_CONFIRMATION_PENDING",
+  "TRIGGER_CHOP_DETECTED",
+  "TRIGGER_CHASE_EXCEEDED",
+  "TRIGGER_VOLUME_INSUFFICIENT",
   "GATE_NOT_EVALUATED",
 ]);
 export type TradePlanGateReasonCode = z.infer<typeof TradePlanGateReasonCodeSchema>;
@@ -2837,12 +3064,17 @@ export type TradePlanGateReasonCode = z.infer<typeof TradePlanGateReasonCodeSche
 export const TradePlanOverallWarningCodeSchema = z.enum([
   "MARKET_STATE_UNAVAILABLE",
   "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE",
+  "RAW_SOURCE_SKEW_EXCEEDED",
   "BIAS_UNAVAILABLE",
   "CURRENT_SESSION_DATE_MISMATCH",
   "TRIGGER_INPUT_INVALID",
   "REQUIRED_INPUT_PARTIAL",
   "REQUIRED_INPUT_STALE",
   "INSUFFICIENT_PLAN_DATA",
+  "TRIGGER_CONFIRMATION_PENDING",
+  "TRIGGER_CHOP_DETECTED",
+  "TRIGGER_CHASE_EXCEEDED",
+  "TRIGGER_VOLUME_INSUFFICIENT",
 ]);
 export type TradePlanOverallWarningCode = z.infer<
   typeof TradePlanOverallWarningCodeSchema
@@ -2872,6 +3104,9 @@ export const TradePlanSameSnapshotGateSchema = z.object({
     marketStateCalculatedAt: z.string().datetime(),
     biasSourceMarketStateCalculatedAt: z.string().datetime(),
     sameSnapshotGuaranteed: z.boolean(),
+    rawSnapshotIntegrityState: MarketContextSnapshotIntegrityStateSchema.nullable().optional(),
+    marketStructureSkewMilliseconds: z.number().finite().nonnegative().nullable().optional(),
+    maximumMarketStructureSkewMilliseconds: z.number().int().positive().nullable().optional(),
   }),
 });
 export const TradePlanSessionGateSchema = z.object({
@@ -2935,6 +3170,9 @@ export const TradePlanCounterevidenceGateSchema = z.object({
   observedValues: z.object({
     candidateDirection: z.enum(["CALLS", "PUTS"]).nullable(),
     opposingEvidenceCount: z.number().int().nonnegative(),
+    minorOpposingEvidenceCount: z.number().int().nonnegative().optional(),
+    materialOpposingEvidenceCount: z.number().int().nonnegative().optional(),
+    maximumMinorOpposingEvidenceAllowed: z.number().int().nonnegative().optional(),
   }),
 });
 export const TradePlanTriggerInputsGateSchema = z.object({
@@ -2974,6 +3212,9 @@ export const TradePlanTriggerSatisfiedGateSchema = z.object({
     triggerLevel: z.number().finite().positive().nullable(),
     comparison: TradeTriggerComparisonSchema.nullable(),
     satisfied: z.boolean().nullable(),
+    rawCrossSatisfied: z.boolean().nullable().optional(),
+    lifecycleState: TradeTriggerLifecycleStateSchema.nullable().optional(),
+    confirmationPassed: z.boolean().nullable().optional(),
   }),
 });
 
@@ -3004,6 +3245,8 @@ export const TradePlanTriggerSchema = z.object({
     vwap: z.number().finite().positive().nullable(),
     openingRangeBoundary: z.number().finite().positive().nullable(),
   }),
+  setupType: TradeSetupTypeSchema.optional(),
+  confirmation: TradeTriggerConfirmationSchema.optional(),
 });
 export type TradePlanTrigger = z.infer<typeof TradePlanTriggerSchema>;
 
@@ -3039,6 +3282,10 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
     exposureConfidenceAdjustmentPoints: z.number().finite().min(-18).max(18).optional(),
     planConfidenceScore: z.number().finite().min(0).max(100).nullable().optional(),
     exposureConfirmation: TradePlanExposureConfirmationSchema.optional(),
+    sourceSnapshotIntegrityState: MarketContextSnapshotIntegrityStateSchema.nullable().optional(),
+    sourceMarketStructureSkewMilliseconds: z.number().finite().nonnegative().nullable().optional(),
+    setupType: TradeSetupTypeSchema.optional(),
+    tradeQuality: TradeQualityScoreSchema.optional(),
     trigger: TradePlanTriggerSchema,
     gates: z.array(TradePlanGateSchema).length(13),
     supportingBiasEvidenceIds: z.array(MarketStateFeatureIdSchema),
@@ -3046,7 +3293,7 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
     warningCode: TradePlanOverallWarningCodeSchema.nullable(),
   })
   .superRefine((value, ctx) => {
-    if (value.methodologyVersion === "TRADE_PLAN_V2") {
+    if (value.methodologyVersion === "TRADE_PLAN_V2" || value.methodologyVersion === "TRADE_PLAN_V3") {
       if (
         value.structuralConfidenceScore === undefined ||
         value.exposureConfidenceAdjustmentPoints === undefined ||
@@ -3055,7 +3302,7 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "TRADE_PLAN_V2 requires exposure-confirmation confidence fields",
+          message: `${value.methodologyVersion} requires exposure-confirmation confidence fields`,
         });
       } else if (
         value.structuralConfidenceScore !== value.biasConfidenceScore ||
@@ -3064,7 +3311,26 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "TRADE_PLAN_V2 confidence fields are inconsistent",
+          message: `${value.methodologyVersion} confidence fields are inconsistent`,
+        });
+      }
+    }
+    if (value.methodologyVersion === "TRADE_PLAN_V3") {
+      if (
+        value.sourceSnapshotIntegrityState === undefined ||
+        value.setupType === undefined ||
+        value.tradeQuality === undefined ||
+        value.trigger.confirmation === undefined
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "TRADE_PLAN_V3 requires snapshot integrity, setup type, trade quality, and trigger confirmation",
+        });
+      }
+      if (value.setupState === "ELIGIBLE" && value.trigger.confirmation?.confirmationPassed !== true) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "TRADE_PLAN_V3 ELIGIBLE requires passed trigger confirmation",
         });
       }
     }
@@ -3089,8 +3355,25 @@ export const SpyZeroDteDeterministicTradePlanResponseSchema = z
 
     const timestampsMatch =
       value.sourceMarketStateCalculatedAt === value.sourceBiasMarketStateCalculatedAt;
-    if (value.sameSnapshotGuaranteed !== timestampsMatch) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "sameSnapshotGuaranteed must match source timestamps" });
+    if (value.methodologyVersion === "TRADE_PLAN_V3") {
+      const rawSnapshotAllowsGuarantee =
+        value.sourceSnapshotIntegrityState === null ||
+        value.sourceSnapshotIntegrityState === "COHERENT";
+      if (
+        value.sameSnapshotGuaranteed !==
+        (timestampsMatch && rawSnapshotAllowsGuarantee)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "TRADE_PLAN_V3 sameSnapshotGuaranteed must include timestamp and raw-source coherence",
+        });
+      }
+    } else if (value.sameSnapshotGuaranteed !== timestampsMatch) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "sameSnapshotGuaranteed must match source timestamps",
+      });
     }
 
     if (value.setupState === "ELIGIBLE") {
@@ -3126,7 +3409,7 @@ export type SpyZeroDteDeterministicTradePlanResponse = z.infer<
 >;
 
 /** Deterministic, same-snapshot SPY underlying objective and risk framework. */
-export const RiskMethodologyVersionSchema = z.literal("RISK_V1");
+export const RiskMethodologyVersionSchema = z.enum(["RISK_V1", "RISK_V2"]);
 export type RiskMethodologyVersion = z.infer<typeof RiskMethodologyVersionSchema>;
 
 export const RiskFrameworkEngineStateSchema = z.enum(["AVAILABLE", "PARTIAL", "UNAVAILABLE"]);
@@ -3185,6 +3468,8 @@ export const ObjectiveLevelTypeSchema = z.enum([
   "PREMARKET_LOW",
   "EXPECTED_MOVE_UPPER",
   "EXPECTED_MOVE_LOWER",
+  "OPENING_RANGE_EXTENSION",
+  "GAMMA_WALL_CONTEXT",
 ]);
 export type ObjectiveLevelType = z.infer<typeof ObjectiveLevelTypeSchema>;
 
@@ -3195,6 +3480,8 @@ export const ObjectiveCandidateIdSchema = z.enum([
   "OBJECTIVE_PREMARKET_LOW",
   "OBJECTIVE_EXPECTED_MOVE_UPPER",
   "OBJECTIVE_EXPECTED_MOVE_LOWER",
+  "OBJECTIVE_OPENING_RANGE_EXTENSION",
+  "OBJECTIVE_GAMMA_WALL_CONTEXT",
 ]);
 export type ObjectiveCandidateId = z.infer<typeof ObjectiveCandidateIdSchema>;
 
@@ -3202,6 +3489,7 @@ export const InvalidationLevelTypeSchema = z.enum([
   "CURRENT_RTH_VWAP",
   "OPENING_RANGE_HIGH",
   "OPENING_RANGE_LOW",
+  "BUFFERED_TRIGGER_FAILURE",
 ]);
 export type InvalidationLevelType = z.infer<typeof InvalidationLevelTypeSchema>;
 
@@ -3209,10 +3497,17 @@ export const InvalidationCandidateIdSchema = z.enum([
   "INVALIDATION_CURRENT_RTH_VWAP",
   "INVALIDATION_OPENING_RANGE_HIGH",
   "INVALIDATION_OPENING_RANGE_LOW",
+  "INVALIDATION_BUFFERED_TRIGGER_FAILURE",
 ]);
 export type InvalidationCandidateId = z.infer<typeof InvalidationCandidateIdSchema>;
 
-export const RiskLevelSemanticSchema = z.enum(["STRUCTURAL_LEVEL", "IMPLIED_MOVE_BOUNDARY"]);
+export const RiskLevelSemanticSchema = z.enum([
+  "STRUCTURAL_LEVEL",
+  "BUFFERED_STRUCTURAL_INVALIDATION",
+  "PROJECTED_STRUCTURE_LEVEL",
+  "IMPLIED_MOVE_BOUNDARY",
+  "MODEL_DERIVED_EXPOSURE_LEVEL",
+]);
 export type RiskLevelSemantic = z.infer<typeof RiskLevelSemanticSchema>;
 
 export const RiskPlanningReferenceDisclosureSchema = z.literal("PLANNING_REFERENCE_ONLY");
@@ -3302,8 +3597,10 @@ export type ObjectiveLevelCandidate = z.infer<typeof ObjectiveLevelCandidateSche
 export const InvalidationLevelCandidateSchema = z.object({
   candidateId: InvalidationCandidateIdSchema,
   levelType: InvalidationLevelTypeSchema,
-  levelSemantic: z.literal("STRUCTURAL_LEVEL"),
+  levelSemantic: RiskLevelSemanticSchema,
   level: z.number().finite().nullable(),
+  rawStructuralLevel: z.number().finite().positive().nullable().optional(),
+  noiseBufferPoints: z.number().finite().nonnegative().nullable().optional(),
   sourceStatus: RiskCandidateSourceStatusSchema,
   eligibilityStatus: RiskCandidateEligibilityStatusSchema,
   selectable: z.boolean(),
@@ -3322,6 +3619,8 @@ export const SelectedInvalidationSchema = z.object({
   candidateId: InvalidationCandidateIdSchema.nullable(),
   levelType: InvalidationLevelTypeSchema.nullable(),
   level: z.number().finite().positive().nullable(),
+  rawStructuralLevel: z.number().finite().positive().nullable().optional(),
+  noiseBufferPoints: z.number().finite().nonnegative().nullable().optional(),
   riskDistancePoints: z.number().finite().positive().nullable(),
 });
 export type SelectedInvalidation = z.infer<typeof SelectedInvalidationSchema>;
@@ -3336,17 +3635,22 @@ export const SelectedObjectiveSchema = z.object({
 export type SelectedObjective = z.infer<typeof SelectedObjectiveSchema>;
 
 export const RiskMethodologySchema = z.object({
-  objectiveSourceTypes: z.array(ObjectiveLevelTypeSchema).length(6),
-  invalidationSourceTypes: z.array(InvalidationLevelTypeSchema).length(3),
-  objectiveTieBreakOrder: z.array(ObjectiveLevelTypeSchema).length(6),
-  invalidationTieBreakOrderCalls: z.array(InvalidationLevelTypeSchema).length(3),
-  invalidationTieBreakOrderPuts: z.array(InvalidationLevelTypeSchema).length(3),
-  invalidationSelection: z.literal("NEAREST_VALID_ADVERSE_STRUCTURAL_LEVEL"),
+  objectiveSourceTypes: z.array(ObjectiveLevelTypeSchema).min(1),
+  invalidationSourceTypes: z.array(InvalidationLevelTypeSchema).min(1),
+  objectiveTieBreakOrder: z.array(ObjectiveLevelTypeSchema).min(1),
+  invalidationTieBreakOrderCalls: z.array(InvalidationLevelTypeSchema).min(1),
+  invalidationTieBreakOrderPuts: z.array(InvalidationLevelTypeSchema).min(1),
+  invalidationSelection: z.enum([
+    "NEAREST_VALID_ADVERSE_STRUCTURAL_LEVEL",
+    "SETUP_SPECIFIC_BUFFERED_TRIGGER_THEN_NEAREST",
+  ]),
   objectiveSelection: z.literal("NEAREST_QUALIFIED_FAVORABLE_LEVEL"),
   minimumRewardRiskRatio: z.number().finite().positive(),
   calculationsUse: z.literal("SPY_UNDERLYING_PRICE_POINTS"),
   duplicateLevelPolicy: z.literal("PRESERVE_SEPARATE_CANDIDATES_EXACT_EQUALITY_ONLY"),
   partialSelectionPolicy: z.literal("PARTIAL_CANDIDATES_VISIBLE_BUT_NOT_SELECTABLE"),
+  setupSpecificNoiseBufferPolicy: z.literal("MAX_0_05_MIN_0_30_MEDIAN_RANGE_X_0_20").optional(),
+  optionAwareQualificationDelegatedToContractEngine: z.literal(true).optional(),
 });
 export type RiskMethodology = z.infer<typeof RiskMethodologySchema>;
 
@@ -3380,6 +3684,13 @@ export const SpyZeroDteObjectiveRiskResponseSchema = z
     priceSource: MarketStatePriceSourceSchema.nullable(),
     quoteTimestamp: z.string().datetime().nullable(),
     planningReference: RiskPlanningReferenceSchema,
+    sourceTradeSetupType: TradeSetupTypeSchema.optional(),
+    setupSpecificNoiseBufferPoints: z.number().finite().nonnegative().nullable().optional(),
+    timeRiskPolicy: z.object({
+      maximumMinutesWithoutProgress: z.literal(15),
+      minimumProgressFraction: z.literal(0.25),
+      advisoryOnly: z.literal(true),
+    }).optional(),
     minimumRewardRiskRatio: z.number().finite().positive(),
     invalidationCandidates: z.array(InvalidationLevelCandidateSchema),
     selectedInvalidation: SelectedInvalidationSchema,
@@ -3394,10 +3705,24 @@ export const SpyZeroDteObjectiveRiskResponseSchema = z
       value.sourceMarketStateCalculatedAt === value.sourceBiasMarketStateCalculatedAt &&
       value.sourceMarketStateCalculatedAt === value.sourceTradePlanMarketStateCalculatedAt &&
       value.sourceBiasCalculatedAt === value.sourceTradePlanBiasCalculatedAt;
-    if (value.sameSnapshotGuaranteed !== timestampsMatch) {
+    const explicitlyUnavailableDespiteMatchingTimestamps =
+      value.sameSnapshotGuaranteed === false &&
+      timestampsMatch &&
+      value.primaryReasonCode === "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE" &&
+      value.warningCode === "SAME_SNAPSHOT_GUARANTEE_UNAVAILABLE" &&
+      value.engineState === "UNAVAILABLE" &&
+      value.frameworkState === "UNAVAILABLE" &&
+      value.riskQualification === "UNAVAILABLE";
+    if (
+      (value.sameSnapshotGuaranteed && !timestampsMatch) ||
+      (!value.sameSnapshotGuaranteed &&
+        timestampsMatch &&
+        !explicitlyUnavailableDespiteMatchingTimestamps)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Risk sameSnapshotGuaranteed must match all Market-State source timestamps",
+        message:
+          "Risk sameSnapshotGuaranteed must match source timestamps unless raw-source coherence explicitly fails closed",
       });
     }
 
@@ -3473,7 +3798,7 @@ export type SpyZeroDteObjectiveRiskResponse = z.infer<
 >;
 
 /** Deterministic SPY 0DTE contract-selection and liquidity foundation. */
-export const ContractMethodologyVersionSchema = z.literal("CONTRACT_V1");
+export const ContractMethodologyVersionSchema = z.enum(["CONTRACT_V1", "CONTRACT_V2"]);
 export type ContractMethodologyVersion = z.infer<typeof ContractMethodologyVersionSchema>;
 
 export const ContractSourceCompatibilityStateSchema = z.enum([
@@ -3504,6 +3829,22 @@ export const ContractSelectionStateSchema = z.enum([
   "UNAVAILABLE",
 ]);
 export type ContractSelectionState = z.infer<typeof ContractSelectionStateSchema>;
+
+export const ContractPreflightStateSchema = z.enum([
+  "NOT_APPLICABLE",
+  "NOT_EVALUATED",
+  "READY",
+  "NO_QUALIFIED_CONTRACT",
+  "UNAVAILABLE",
+]);
+export type ContractPreflightState = z.infer<typeof ContractPreflightStateSchema>;
+
+export const ContractOptionScenarioStateSchema = z.enum([
+  "QUALIFIED",
+  "NOT_QUALIFIED",
+  "UNAVAILABLE",
+]);
+export type ContractOptionScenarioState = z.infer<typeof ContractOptionScenarioStateSchema>;
 
 export const SelectedContractDirectionSchema = z.enum([
   "CALL",
@@ -3568,6 +3909,14 @@ export const ContractCandidateRejectionReasonCodeSchema = z.enum([
   "CHAIN_UNDERLYING_PRICE_INVALID",
   "CONTRACT_QUOTE_FRESHNESS_UNKNOWN",
   "CONTRACT_QUOTE_STALE",
+  "SPREAD_POINTS_EXCEEDS_MAXIMUM",
+  "BID_SIZE_BELOW_MINIMUM",
+  "ASK_SIZE_BELOW_MINIMUM",
+  "LIQUIDITY_ACTIVITY_BELOW_MINIMUM",
+  "DELTA_UNAVAILABLE",
+  "DELTA_OUTSIDE_RANGE",
+  "OPTION_SCENARIO_UNAVAILABLE",
+  "OPTION_REWARD_RISK_BELOW_MINIMUM",
 ]);
 export type ContractCandidateRejectionReasonCode = z.infer<
   typeof ContractCandidateRejectionReasonCodeSchema
@@ -3649,6 +3998,8 @@ export const ContractSelectionCandidateSchema = z.object({
   openInterest: z.number().int().nonnegative().nullable(),
   volume: z.number().int().nonnegative().nullable(),
   delta: z.number().finite().nullable(),
+  absoluteDelta: z.number().finite().min(0).max(1).nullable().optional(),
+  deltaDistanceFromTarget: z.number().finite().nonnegative().nullable().optional(),
   gamma: z.number().finite().nonnegative().nullable(),
   theta: z.number().finite().nullable(),
   vega: z.number().finite().nullable(),
@@ -3658,6 +4009,15 @@ export const ContractSelectionCandidateSchema = z.object({
   tradeAt: z.string().datetime().nullable(),
   quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
   quoteFreshnessState: ContractQuoteFreshnessStateSchema,
+  liquidityActivityPassed: z.boolean().nullable().optional(),
+  optionScenarioState: ContractOptionScenarioStateSchema.optional(),
+  estimatedEntryPremium: z.number().finite().positive().nullable().optional(),
+  estimatedInvalidationExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedObjectiveExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
+  estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  scenarioMinutes: z.number().int().positive().nullable().optional(),
   selectionRank: z.number().int().positive().nullable(),
   rejectionReasonCodes: z.array(ContractCandidateRejectionReasonCodeSchema),
   warningCode: ContractCandidateWarningCodeSchema.nullable(),
@@ -3677,6 +4037,20 @@ export const SelectedContractSchema = z.object({
   spreadPoints: z.number().finite().nonnegative().nullable(),
   spreadRatio: z.number().finite().nonnegative().nullable(),
   spreadPercent: z.number().finite().nonnegative().nullable(),
+  delta: z.number().finite().nullable().optional(),
+  gamma: z.number().finite().nonnegative().nullable().optional(),
+  theta: z.number().finite().nullable().optional(),
+  openInterest: z.number().int().nonnegative().nullable().optional(),
+  volume: z.number().int().nonnegative().nullable().optional(),
+  bidSize: z.number().int().nonnegative().nullable().optional(),
+  askSize: z.number().int().nonnegative().nullable().optional(),
+  optionScenarioState: ContractOptionScenarioStateSchema.optional(),
+  estimatedInvalidationExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedObjectiveExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
+  estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  scenarioMinutes: z.number().int().positive().nullable().optional(),
   quoteAt: z.string().datetime().nullable(),
   quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
   strikeDistancePoints: z.number().finite().nonnegative().nullable(),
@@ -3692,24 +4066,42 @@ export const ContractPremiumReferenceSchema = z.object({
 export type ContractPremiumReference = z.infer<typeof ContractPremiumReferenceSchema>;
 
 export const ContractSelectionMethodologySchema = z.object({
-  maximumSpreadRatio: z.literal(0.15),
-  maximumSpreadPercent: z.literal(15),
-  maximumSourceAssemblySkewMilliseconds: z.literal(60_000),
-  maximumContractQuoteAgeMilliseconds: z.literal(60_000),
+  maximumSpreadRatio: z.number().finite().positive().max(0.15),
+  maximumSpreadPercent: z.number().finite().positive().max(15),
+  maximumSpreadPoints: z.number().finite().positive().optional(),
+  maximumSourceAssemblySkewMilliseconds: z.number().int().positive().max(60_000),
+  maximumContractQuoteAgeMilliseconds: z.number().int().positive().max(60_000),
   quoteFreshnessPolicy: z.literal("NORMALIZED_QUOTE_AT_EPOCH_MILLISECONDS"),
   sourceAssemblySkewPolicy: z.literal("RISK_CALCULATED_AT_VS_CHAIN_FETCHED_AT"),
-  rankingMethod: z.literal("ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS"),
-  itmExactDistanceTiePreference: z.literal(true),
-  openInterestHardMinimum: z.null(),
-  volumeHardMinimum: z.null(),
-  deltaHardRange: z.null(),
+  rankingMethod: z.enum([
+    "ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS",
+    "TARGET_DELTA_THEN_OPTION_RR_AND_LIQUIDITY",
+  ]),
+  itmExactDistanceTiePreference: z.boolean(),
+  openInterestHardMinimum: z.number().int().nonnegative().nullable(),
+  volumeHardMinimum: z.number().int().nonnegative().nullable(),
+  minimumBidSize: z.number().int().positive().optional(),
+  minimumAskSize: z.number().int().positive().optional(),
+  liquidityActivityPolicy: z.literal("OPEN_INTEREST_OR_VOLUME").optional(),
+  deltaHardRange: z.object({ minimumAbsoluteDelta: z.number(), maximumAbsoluteDelta: z.number() }).nullable(),
+  targetAbsoluteDelta: z.number().finite().min(0).max(1).optional(),
   gammaHardRange: z.null(),
   thetaHardRange: z.null(),
   impliedVolatilityHardRange: z.null(),
+  minimumEstimatedPremiumRewardRiskRatio: z.number().finite().positive().optional(),
+  optionScenarioMinutes: z.number().int().positive().optional(),
+  optionScenarioPolicy: z.literal("DELTA_GAMMA_THETA_CONSTANT_IV_CONSERVATIVE_SPREAD_EXIT").optional(),
+  preflightPolicy: z.literal("EVALUATE_CHAIN_WHILE_RISK_PREVIEW_WITHOUT_SELECTING").optional(),
   evaluationScope: z.literal("RETURNED_CHAIN_WINDOW_SELECTED_SIDE"),
-  calculationsUse: z.literal("OPTIONS_CHAIN_BID_ASK_AND_CHAIN_UNDERLYING"),
+  calculationsUse: z.enum([
+    "OPTIONS_CHAIN_BID_ASK_AND_CHAIN_UNDERLYING",
+    "OPTIONS_CHAIN_LIQUIDITY_AND_OPTION_SCENARIO_ESTIMATE",
+  ]),
   midpointDisclosureCode: z.literal("MIDPOINT_REFERENCE_ONLY"),
-  thresholdPolicy: z.literal("EXPLICIT_CONTRACT_V1_PRODUCT_POLICY_NOT_BACKTESTED"),
+  thresholdPolicy: z.enum([
+    "EXPLICIT_CONTRACT_V1_PRODUCT_POLICY_NOT_BACKTESTED",
+    "EXPLICIT_CONTRACT_V2_CONSERVATIVE_EXECUTION_POLICY_NOT_CALIBRATED",
+  ]),
 });
 export type ContractSelectionMethodology = z.infer<
   typeof ContractSelectionMethodologySchema
@@ -3745,6 +4137,9 @@ export const SpyZeroDteContractSelectionResponseSchema = z
     sourceAssemblySkewMilliseconds: z.number().finite().nonnegative().nullable(),
     engineState: ContractSelectionEngineStateSchema,
     selectionState: ContractSelectionStateSchema,
+    preflightState: ContractPreflightStateSchema.optional(),
+    preflightContract: SelectedContractSchema.optional(),
+    preflightPremiumReference: ContractPremiumReferenceSchema.optional(),
     contractDirection: SelectedContractDirectionSchema,
     sourceRiskFrameworkState: ObjectiveRiskFrameworkStateSchema,
     sourceRiskQualification: RiskQualificationStateSchema,
@@ -3774,10 +4169,25 @@ export const SpyZeroDteContractSelectionResponseSchema = z
       value.sourceBiasCalculatedAt === value.sourceTradePlanBiasCalculatedAt &&
       value.sourceBiasCalculatedAt === value.sourceRiskBiasCalculatedAt &&
       value.sourceTradePlanCalculatedAt === value.sourceRiskTradePlanCalculatedAt;
-    if (value.upstreamSameSnapshotGuaranteed !== upstreamMatch) {
+    const explicitlyUnavailableDespiteMatchingTimestamps =
+      value.upstreamSameSnapshotGuaranteed === false &&
+      upstreamMatch &&
+      value.sourceRiskFrameworkState === "UNAVAILABLE" &&
+      value.sourceRiskQualification === "UNAVAILABLE" &&
+      value.engineState === "UNAVAILABLE" &&
+      value.selectionState === "UNAVAILABLE" &&
+      value.primaryReasonCode === "SOURCE_RISK_UNAVAILABLE" &&
+      value.warningCode === "RISK_FRAMEWORK_UNAVAILABLE";
+    if (
+      (value.upstreamSameSnapshotGuaranteed && !upstreamMatch) ||
+      (!value.upstreamSameSnapshotGuaranteed &&
+        upstreamMatch &&
+        !explicitlyUnavailableDespiteMatchingTimestamps)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Contract upstreamSameSnapshotGuaranteed must match all upstream timestamps",
+        message:
+          "Contract upstreamSameSnapshotGuaranteed must match timestamps unless upstream raw-source coherence explicitly fails closed",
       });
     }
 
@@ -3816,7 +4226,7 @@ export const SpyZeroDteContractSelectionResponseSchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Contract candidates must be unique" });
     }
 
-    if (["DEFERRED", "NOT_APPLICABLE"].includes(value.selectionState)) {
+    if (value.selectionState === "NOT_APPLICABLE") {
       if (
         value.sourceCompatibilityState !== "NOT_EVALUATED" ||
         value.sourceOptionsChainFetchedAt !== null ||
@@ -3824,7 +4234,30 @@ export const SpyZeroDteContractSelectionResponseSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Deferred/non-applicable Contract response cannot expose Chain evaluation",
+          message: "Non-applicable Contract response cannot expose Chain evaluation",
+        });
+      }
+    }
+    if (value.selectionState === "DEFERRED") {
+      const preflight = value.preflightState ?? "NOT_EVALUATED";
+      if (preflight === "NOT_EVALUATED" && (
+        value.sourceCompatibilityState !== "NOT_EVALUATED" ||
+        value.sourceOptionsChainFetchedAt !== null ||
+        value.candidates.length > 0
+      )) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Unevaluated deferred Contract response cannot expose Chain evaluation",
+        });
+      }
+      if (preflight === "READY" && (
+        !value.preflightContract ||
+        value.preflightContract.candidateId === null ||
+        value.preflightPremiumReference?.type !== "CALCULATED_BID_ASK_MIDPOINT"
+      )) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "READY Contract preflight requires a valid preflight contract reference",
         });
       }
     }
@@ -4001,6 +4434,15 @@ export const TradePlanAssemblyEntryConditionSchema = z.object({
     vwap: z.number().finite().positive().nullable(),
     openingRangeBoundary: z.number().finite().positive().nullable(),
   }),
+  setupType: TradeSetupTypeSchema.optional(),
+  triggerLifecycleState: TradeTriggerLifecycleStateSchema.nullable().optional(),
+  confirmationPassed: z.boolean().nullable().optional(),
+  dynamicBufferPoints: z.number().finite().nonnegative().nullable().optional(),
+  bufferedTriggerLevel: z.number().finite().positive().nullable().optional(),
+  latestCompletedClose: z.number().finite().positive().nullable().optional(),
+  recrossCount: z.number().int().nonnegative().nullable().optional(),
+  latestVolumeRatio: z.number().finite().nonnegative().nullable().optional(),
+  chaseDistancePoints: z.number().finite().nonnegative().nullable().optional(),
   disclosureCode: z.literal("PLANNING_REFERENCE_ONLY"),
 });
 export type TradePlanAssemblyEntryCondition = z.infer<
@@ -4010,7 +4452,7 @@ export type TradePlanAssemblyEntryCondition = z.infer<
 export const TradePlanAssemblyInvalidationSummarySchema = z.object({
   candidateId: InvalidationCandidateIdSchema.nullable(),
   levelType: InvalidationLevelTypeSchema.nullable(),
-  levelSemantic: z.literal("STRUCTURAL_LEVEL").nullable(),
+  levelSemantic: RiskLevelSemanticSchema.nullable(),
   level: z.number().finite().positive().nullable(),
   riskDistancePoints: z.number().finite().positive().nullable(),
   sourceFeatureId: MarketStateFeatureIdSchema.nullable(),
@@ -4088,11 +4530,34 @@ export const TradePlanAssemblySelectedContractSummarySchema = z.object({
   tradeAt: z.string().datetime().nullable(),
   quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
   quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
+  optionScenarioState: ContractOptionScenarioStateSchema.nullable().optional(),
+  estimatedInvalidationExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedObjectiveExitPremium: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
+  estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
+  estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  scenarioMinutes: z.number().int().positive().nullable().optional(),
   strikeDistancePoints: z.number().finite().nonnegative().nullable(),
   selectionRank: z.number().int().positive().nullable(),
 });
 export type TradePlanAssemblySelectedContractSummary = z.infer<
   typeof TradePlanAssemblySelectedContractSummarySchema
+>;
+
+export const TradePlanAssemblyOptionRiskRewardSchema = z.object({
+  state: ContractOptionScenarioStateSchema,
+  estimatedInvalidationExitPremium: z.number().finite().nonnegative().nullable(),
+  estimatedObjectiveExitPremium: z.number().finite().nonnegative().nullable(),
+  estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable(),
+  estimatedPremiumRewardPerShare: z.number().finite().nullable(),
+  estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  minimumRequiredPremiumRewardRiskRatio: z.number().finite().positive(),
+  scenarioMinutes: z.number().int().positive().nullable(),
+  calculationUnit: z.literal("OPTION_PREMIUM_PER_SHARE_ESTIMATE"),
+  disclosureCode: z.literal("CONSERVATIVE_SCENARIO_ESTIMATE_NOT_GUARANTEED"),
+});
+export type TradePlanAssemblyOptionRiskReward = z.infer<
+  typeof TradePlanAssemblyOptionRiskRewardSchema
 >;
 
 export const TradePlanAssemblyPremiumReferenceSchema = z.object({
@@ -4112,6 +4577,8 @@ export const TradePlanAssemblySourceSummarySchema = z.object({
     calculatedAt: z.string().datetime(),
     engineState: MarketStateEngineStateSchema,
     warningCode: MarketStateOverallWarningCodeSchema.nullable(),
+    snapshotIntegrityState: MarketContextSnapshotIntegrityStateSchema.nullable().optional(),
+    marketStructureSkewMilliseconds: z.number().finite().nonnegative().nullable().optional(),
   }),
   bias: z.object({
     product: z.literal("SPY_ZERO_DTE_DETERMINISTIC_BIAS_CONFIDENCE"),
@@ -4165,11 +4632,15 @@ export type TradePlanAssemblySourceSummary = z.infer<
 >;
 
 export const TradePlanAssemblyPlanConfidenceSchema = z.object({
-  methodologyVersion: z.literal("EXPOSURE_CONFIRMATION_V1"),
+  methodologyVersion: TradePlanExposureConfirmationMethodologyVersionSchema,
   structuralConfidenceScore: z.number().finite().min(0).max(100).nullable(),
+  executionQualityAlignmentScore: z.number().finite().min(0).max(100).nullable().optional(),
   exposureAdjustmentPoints: z.number().finite().min(-18).max(18),
   adjustedConfidenceScore: z.number().finite().min(0).max(100).nullable(),
-  scope: z.literal("STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION"),
+  scope: z.enum([
+    "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    "EXECUTION_QUALITY_ALIGNMENT_EXPOSURE_CONTEXT_ONLY",
+  ]),
 });
 export type TradePlanAssemblyPlanConfidence = z.infer<
   typeof TradePlanAssemblyPlanConfidenceSchema
@@ -4183,12 +4654,14 @@ export const TradePlanAssemblyDisclosuresSchema = z.object({
   confidence: z.enum([
     "STRUCTURAL_EVIDENCE_ONLY",
     "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION",
+    "EXECUTION_QUALITY_ALIGNMENT_EXPOSURE_CONTEXT_ONLY",
   ]),
   noOrderExecution: z.literal(true),
   noPositionSizing: z.literal(true),
   noGuaranteedFill: z.literal(true),
   noPremiumTarget: z.literal(true),
   noPremiumStop: z.literal(true),
+  premiumScenarioEstimateOnly: z.literal(true).optional(),
 });
 export type TradePlanAssemblyDisclosures = z.infer<
   typeof TradePlanAssemblyDisclosuresSchema
@@ -4206,8 +4679,8 @@ export const TradePlanAssemblyMethodologySchema = z.object({
     z.literal("V1"),
     z.literal("BIAS_V1"),
     TradePlanMethodologyVersionSchema,
-    z.literal("RISK_V1"),
-    z.literal("CONTRACT_V1"),
+    RiskMethodologyVersionSchema,
+    ContractMethodologyVersionSchema,
   ]),
   calculationUnit: z.literal("SPY_UNDERLYING_PRICE_POINTS"),
   assemblyOnly: z.literal(true),
@@ -4237,10 +4710,12 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
     bias: TradePlanAssemblyBiasSummarySchema,
     planConfidence: TradePlanAssemblyPlanConfidenceSchema.optional(),
     exposureConfirmation: TradePlanExposureConfirmationSchema.optional(),
+    gammaResearchContext: SpyZeroDteExposureStructureResponseSchema.nullable().optional(),
     entryCondition: TradePlanAssemblyEntryConditionSchema,
     structuralInvalidation: TradePlanAssemblyInvalidationSummarySchema,
     primaryObjective: TradePlanAssemblyObjectiveSummarySchema,
     underlyingRiskReward: TradePlanAssemblyRiskRewardSummarySchema,
+    optionRiskReward: TradePlanAssemblyOptionRiskRewardSchema.optional(),
     selectedContract: TradePlanAssemblySelectedContractSummarySchema,
     premiumReference: TradePlanAssemblyPremiumReferenceSchema,
     sourceSummary: TradePlanAssemblySourceSummarySchema,
@@ -4257,11 +4732,34 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
       } else if (
         value.planConfidence.structuralConfidenceScore !== value.bias.confidenceScore ||
         value.planConfidence.exposureAdjustmentPoints !== value.exposureConfirmation.adjustmentPoints ||
-        value.planConfidence.adjustedConfidenceScore !== value.exposureConfirmation.adjustedConfidenceScore
+        (value.planConfidence.scope === "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" &&
+          value.planConfidence.adjustedConfidenceScore !== value.exposureConfirmation.adjustedConfidenceScore) ||
+        (value.planConfidence.scope === "EXECUTION_QUALITY_ALIGNMENT_EXPOSURE_CONTEXT_ONLY" &&
+          value.planConfidence.adjustedConfidenceScore !== value.planConfidence.executionQualityAlignmentScore)
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "ASSEMBLY_V2 confidence fields are inconsistent",
+        });
+      }
+    }
+    if (
+      value.gammaResearchContext !== undefined &&
+      value.gammaResearchContext !== null
+    ) {
+      if (value.gammaResearchContext.currentMarketDate !== value.currentMarketDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Gamma research context must match the Assembly market date",
+        });
+      }
+      if (
+        Date.parse(value.gammaResearchContext.calculatedAt) >
+        Date.parse(value.calculatedAt)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Gamma research context cannot be calculated after the Assembly",
         });
       }
     }
@@ -4326,7 +4824,9 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
         (value.direction === "CALLS" && value.selectedContract.contractDirection !== "CALL") ||
         (value.direction === "PUTS" && value.selectedContract.contractDirection !== "PUT") ||
         value.structuralInvalidation.candidateId === null ||
-        value.structuralInvalidation.levelSemantic !== "STRUCTURAL_LEVEL" ||
+        !["STRUCTURAL_LEVEL", "BUFFERED_STRUCTURAL_INVALIDATION"].includes(
+          value.structuralInvalidation.levelSemantic ?? "",
+        ) ||
         value.primaryObjective.candidateId === null ||
         value.primaryObjective.qualificationStatus !== "QUALIFIED" ||
         value.underlyingRiskReward.qualification !== "QUALIFIED" ||
@@ -4337,7 +4837,12 @@ export const SpyZeroDteTradePlanAssemblyResponseSchema = z
         value.premiumReference.value === null ||
         value.premiumReference.value !== value.selectedContract.calculatedMidpoint ||
         value.entryCondition.state !== "SATISFIED" ||
-        value.entryCondition.planningReferenceType !== "CURRENT_PRICE"
+        value.entryCondition.planningReferenceType !== "CURRENT_PRICE" ||
+        value.entryCondition.confirmationPassed !== true ||
+        value.optionRiskReward?.state !== "QUALIFIED" ||
+        value.optionRiskReward.estimatedPremiumRewardRiskRatio === null ||
+        value.optionRiskReward.estimatedPremiumRewardRiskRatio <
+          value.optionRiskReward.minimumRequiredPremiumRewardRiskRatio
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -8296,6 +8801,349 @@ export type DeterministicJournalAnalyticsResponse = z.infer<
   typeof DeterministicJournalAnalyticsResponseSchema
 >;
 
+/** Research-only observational analysis of Gamma context against user-reviewed READY outcomes. */
+export const EmpiricalGammaResearchMethodologyVersionSchema = z.literal(
+  "EMPIRICAL_GAMMA_RESEARCH_V1",
+);
+export type EmpiricalGammaResearchMethodologyVersion = z.infer<
+  typeof EmpiricalGammaResearchMethodologyVersionSchema
+>;
+
+export const EmpiricalGammaResearchEngineStateSchema = z.enum([
+  "AVAILABLE",
+  "UNAVAILABLE",
+]);
+export type EmpiricalGammaResearchEngineState = z.infer<
+  typeof EmpiricalGammaResearchEngineStateSchema
+>;
+
+export const EmpiricalGammaResearchPrimaryReasonCodeSchema = z.enum([
+  "GAMMA_RESEARCH_AVAILABLE",
+  "GAMMA_RESEARCH_EMPTY",
+  "DATABASE_NOT_CONFIGURED",
+  "DATABASE_UNAVAILABLE",
+]);
+export type EmpiricalGammaResearchPrimaryReasonCode = z.infer<
+  typeof EmpiricalGammaResearchPrimaryReasonCodeSchema
+>;
+
+export const EmpiricalGammaResearchFeatureTypeSchema = z.enum([
+  "GAMMA_REGIME",
+  "DIRECTIONAL_WALL_LOCATION",
+  "OPPOSING_WALL_LOCATION",
+  "NEAREST_GAMMA_CLIFF",
+  "NEAREST_GAMMA_SIGN_TRANSITION",
+]);
+export type EmpiricalGammaResearchFeatureType = z.infer<
+  typeof EmpiricalGammaResearchFeatureTypeSchema
+>;
+
+export const EmpiricalGammaResearchEvidenceStateSchema = z.enum([
+  "INSUFFICIENT_SAMPLE",
+  "NO_CLEAR_SEPARATION",
+  "POSITIVE_CANDIDATE",
+  "NEGATIVE_CANDIDATE",
+]);
+export type EmpiricalGammaResearchEvidenceState = z.infer<
+  typeof EmpiricalGammaResearchEvidenceStateSchema
+>;
+
+export const EmpiricalGammaResearchContextCompletenessSchema = z.enum([
+  "FULL_CONTEXT",
+  "LEGACY_PARTIAL_CONTEXT",
+  "NO_GAMMA_CONTEXT",
+]);
+export type EmpiricalGammaResearchContextCompleteness = z.infer<
+  typeof EmpiricalGammaResearchContextCompletenessSchema
+>;
+
+export const EmpiricalGammaResearchMetricsSchema = z
+  .object({
+    tradeCount: z.number().int().nonnegative(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+    winRatePercent: z.number().finite().min(0).max(100).nullable(),
+    winRateWilsonLowerPercent: z.number().finite().min(0).max(100).nullable(),
+    winRateWilsonUpperPercent: z.number().finite().min(0).max(100).nullable(),
+    totalPnlDollars: z.number().finite().nullable(),
+    averagePnlDollars: z.number().finite().nullable(),
+    expectancyDollars: z.number().finite().nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.wins + value.losses + value.breakevens !== value.tradeCount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research outcome counts are inconsistent",
+      });
+    }
+    const rateFields = [
+      value.winRatePercent,
+      value.winRateWilsonLowerPercent,
+      value.winRateWilsonUpperPercent,
+    ];
+    const allRateFieldsNull = rateFields.every((item) => item === null);
+    const allRateFieldsPresent = rateFields.every((item) => item !== null);
+    if (
+      (value.tradeCount === 0 && !allRateFieldsNull) ||
+      (value.tradeCount > 0 && !allRateFieldsPresent)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research win-rate fields are inconsistent",
+      });
+    }
+    const pnlFields = [
+      value.totalPnlDollars,
+      value.averagePnlDollars,
+      value.expectancyDollars,
+    ];
+    const allPnlFieldsNull = pnlFields.every((item) => item === null);
+    const allPnlFieldsPresent = pnlFields.every((item) => item !== null);
+    if (
+      (value.tradeCount === 0 && !allPnlFieldsNull) ||
+      (value.tradeCount > 0 && !allPnlFieldsPresent)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research P&L fields are inconsistent",
+      });
+    }
+  });
+export type EmpiricalGammaResearchMetrics = z.infer<
+  typeof EmpiricalGammaResearchMetricsSchema
+>;
+
+export const EmpiricalGammaResearchBaselineSchema = z
+  .object({
+    setupType: TradeSetupTypeSchema,
+    direction: z.enum(["CALLS", "PUTS"]),
+    metrics: EmpiricalGammaResearchMetricsSchema,
+  })
+  .strict();
+export type EmpiricalGammaResearchBaseline = z.infer<
+  typeof EmpiricalGammaResearchBaselineSchema
+>;
+
+export const EmpiricalGammaResearchFindingSchema = z
+  .object({
+    setupType: TradeSetupTypeSchema,
+    direction: z.enum(["CALLS", "PUTS"]),
+    featureType: EmpiricalGammaResearchFeatureTypeSchema,
+    bucketKey: z.string().min(1).max(160),
+    bucketLabel: z.string().min(1).max(240),
+    bucketMetrics: EmpiricalGammaResearchMetricsSchema,
+    comparatorMetrics: EmpiricalGammaResearchMetricsSchema,
+    winRateDeltaPercentagePoints: z.number().finite().nullable(),
+    expectancyDeltaDollars: z.number().finite().nullable(),
+    evidenceState: EmpiricalGammaResearchEvidenceStateSchema,
+    fullContextObservationCount: z.number().int().nonnegative(),
+    legacyContextObservationCount: z.number().int().nonnegative(),
+    eligibleForDirectionalWeight: z.literal(false),
+    weightingBlockers: z.array(
+      z.enum([
+        "MINIMUM_BUCKET_SAMPLE_NOT_MET",
+        "MINIMUM_COMPARATOR_SAMPLE_NOT_MET",
+        "HOLDOUT_VALIDATION_MISSING",
+        "OBSERVATIONAL_USER_ENTERED_OUTCOMES_ONLY",
+      ]),
+    ).min(1),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.fullContextObservationCount + value.legacyContextObservationCount !==
+      value.bucketMetrics.tradeCount
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research context counts must equal bucket trade count",
+      });
+    }
+    if (value.evidenceState !== "INSUFFICIENT_SAMPLE" &&
+        value.weightingBlockers.some((item) => item.includes("MINIMUM_"))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Sufficient findings cannot retain minimum-sample blockers",
+      });
+    }
+  });
+export type EmpiricalGammaResearchFinding = z.infer<
+  typeof EmpiricalGammaResearchFindingSchema
+>;
+
+export const EmpiricalGammaResearchPayloadSchema = z
+  .object({
+    dataStartMarketDate: MarketDateSchema.nullable(),
+    dataEndMarketDate: MarketDateSchema.nullable(),
+    counts: z
+      .object({
+        totalPersistedSnapshots: z.number().int().nonnegative(),
+        reviewedTradeOutcomeSnapshots: z.number().int().nonnegative(),
+        readyReviewedTradeSnapshots: z.number().int().nonnegative(),
+        eligibleResearchObservations: z.number().int().nonnegative(),
+        skippedNonReadyReviewedTrades: z.number().int().nonnegative(),
+        skippedInvalidAssemblies: z.number().int().nonnegative(),
+        fullContextObservations: z.number().int().nonnegative(),
+        legacyPartialContextObservations: z.number().int().nonnegative(),
+        noGammaContextObservations: z.number().int().nonnegative(),
+      })
+      .strict(),
+    baselines: z.array(EmpiricalGammaResearchBaselineSchema).max(16),
+    findings: z.array(EmpiricalGammaResearchFindingSchema).max(500),
+    thresholds: z
+      .object({
+        nearLevelPercent: z.literal(1),
+        minimumBucketTradeCount: z.literal(30),
+        minimumComparatorTradeCount: z.literal(30),
+        confidenceInterval: z.literal("WILSON_95_PERCENT"),
+        positiveCandidateRule: z.literal(
+          "NONOVERLAPPING_WIN_RATE_INTERVAL_AND_POSITIVE_EXPECTANCY_DELTA",
+        ),
+        negativeCandidateRule: z.literal(
+          "NONOVERLAPPING_WIN_RATE_INTERVAL_AND_NEGATIVE_EXPECTANCY_DELTA",
+        ),
+      })
+      .strict(),
+    weightingPolicy: z
+      .object({
+        automaticDirectionalWeightingEnabled: z.literal(false),
+        holdoutValidationPresent: z.literal(false),
+        minimumOutOfSampleTradeCountBeforeWeightingReview: z.literal(50),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.counts.totalPersistedSnapshots <
+      value.counts.reviewedTradeOutcomeSnapshots
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research reviewed count cannot exceed persisted snapshots",
+      });
+    }
+    if (
+      value.counts.reviewedTradeOutcomeSnapshots !==
+      value.counts.readyReviewedTradeSnapshots +
+        value.counts.skippedNonReadyReviewedTrades
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research reviewed outcome counts are inconsistent",
+      });
+    }
+    if (
+      value.counts.readyReviewedTradeSnapshots !==
+      value.counts.eligibleResearchObservations +
+        value.counts.skippedInvalidAssemblies
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research READY observation counts are inconsistent",
+      });
+    }
+    if (value.counts.eligibleResearchObservations === 0) {
+      if (value.dataStartMarketDate !== null || value.dataEndMarketDate !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Empty Gamma research cannot expose a date range",
+        });
+      }
+    } else if (value.dataStartMarketDate === null || value.dataEndMarketDate === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Populated Gamma research requires a date range",
+      });
+    }
+    if (
+      value.counts.fullContextObservations +
+        value.counts.legacyPartialContextObservations +
+        value.counts.noGammaContextObservations !==
+      value.counts.eligibleResearchObservations
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Gamma research context coverage counts are inconsistent",
+      });
+    }
+  });
+export type EmpiricalGammaResearchPayload = z.infer<
+  typeof EmpiricalGammaResearchPayloadSchema
+>;
+
+export const EmpiricalGammaResearchResponseSchema = z
+  .object({
+    symbol: z.literal("SPY"),
+    product: z.literal("SPY_ZERO_DTE_EMPIRICAL_GAMMA_RESEARCH"),
+    methodologyVersion: EmpiricalGammaResearchMethodologyVersionSchema,
+    calculatedAt: z.string().datetime(),
+    engineState: EmpiricalGammaResearchEngineStateSchema,
+    primaryReasonCode: EmpiricalGammaResearchPrimaryReasonCodeSchema,
+    research: EmpiricalGammaResearchPayloadSchema.nullable(),
+    disclosures: z
+      .object({
+        researchOnly: z.literal(true),
+        observationalNotCausal: z.literal(true),
+        userEnteredOutcomesOnly: z.literal(true),
+        readyPlanSnapshotsOnly: z.literal(true),
+        winRateIncludesBreakevensInDenominator: z.literal(true),
+        liveCompleteGammaInputsOnly: z.literal(true),
+        multipleComparisonsUnadjusted: z.literal(true),
+        matchedWithinSetupAndDirection: z.literal(true),
+        comparatorExcludesCurrentBucket: z.literal(true),
+        snapshotLevelObservationsNotTradeIdentity: z.literal(true),
+        legacyRowsMayLackCliffsOrTransitions: z.literal(true),
+        returnedWindowGammaOnly: z.literal(true),
+        openInterestMayBeStaleIntraday: z.literal(true),
+        noAutomaticDirectionalWeighting: z.literal(true),
+        outOfSampleValidationRequired: z.literal(true),
+        noPrivateAccountData: z.literal(true),
+        noPositionSizing: z.literal(true),
+        noOrderExecution: z.literal(true),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.engineState === "AVAILABLE") {
+      if (value.research === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Available Gamma research requires a payload",
+        });
+      } else {
+        const empty = value.research.counts.eligibleResearchObservations === 0;
+        if (
+          (empty && value.primaryReasonCode !== "GAMMA_RESEARCH_EMPTY") ||
+          (!empty && value.primaryReasonCode !== "GAMMA_RESEARCH_AVAILABLE")
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Gamma research reason code does not match payload population",
+          });
+        }
+      }
+      return;
+    }
+    if (
+      value.research !== null ||
+      !["DATABASE_NOT_CONFIGURED", "DATABASE_UNAVAILABLE"].includes(
+        value.primaryReasonCode,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Unavailable Gamma research must be database-related and payload-free",
+      });
+    }
+  });
+export type EmpiricalGammaResearchResponse = z.infer<
+  typeof EmpiricalGammaResearchResponseSchema
+>;
+
 /**
  * Complete deterministic session-structure product: Traditional daily/weekly
  * pivots plus fixed 5m/15m/30m opening ranges. This product is supplemental
@@ -9430,7 +10278,7 @@ export const SystemReadinessResponseSchema = z
   .object({
     product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
     methodologyVersion: SystemReadinessMethodologyVersionSchema,
-    releaseVersion: z.literal("1.3.0"),
+    releaseVersion: z.literal("1.5.0"),
     calculatedAt: z.string().datetime(),
     engineState: SystemReadinessEngineStateSchema,
     summary: z

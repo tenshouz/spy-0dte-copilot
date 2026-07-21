@@ -96,15 +96,15 @@ test("Trade Plan page consumes only the Assembly hook", () => {
   }
 });
 
-test("Trade Plan page explains GEX and DEX as soft confirmation rather than a gate", () => {
+test("Trade Plan page explains GEX and DEX as context-only rather than a directional gate", () => {
   const page = readFileSync(
     resolve(process.cwd(), "apps/web/src/app/trade-plan/page.tsx"),
     "utf8",
   );
-  assert.equal(page.includes("GEX / DEX Soft Confirmation"), true);
-  assert.equal(page.includes("Never an eligibility gate"), true);
-  assert.equal(page.includes("cannot create a direction or block eligibility"), true);
-  assert.equal(page.includes("Adjusted Plan Confidence"), true);
+  assert.equal(page.includes("Execution Quality & Exposure Context"), true);
+  assert.equal(page.includes("Uncalibrated alignment score — not win probability"), true);
+  assert.equal(page.includes("Disabled until calibration; context only"), true);
+  assert.equal(page.includes("The wall is context only, not an entry, target, stop, or dealer-position observation."), true);
 });
 
 test("Trade Plan page contains no order controls or mock Report fields", () => {

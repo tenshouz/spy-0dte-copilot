@@ -82,7 +82,7 @@ export function selectMostRecentRthSessionDate(
   return dates[dates.length - 1] ?? null;
 }
 
-export function summarizeSpyCandles(candles: SpyCandleResponse) {
+export function summarizeSpyCandles(candles: SpyCandleResponse, nowMs = Date.now()) {
   const sorted = [...candles.candles].sort((a, b) => a.timestamp - b.timestamp);
   const latest = sorted[sorted.length - 1] ?? null;
   const previous = sorted[sorted.length - 2] ?? null;
@@ -90,6 +90,14 @@ export function summarizeSpyCandles(candles: SpyCandleResponse) {
   const sessionOpen = sorted[0]?.open ?? null;
   const sessionHigh = sorted.length > 0 ? Math.max(...sorted.map((item) => item.high)) : null;
   const sessionLow = sorted.length > 0 ? Math.min(...sorted.map((item) => item.low)) : null;
+  const currentMarketDate = getObservedMarketDate(nowMs);
+  const recentCompletedRthCandles = sorted
+    .filter((item) =>
+      item.timestamp + 5 * 60_000 <= nowMs &&
+      getObservedMarketDate(item.timestamp) === currentMarketDate &&
+      classifyMarketSession(item.timestamp) === "RTH"
+    )
+    .slice(-12);
 
   return {
     marketDate,
@@ -102,9 +110,105 @@ export function summarizeSpyCandles(candles: SpyCandleResponse) {
     latestCandle: latest,
     previousCandle: previous,
     latestCandleAt: candles.latestCandleAt,
+    recentCompletedRthCandles,
     fetchedAt: candles.fetchedAt,
     dataAgeMs: candles.dataAgeMs,
     warningCode: candles.warningCode,
+  };
+}
+
+export const MAXIMUM_MARKET_STRUCTURE_SKEW_MS = 30_000;
+export const MAXIMUM_EXECUTION_SKEW_MS = 45_000;
+
+function parsedTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function timestampSkew(values: readonly (number | null)[]): number | null {
+  const available = values.filter((value): value is number => value !== null);
+  if (available.length !== values.length || available.length < 2) return null;
+  return Math.max(...available) - Math.min(...available);
+}
+
+export function buildMarketContextSnapshotIntegrity(
+  inputs: SpyMarketContextInputs,
+  nowMs = Date.now(),
+) {
+  const assembledAt = new Date(nowMs).toISOString();
+  const quoteAt = parsedTimestamp(inputs.quote.fetchedAt);
+  const candlesAt = parsedTimestamp(inputs.candles.fetchedAt);
+  const optionsUsable =
+    inputs.options.sourceState !== "UNAVAILABLE" &&
+    inputs.options.metricState !== "UNAVAILABLE" &&
+    inputs.options.sourceState !== "MOCK";
+  const optionsAt = optionsUsable ? parsedTimestamp(inputs.options.fetchedAt) : null;
+  const marketStructureSkewMilliseconds = timestampSkew([quoteAt, candlesAt]);
+  const executionSkewMilliseconds = optionsUsable
+    ? timestampSkew([quoteAt, candlesAt, optionsAt])
+    : marketStructureSkewMilliseconds;
+  const warningCodes: Array<
+    | "QUOTE_TIMESTAMP_UNAVAILABLE"
+    | "CANDLE_TIMESTAMP_UNAVAILABLE"
+    | "OPTIONS_TIMESTAMP_UNAVAILABLE"
+    | "MARKET_STRUCTURE_SKEW_EXCEEDED"
+    | "EXECUTION_SKEW_EXCEEDED"
+    | "MOCK_SOURCE_PRESENT"
+  > = [];
+
+  if (quoteAt === null) warningCodes.push("QUOTE_TIMESTAMP_UNAVAILABLE");
+  if (candlesAt === null) warningCodes.push("CANDLE_TIMESTAMP_UNAVAILABLE");
+  if (optionsUsable && optionsAt === null) warningCodes.push("OPTIONS_TIMESTAMP_UNAVAILABLE");
+  if (inputs.quote.sourceState === "MOCK" || inputs.candles.sourceState === "MOCK") {
+    warningCodes.push("MOCK_SOURCE_PRESENT");
+  }
+  if (
+    marketStructureSkewMilliseconds !== null &&
+    marketStructureSkewMilliseconds > MAXIMUM_MARKET_STRUCTURE_SKEW_MS
+  ) {
+    warningCodes.push("MARKET_STRUCTURE_SKEW_EXCEEDED");
+  }
+  if (
+    executionSkewMilliseconds !== null &&
+    executionSkewMilliseconds > MAXIMUM_EXECUTION_SKEW_MS
+  ) {
+    warningCodes.push("EXECUTION_SKEW_EXCEEDED");
+  }
+
+  const unavailable =
+    quoteAt === null ||
+    candlesAt === null ||
+    inputs.quote.sourceState === "MOCK" ||
+    inputs.candles.sourceState === "MOCK";
+  const skewed =
+    !unavailable &&
+    (marketStructureSkewMilliseconds === null ||
+      marketStructureSkewMilliseconds > MAXIMUM_MARKET_STRUCTURE_SKEW_MS ||
+      (optionsUsable &&
+        (executionSkewMilliseconds === null ||
+          executionSkewMilliseconds > MAXIMUM_EXECUTION_SKEW_MS)));
+
+  return {
+    methodologyVersion: "SNAPSHOT_INTEGRITY_V1" as const,
+    snapshotId: [
+      "SPY",
+      getObservedMarketDate(nowMs),
+      inputs.quote.fetchedAt,
+      inputs.candles.fetchedAt,
+      optionsUsable ? inputs.options.fetchedAt : "NO_OPTIONS",
+    ].join("|"),
+    assembledAt,
+    quoteFetchedAt: quoteAt === null ? null : inputs.quote.fetchedAt,
+    candlesFetchedAt: candlesAt === null ? null : inputs.candles.fetchedAt,
+    optionsChainFetchedAt: optionsAt === null ? null : inputs.options.fetchedAt,
+    marketStructureSkewMilliseconds,
+    maximumMarketStructureSkewMilliseconds: MAXIMUM_MARKET_STRUCTURE_SKEW_MS as 30_000,
+    executionSkewMilliseconds,
+    maximumExecutionSkewMilliseconds: MAXIMUM_EXECUTION_SKEW_MS as 45_000,
+    optionsIncludedInExecutionSkew: optionsUsable,
+    state: unavailable ? ("UNAVAILABLE" as const) : skewed ? ("SKEWED" as const) : ("COHERENT" as const),
+    warningCodes,
   };
 }
 
@@ -474,7 +578,8 @@ export function buildSpyZeroDteMarketContext(
 
   const strikes = [...inputs.options.calls, ...inputs.options.puts].map((item) => item.strikePrice);
   const atmStrike = selectAtmStrike(strikes, inputs.options.underlyingPrice);
-  const candleSummary = summarizeSpyCandles(inputs.candles);
+  const candleSummary = summarizeSpyCandles(inputs.candles, nowMs);
+  const snapshotIntegrity = buildMarketContextSnapshotIntegrity(inputs, nowMs);
   const exposureStructure = deriveSpyZeroDteExposureStructure(
     inputs.gex,
     inputs.dex,
@@ -487,6 +592,7 @@ export function buildSpyZeroDteMarketContext(
     currentMarketDate,
     mostRecentRthSessionDate,
     assembledAt: new Date(nowMs).toISOString(),
+    snapshotIntegrity,
     contextState,
     quote: {
       symbol: inputs.quote.symbol,

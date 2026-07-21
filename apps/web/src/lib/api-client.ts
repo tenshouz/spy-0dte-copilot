@@ -22,6 +22,10 @@ import {
   DeterministicJournalOutcomeUpdateRequestSchema,
   DeterministicJournalOutcomeUpdateResponseSchema,
   DeterministicJournalSnapshotListResponseSchema,
+  EmpiricalGammaResearchResponseSchema,
+  PointInTimeBacktestHistoryResponseSchema,
+  PointInTimeBacktestRunRequestSchema,
+  PointInTimeBacktestRunResponseSchema,
   HistoricalReplayHistoryResponseSchema,
   HistoricalReplayRunRequestSchema,
   HistoricalReplayRunResponseSchema,
@@ -87,6 +91,10 @@ import {
   type DeterministicJournalOutcomeUpdateRequest,
   type DeterministicJournalOutcomeUpdateResponse,
   type DeterministicJournalSnapshotListResponse,
+  type EmpiricalGammaResearchResponse,
+  type PointInTimeBacktestHistoryResponse,
+  type PointInTimeBacktestRunRequest,
+  type PointInTimeBacktestRunResponse,
   type HistoricalReplayHistoryResponse,
   type HistoricalReplayRunRequest,
   type HistoricalReplayRunResponse,
@@ -227,6 +235,11 @@ export const apiClient = {
       "/api/journal/spy/analytics",
       DeterministicJournalAnalyticsResponseSchema,
     ),
+  getEmpiricalGammaResearch: (): Promise<EmpiricalGammaResearchResponse> =>
+    getPrivateNoStoreJson(
+      "/api/gamma-research/spy",
+      EmpiricalGammaResearchResponseSchema,
+    ),
   getDeterministicJournalSnapshots: (): Promise<DeterministicJournalSnapshotListResponse> =>
     getPrivateNoStoreJson(
       "/api/journal/spy/snapshots",
@@ -282,6 +295,27 @@ export const apiClient = {
       request,
       HistoricalReplayRunRequestSchema,
       HistoricalReplayRunResponseSchema,
+    ),
+  getPointInTimeBacktestRuns: (): Promise<PointInTimeBacktestHistoryResponse> =>
+    getPrivateNoStoreJson(
+      "/api/backtest/spy/runs",
+      PointInTimeBacktestHistoryResponseSchema,
+    ),
+  getPointInTimeBacktestRun: (
+    runId: string,
+  ): Promise<PointInTimeBacktestRunResponse> =>
+    getPrivateNoStoreJson(
+      `/api/backtest/spy/runs/${encodeURIComponent(runId)}`,
+      PointInTimeBacktestRunResponseSchema,
+    ),
+  createPointInTimeBacktestRun: (
+    request: PointInTimeBacktestRunRequest,
+  ): Promise<PointInTimeBacktestRunResponse> =>
+    postJson<PointInTimeBacktestRunRequest, PointInTimeBacktestRunResponse>(
+      "/api/backtest/spy/runs",
+      request,
+      PointInTimeBacktestRunRequestSchema,
+      PointInTimeBacktestRunResponseSchema,
     ),
   getAlerts: (): Promise<Alert[]> => getJson("/api/alerts", z.array(AlertSchema)),
   getBackendAutomationSettings: (): Promise<BackendAutomationSettingsResponse> =>

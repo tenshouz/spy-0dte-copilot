@@ -544,11 +544,23 @@ test("release documentation and verification scripts are present", () => {
     resolve(process.cwd(), "docs/V1_3_DASHBOARD_GUIDE.md"),
     "utf8",
   );
+  const executionQualityMethodology = readFileSync(
+    resolve(process.cwd(), "docs/V1_4_EXECUTION_QUALITY.md"),
+    "utf8",
+  );
+  const empiricalGammaMethodology = readFileSync(
+    resolve(process.cwd(), "docs/V1_4_1_EMPIRICAL_GAMMA_RESEARCH.md"),
+    "utf8",
+  );
+  const pointInTimeBacktestMethodology = readFileSync(
+    resolve(process.cwd(), "docs/V1_5_POINT_IN_TIME_BACKTESTING.md"),
+    "utf8",
+  );
   const verifier = readFileSync(
     resolve(process.cwd(), "scripts/verify-v1.mjs"),
     "utf8",
   );
-  assert.match(readme, /Local V1\.3\.0 Complete/i);
+  assert.match(readme, /V1\.5\.0 Point-in-Time Backtesting/i);
   assert.match(runbook, /Backup and restore/i);
   assert.match(runbook, /Schwab recovery/i);
   assert.match(audit, /No order execution/i);
@@ -558,7 +570,13 @@ test("release documentation and verification scripts are present", () => {
   assert.match(refreshMethodology, /does not modify, synthesize, or extend candle OHLC values/i);
   assert.match(guideMethodology, /Dashboard Guide/i);
   assert.match(guideMethodology, /public deployment warning/i);
-  assert.match(verifier, /V1 verification passed/);
+  assert.match(executionQualityMethodology, /completed five-minute candles/i);
+  assert.match(executionQualityMethodology, /not a win probability/i);
+  assert.match(empiricalGammaMethodology, /research-only/i);
+  assert.match(empiricalGammaMethodology, /no automatic directional weighting/i);
+  assert.match(pointInTimeBacktestMethodology, /no[- ]look-ahead/i);
+  assert.match(pointInTimeBacktestMethodology, /INSUFFICIENT_FUTURE_DATA/i);
+  assert.match(verifier, /V1\.5\.0 verification passed/);
 });
 
 async function run(): Promise<void> {

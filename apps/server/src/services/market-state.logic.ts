@@ -770,6 +770,30 @@ function deriveDexSignFeature(context: SpyZeroDteMarketContextResponse): NetDexP
   };
 }
 
+function median(values: readonly number[]): number | null {
+  const finiteValues = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (finiteValues.length === 0) return null;
+  const middle = Math.floor(finiteValues.length / 2);
+  if (finiteValues.length % 2 === 1) return finiteValues[middle]!;
+  return (finiteValues[middle - 1]! + finiteValues[middle]!) / 2;
+}
+
+export function buildMarketStateExecutionContext(context: SpyZeroDteMarketContextResponse) {
+  const candles = context.candles.recentCompletedRthCandles ?? [];
+  const latest = candles[candles.length - 1] ?? null;
+  return {
+    methodologyVersion: "EXECUTION_CONTEXT_V1" as const,
+    timeframe: "5m" as const,
+    recentCompletedCandles: candles,
+    completedCandleCount: candles.length,
+    latestCompletedCandleAt: latest ? new Date(latest.timestamp).toISOString() : null,
+    medianRangePoints: median(candles.map((item) => item.high - item.low)),
+    medianVolume: median(candles.map((item) => item.volume)),
+    sourceCandleFetchedAt: context.candles.fetchedAt,
+    sourceState: context.candles.sourceState,
+  };
+}
+
 export function deriveMarketStateEngineState(
   sourceContextState: SpyZeroDteMarketContextResponse["contextState"],
   price: number | null,
@@ -806,6 +830,7 @@ export function buildSpyZeroDteDeterministicMarketState(
   const priceVsExpectedMoveRange = deriveExpectedMoveFeature(context, price, priceStatus);
   const netGexProxySign = deriveGexSignFeature(context);
   const netDexProxySign = deriveDexSignFeature(context);
+  const executionContext = buildMarketStateExecutionContext(context);
 
   const features = {
     sessionPhase,
@@ -847,6 +872,8 @@ export function buildSpyZeroDteDeterministicMarketState(
     priceSource: price === null ? null : PRICE_SOURCE,
     quoteTimestamp: price === null ? null : context.quote.quoteTimestamp,
     quoteSourceState: context.quote.sourceState,
+    snapshotIntegrity: context.snapshotIntegrity,
+    executionContext,
     exposureStructure: context.exposureStructure,
     features,
     featureStatuses,

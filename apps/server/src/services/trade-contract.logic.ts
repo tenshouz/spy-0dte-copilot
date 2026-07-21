@@ -16,10 +16,20 @@ import {
   type SpyZeroDteOptionsChainResponse,
 } from "@spy-copilot/shared";
 
-export const CONTRACT_METHODOLOGY_VERSION = "CONTRACT_V1" as const;
-export const MAXIMUM_SPREAD_RATIO = 0.15;
-export const MAXIMUM_SOURCE_ASSEMBLY_SKEW_MS = 60_000;
-export const MAXIMUM_CONTRACT_QUOTE_AGE_MS = 60_000;
+export const CONTRACT_METHODOLOGY_VERSION = "CONTRACT_V2" as const;
+export const MAXIMUM_SPREAD_RATIO = 0.10;
+export const MAXIMUM_SPREAD_POINTS = 0.20;
+export const MAXIMUM_SOURCE_ASSEMBLY_SKEW_MS = 30_000;
+export const MAXIMUM_CONTRACT_QUOTE_AGE_MS = 20_000;
+export const MINIMUM_BID_SIZE = 1;
+export const MINIMUM_ASK_SIZE = 1;
+export const MINIMUM_OPEN_INTEREST = 100;
+export const MINIMUM_VOLUME = 20;
+export const MINIMUM_ABSOLUTE_DELTA = 0.35;
+export const MAXIMUM_ABSOLUTE_DELTA = 0.75;
+export const TARGET_ABSOLUTE_DELTA = 0.55;
+export const MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO = 1.25;
+export const OPTION_SCENARIO_MINUTES = 15;
 
 const EMPTY_SELECTED_CONTRACT = {
   candidateId: null,
@@ -34,6 +44,20 @@ const EMPTY_SELECTED_CONTRACT = {
   spreadPoints: null,
   spreadRatio: null,
   spreadPercent: null,
+  delta: null,
+  gamma: null,
+  theta: null,
+  openInterest: null,
+  volume: null,
+  bidSize: null,
+  askSize: null,
+  optionScenarioState: undefined,
+  estimatedInvalidationExitPremium: null,
+  estimatedObjectiveExitPremium: null,
+  estimatedPremiumRiskPerShare: null,
+  estimatedPremiumRewardPerShare: null,
+  estimatedPremiumRewardRiskRatio: null,
+  scenarioMinutes: null,
   quoteAt: null,
   quoteFreshnessState: null,
   strikeDistancePoints: null,
@@ -47,24 +71,36 @@ const EMPTY_PREMIUM_REFERENCE = {
 };
 
 const METHODOLOGY = {
-  maximumSpreadRatio: 0.15 as const,
-  maximumSpreadPercent: 15 as const,
-  maximumSourceAssemblySkewMilliseconds: 60_000 as const,
-  maximumContractQuoteAgeMilliseconds: 60_000 as const,
+  maximumSpreadRatio: MAXIMUM_SPREAD_RATIO,
+  maximumSpreadPercent: MAXIMUM_SPREAD_RATIO * 100,
+  maximumSpreadPoints: MAXIMUM_SPREAD_POINTS,
+  maximumSourceAssemblySkewMilliseconds: MAXIMUM_SOURCE_ASSEMBLY_SKEW_MS,
+  maximumContractQuoteAgeMilliseconds: MAXIMUM_CONTRACT_QUOTE_AGE_MS,
   quoteFreshnessPolicy: "NORMALIZED_QUOTE_AT_EPOCH_MILLISECONDS" as const,
   sourceAssemblySkewPolicy: "RISK_CALCULATED_AT_VS_CHAIN_FETCHED_AT" as const,
-  rankingMethod: "ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS" as const,
-  itmExactDistanceTiePreference: true as const,
-  openInterestHardMinimum: null,
-  volumeHardMinimum: null,
-  deltaHardRange: null,
+  rankingMethod: "TARGET_DELTA_THEN_OPTION_RR_AND_LIQUIDITY" as const,
+  itmExactDistanceTiePreference: true,
+  openInterestHardMinimum: MINIMUM_OPEN_INTEREST,
+  volumeHardMinimum: MINIMUM_VOLUME,
+  minimumBidSize: MINIMUM_BID_SIZE,
+  minimumAskSize: MINIMUM_ASK_SIZE,
+  liquidityActivityPolicy: "OPEN_INTEREST_OR_VOLUME" as const,
+  deltaHardRange: {
+    minimumAbsoluteDelta: MINIMUM_ABSOLUTE_DELTA,
+    maximumAbsoluteDelta: MAXIMUM_ABSOLUTE_DELTA,
+  },
+  targetAbsoluteDelta: TARGET_ABSOLUTE_DELTA,
   gammaHardRange: null,
   thetaHardRange: null,
   impliedVolatilityHardRange: null,
+  minimumEstimatedPremiumRewardRiskRatio: MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO,
+  optionScenarioMinutes: OPTION_SCENARIO_MINUTES,
+  optionScenarioPolicy: "DELTA_GAMMA_THETA_CONSTANT_IV_CONSERVATIVE_SPREAD_EXIT" as const,
+  preflightPolicy: "EVALUATE_CHAIN_WHILE_RISK_PREVIEW_WITHOUT_SELECTING" as const,
   evaluationScope: "RETURNED_CHAIN_WINDOW_SELECTED_SIDE" as const,
-  calculationsUse: "OPTIONS_CHAIN_BID_ASK_AND_CHAIN_UNDERLYING" as const,
+  calculationsUse: "OPTIONS_CHAIN_LIQUIDITY_AND_OPTION_SCENARIO_ESTIMATE" as const,
   midpointDisclosureCode: "MIDPOINT_REFERENCE_ONLY" as const,
-  thresholdPolicy: "EXPLICIT_CONTRACT_V1_PRODUCT_POLICY_NOT_BACKTESTED" as const,
+  thresholdPolicy: "EXPLICIT_CONTRACT_V2_CONSERVATIVE_EXECUTION_POLICY_NOT_CALIBRATED" as const,
 };
 
 function finite(value: unknown): value is number {
@@ -86,9 +122,8 @@ export function contractSelectionRequiresOptionsChain(
   risk: SpyZeroDteObjectiveRiskResponse,
 ): boolean {
   return (
-    risk.frameworkState === "READY" &&
+    (risk.frameworkState === "READY" || risk.frameworkState === "PREVIEW") &&
     risk.riskQualification === "QUALIFIED" &&
-    risk.isCurrentlyTradeEligible &&
     risk.sameSnapshotGuaranteed &&
     (risk.direction === "CALLS" || risk.direction === "PUTS")
   );
@@ -155,6 +190,105 @@ export function calculateContractLiquidity(
     return { midpoint, spreadPoints, spreadRatio: null, spreadPercent: null };
   }
   return { midpoint, spreadPoints, spreadRatio, spreadPercent };
+}
+
+interface OptionScenarioEstimate {
+  state: "QUALIFIED" | "NOT_QUALIFIED" | "UNAVAILABLE";
+  entryPremium: number | null;
+  invalidationExitPremium: number | null;
+  objectiveExitPremium: number | null;
+  premiumRiskPerShare: number | null;
+  premiumRewardPerShare: number | null;
+  rewardRiskRatio: number | null;
+}
+
+function estimateOptionScenario(
+  contract: NormalizedOptionContract,
+  risk: SpyZeroDteObjectiveRiskResponse,
+  chainUnderlyingPrice: number | null,
+  liquidity: ContractLiquidityCalculation,
+): OptionScenarioEstimate {
+  const entryPremium = finitePositive(contract.ask) ? contract.ask : null;
+  const currentUnderlying = finitePositive(chainUnderlyingPrice) ? chainUnderlyingPrice : null;
+  const invalidation = risk.selectedInvalidation.level;
+  const objective = risk.selectedObjective.level;
+  const delta = contract.delta;
+  const gamma = contract.gamma;
+  const theta = contract.theta;
+  const halfSpread = finite(liquidity.spreadPoints) ? liquidity.spreadPoints / 2 : null;
+
+  if (
+    entryPremium === null ||
+    currentUnderlying === null ||
+    !finitePositive(invalidation) ||
+    !finitePositive(objective) ||
+    !finite(delta) ||
+    !finite(gamma) || gamma < 0 ||
+    !finite(theta) ||
+    halfSpread === null
+  ) {
+    return {
+      state: "UNAVAILABLE",
+      entryPremium,
+      invalidationExitPremium: null,
+      objectiveExitPremium: null,
+      premiumRiskPerShare: null,
+      premiumRewardPerShare: null,
+      rewardRiskRatio: null,
+    };
+  }
+
+  const timeFraction = OPTION_SCENARIO_MINUTES / 390;
+  const estimateExit = (underlyingLevel: number) => {
+    const move = underlyingLevel - currentUnderlying;
+    const modeledMidpoint =
+      (liquidity.midpoint ?? entryPremium) +
+      delta * move +
+      0.5 * gamma * move * move +
+      theta * timeFraction;
+    return Math.max(0, modeledMidpoint - halfSpread);
+  };
+
+  const invalidationExitPremium = estimateExit(invalidation);
+  const objectiveExitPremium = estimateExit(objective);
+  const premiumRiskPerShare = entryPremium - invalidationExitPremium;
+  const premiumRewardPerShare = objectiveExitPremium - entryPremium;
+  if (!finitePositive(premiumRiskPerShare) || !finite(premiumRewardPerShare)) {
+    return {
+      state: "UNAVAILABLE",
+      entryPremium,
+      invalidationExitPremium,
+      objectiveExitPremium,
+      premiumRiskPerShare: finite(premiumRiskPerShare) ? Math.max(0, premiumRiskPerShare) : null,
+      premiumRewardPerShare: finite(premiumRewardPerShare) ? premiumRewardPerShare : null,
+      rewardRiskRatio: null,
+    };
+  }
+
+  const rewardRiskRatio = premiumRewardPerShare / premiumRiskPerShare;
+  if (!finite(rewardRiskRatio) || rewardRiskRatio < 0) {
+    return {
+      state: "NOT_QUALIFIED",
+      entryPremium,
+      invalidationExitPremium,
+      objectiveExitPremium,
+      premiumRiskPerShare,
+      premiumRewardPerShare,
+      rewardRiskRatio: null,
+    };
+  }
+  return {
+    state:
+      rewardRiskRatio >= MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO
+        ? "QUALIFIED"
+        : "NOT_QUALIFIED",
+    entryPremium,
+    invalidationExitPremium,
+    objectiveExitPremium,
+    premiumRiskPerShare,
+    premiumRewardPerShare,
+    rewardRiskRatio,
+  };
 }
 
 interface CompatibilityResult {
@@ -274,6 +408,7 @@ function buildCandidate(
   chainUnderlyingPrice: number | null,
   compatibilityState: ContractSourceCompatibilityState,
   evaluationTimeMs: number,
+  risk: SpyZeroDteObjectiveRiskResponse,
 ): ContractSelectionCandidate {
   const reasons: ContractCandidateRejectionReasonCode[] = [];
 
@@ -328,8 +463,38 @@ function buildCandidate(
   if (liquidity.spreadPoints !== null && liquidity.spreadRatio === null) {
     pushReason(reasons, "SPREAD_RATIO_NOT_FINITE");
   }
-  if (liquidity.spreadRatio !== null && liquidity.spreadRatio > MAXIMUM_SPREAD_RATIO) {
+  if (liquidity.spreadRatio !== null && liquidity.spreadRatio > MAXIMUM_SPREAD_RATIO + 1e-9) {
     pushReason(reasons, "SPREAD_EXCEEDS_MAXIMUM");
+  }
+  if (liquidity.spreadPoints !== null && liquidity.spreadPoints > MAXIMUM_SPREAD_POINTS + 1e-9) {
+    pushReason(reasons, "SPREAD_POINTS_EXCEEDS_MAXIMUM");
+  }
+
+  if (contract.bidSize === null || contract.bidSize < MINIMUM_BID_SIZE) {
+    pushReason(reasons, "BID_SIZE_BELOW_MINIMUM");
+  }
+  if (contract.askSize === null || contract.askSize < MINIMUM_ASK_SIZE) {
+    pushReason(reasons, "ASK_SIZE_BELOW_MINIMUM");
+  }
+
+  const liquidityActivityPassed =
+    (contract.openInterest !== null && contract.openInterest >= MINIMUM_OPEN_INTEREST) ||
+    (contract.volume !== null && contract.volume >= MINIMUM_VOLUME);
+  if (!liquidityActivityPassed) {
+    pushReason(reasons, "LIQUIDITY_ACTIVITY_BELOW_MINIMUM");
+  }
+
+  const absoluteDelta = finite(contract.delta) ? Math.abs(contract.delta) : null;
+  const deltaDistanceFromTarget = absoluteDelta === null
+    ? null
+    : Math.abs(absoluteDelta - TARGET_ABSOLUTE_DELTA);
+  if (absoluteDelta === null) {
+    pushReason(reasons, "DELTA_UNAVAILABLE");
+  } else if (
+    absoluteDelta < MINIMUM_ABSOLUTE_DELTA ||
+    absoluteDelta > MAXIMUM_ABSOLUTE_DELTA
+  ) {
+    pushReason(reasons, "DELTA_OUTSIDE_RANGE");
   }
 
   const underlyingValid = finitePositive(chainUnderlyingPrice);
@@ -341,6 +506,13 @@ function buildCandidate(
   const moneyness = underlyingValid
     ? calculateContractMoneyness(direction, contract.strikePrice, chainUnderlyingPrice)
     : "UNAVAILABLE";
+
+  const scenario = estimateOptionScenario(contract, risk, chainUnderlyingPrice, liquidity);
+  if (scenario.state === "UNAVAILABLE") {
+    pushReason(reasons, "OPTION_SCENARIO_UNAVAILABLE");
+  } else if (scenario.state === "NOT_QUALIFIED") {
+    pushReason(reasons, "OPTION_REWARD_RISK_BELOW_MINIMUM");
+  }
 
   const freshness = classifyContractQuoteFreshness(contract.quoteAt, evaluationTimeMs);
   if (freshness.state === "UNKNOWN" || freshness.state === "UNAVAILABLE") {
@@ -389,6 +561,8 @@ function buildCandidate(
     openInterest: contract.openInterest,
     volume: contract.volume,
     delta: contract.delta,
+    absoluteDelta,
+    deltaDistanceFromTarget,
     gamma: contract.gamma,
     theta: contract.theta,
     vega: contract.vega,
@@ -398,6 +572,15 @@ function buildCandidate(
     tradeAt: contract.tradeAt,
     quoteAgeMilliseconds: freshness.ageMilliseconds,
     quoteFreshnessState: freshness.state,
+    liquidityActivityPassed,
+    optionScenarioState: scenario.state,
+    estimatedEntryPremium: scenario.entryPremium,
+    estimatedInvalidationExitPremium: scenario.invalidationExitPremium,
+    estimatedObjectiveExitPremium: scenario.objectiveExitPremium,
+    estimatedPremiumRiskPerShare: scenario.premiumRiskPerShare,
+    estimatedPremiumRewardPerShare: scenario.premiumRewardPerShare,
+    estimatedPremiumRewardRiskRatio: scenario.rewardRiskRatio,
+    scenarioMinutes: OPTION_SCENARIO_MINUTES,
     selectionRank: null,
     rejectionReasonCodes: reasons,
     warningCode,
@@ -425,22 +608,35 @@ export function rankContractCandidates(
     .filter((candidate) => candidate.selectable)
     .slice()
     .sort((a, b) => {
+      const deltaDistance = (a.deltaDistanceFromTarget ?? Number.POSITIVE_INFINITY) -
+        (b.deltaDistanceFromTarget ?? Number.POSITIVE_INFINITY);
+      if (deltaDistance !== 0) return deltaDistance;
+
+      const optionRewardRisk =
+        (b.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY) -
+        (a.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY);
+      if (optionRewardRisk !== 0) return optionRewardRisk;
+
+      const spread = (a.spreadRatio ?? Number.POSITIVE_INFINITY) -
+        (b.spreadRatio ?? Number.POSITIVE_INFINITY);
+      if (spread !== 0) return spread;
+
+      const displayedDepthA = Math.min(a.bidSize ?? 0, a.askSize ?? 0);
+      const displayedDepthB = Math.min(b.bidSize ?? 0, b.askSize ?? 0);
+      if (displayedDepthA !== displayedDepthB) return displayedDepthB - displayedDepthA;
+
+      const volume = descendingNullable(a.volume, b.volume);
+      if (volume !== 0) return volume;
+
+      const oi = descendingNullable(a.openInterest, b.openInterest);
+      if (oi !== 0) return oi;
+
       const distance = (a.strikeDistancePoints ?? Number.POSITIVE_INFINITY) -
         (b.strikeDistancePoints ?? Number.POSITIVE_INFINITY);
       if (distance !== 0) return distance;
 
       const moneyness = moneynessPriority(a.moneyness) - moneynessPriority(b.moneyness);
       if (moneyness !== 0) return moneyness;
-
-      const spread = (a.spreadRatio ?? Number.POSITIVE_INFINITY) -
-        (b.spreadRatio ?? Number.POSITIVE_INFINITY);
-      if (spread !== 0) return spread;
-
-      const oi = descendingNullable(a.openInterest, b.openInterest);
-      if (oi !== 0) return oi;
-
-      const volume = descendingNullable(a.volume, b.volume);
-      if (volume !== 0) return volume;
 
       const strike = direction === "CALL"
         ? a.strikePrice - b.strikePrice
@@ -455,6 +651,44 @@ export function rankContractCandidates(
     ...candidate,
     selectionRank: rankById.get(candidate.candidateId) ?? null,
   }));
+}
+
+
+function selectedContractFromCandidate(
+  selected: ContractSelectionCandidate,
+): SpyZeroDteContractSelectionResponse["selectedContract"] {
+  return {
+    candidateId: selected.candidateId,
+    contractSymbol: selected.contractSymbol,
+    contractDirection: selected.contractDirection,
+    strikePrice: selected.strikePrice,
+    expirationDate: selected.expirationDate,
+    moneyness: selected.moneyness,
+    bid: selected.bid,
+    ask: selected.ask,
+    calculatedMidpoint: selected.calculatedMidpoint,
+    spreadPoints: selected.spreadPoints,
+    spreadRatio: selected.spreadRatio,
+    spreadPercent: selected.spreadPercent,
+    delta: selected.delta,
+    gamma: selected.gamma,
+    theta: selected.theta,
+    openInterest: selected.openInterest,
+    volume: selected.volume,
+    bidSize: selected.bidSize,
+    askSize: selected.askSize,
+    optionScenarioState: selected.optionScenarioState,
+    estimatedInvalidationExitPremium: selected.estimatedInvalidationExitPremium ?? null,
+    estimatedObjectiveExitPremium: selected.estimatedObjectiveExitPremium ?? null,
+    estimatedPremiumRiskPerShare: selected.estimatedPremiumRiskPerShare ?? null,
+    estimatedPremiumRewardPerShare: selected.estimatedPremiumRewardPerShare ?? null,
+    estimatedPremiumRewardRiskRatio: selected.estimatedPremiumRewardRiskRatio ?? null,
+    scenarioMinutes: selected.scenarioMinutes ?? null,
+    quoteAt: selected.quoteAt,
+    quoteFreshnessState: selected.quoteFreshnessState,
+    strikeDistancePoints: selected.strikeDistancePoints,
+    selectionRank: selected.selectionRank,
+  };
 }
 
 export interface ContractSelectionChainDependencies {
@@ -602,6 +836,7 @@ function noChainResponse(
     sourceAssemblySkewMilliseconds: null,
     engineState,
     selectionState,
+    preflightState: risk.frameworkState === "PREVIEW" ? "NOT_EVALUATED" : "NOT_APPLICABLE",
     contractDirection,
     chainUnderlyingPrice: null,
     underlyingPriceDifferencePoints: null,
@@ -651,6 +886,7 @@ export function buildSpyZeroDteContractSelection(
       sourceAssemblySkewMilliseconds: compatibility.skewMilliseconds,
       engineState: "UNAVAILABLE",
       selectionState: "UNAVAILABLE",
+      preflightState: risk.frameworkState === "PREVIEW" ? "UNAVAILABLE" : "NOT_APPLICABLE",
       contractDirection: "UNAVAILABLE",
       chainUnderlyingPrice: chain.underlyingPrice,
       underlyingPriceDifferencePoints: underlyingDifference,
@@ -676,6 +912,7 @@ export function buildSpyZeroDteContractSelection(
       chain.underlyingPrice,
       compatibility.state,
       calculatedAtMs,
+      risk,
     ),
   );
   const candidates = rankContractCandidates(rawCandidates, direction as "CALL" | "PUT");
@@ -705,6 +942,7 @@ export function buildSpyZeroDteContractSelection(
       sourceAssemblySkewMilliseconds: compatibility.skewMilliseconds,
       engineState: "PARTIAL",
       selectionState: "UNAVAILABLE",
+      preflightState: risk.frameworkState === "PREVIEW" ? "UNAVAILABLE" : "NOT_APPLICABLE",
       contractDirection: direction,
       chainUnderlyingPrice: chain.underlyingPrice,
       underlyingPriceDifferencePoints: underlyingDifference,
@@ -718,6 +956,45 @@ export function buildSpyZeroDteContractSelection(
       premiumReference: EMPTY_PREMIUM_REFERENCE,
       primaryReasonCode: compatibility.primaryReasonCode ?? "SOURCE_COMPATIBILITY_PARTIAL",
       warningCode: compatibility.warningCode ?? "SOURCE_COMPATIBILITY_PARTIAL",
+    });
+  }
+
+  if (risk.frameworkState === "PREVIEW") {
+    return SpyZeroDteContractSelectionResponseSchema.parse({
+      ...base,
+      sourceOptionsChainFetchedAt: chain.fetchedAt,
+      sourceOptionsChainMetricState: chain.metricState,
+      sourceOptionsChainSourceState: chain.sourceState,
+      sourceOptionsChainWarningCode: chain.warningCode,
+      sourceOptionsChainIsDelayed: chain.isDelayed,
+      sourceOptionsChainLatestQuoteAt: chain.latestOptionQuoteAt,
+      sourceOptionsChainLatestTradeAt: chain.latestOptionTradeAt,
+      sourceCompatibilityState: "COMPATIBLE",
+      sourceAssemblySkewMilliseconds: compatibility.skewMilliseconds,
+      engineState: "AVAILABLE",
+      selectionState: "DEFERRED",
+      preflightState: selected ? "READY" : "NO_QUALIFIED_CONTRACT",
+      preflightContract: selected ? selectedContractFromCandidate(selected) : EMPTY_SELECTED_CONTRACT,
+      preflightPremiumReference: selected
+        ? {
+            type: "CALCULATED_BID_ASK_MIDPOINT",
+            value: selected.calculatedMidpoint,
+            disclosureCode: "MIDPOINT_REFERENCE_ONLY",
+          }
+        : EMPTY_PREMIUM_REFERENCE,
+      contractDirection: direction,
+      chainUnderlyingPrice: chain.underlyingPrice,
+      underlyingPriceDifferencePoints: underlyingDifference,
+      expirationDate: chain.returnedExpirationDate,
+      evaluatedCandidateCount: candidates.length,
+      selectableCandidateCount,
+      rejectedCandidateCount,
+      unavailableCandidateCount,
+      candidates,
+      selectedContract: EMPTY_SELECTED_CONTRACT,
+      premiumReference: EMPTY_PREMIUM_REFERENCE,
+      primaryReasonCode: "CONTRACT_SELECTION_DEFERRED_UNTIL_SETUP_READY",
+      warningCode: selected ? null : "INSUFFICIENT_CONTRACT_DATA",
     });
   }
 
@@ -744,24 +1021,8 @@ export function buildSpyZeroDteContractSelection(
       rejectedCandidateCount,
       unavailableCandidateCount,
       candidates,
-      selectedContract: {
-        candidateId: selected.candidateId,
-        contractSymbol: selected.contractSymbol,
-        contractDirection: selected.contractDirection,
-        strikePrice: selected.strikePrice,
-        expirationDate: selected.expirationDate,
-        moneyness: selected.moneyness,
-        bid: selected.bid,
-        ask: selected.ask,
-        calculatedMidpoint: selected.calculatedMidpoint,
-        spreadPoints: selected.spreadPoints,
-        spreadRatio: selected.spreadRatio,
-        spreadPercent: selected.spreadPercent,
-        quoteAt: selected.quoteAt,
-        quoteFreshnessState: selected.quoteFreshnessState,
-        strikeDistancePoints: selected.strikeDistancePoints,
-        selectionRank: selected.selectionRank,
-      },
+      preflightState: "NOT_APPLICABLE",
+      selectedContract: selectedContractFromCandidate(selected),
       premiumReference: {
         type: "CALCULATED_BID_ASK_MIDPOINT",
         value: selected.calculatedMidpoint,
@@ -803,6 +1064,7 @@ export function buildSpyZeroDteContractSelection(
     sourceAssemblySkewMilliseconds: compatibility.skewMilliseconds,
     engineState,
     selectionState: "NO_QUALIFIED_CONTRACT",
+    preflightState: "NOT_APPLICABLE",
     contractDirection: direction,
     chainUnderlyingPrice: chain.underlyingPrice,
     underlyingPriceDifferencePoints: underlyingDifference,

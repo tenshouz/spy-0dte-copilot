@@ -29,6 +29,7 @@ import {
   setDiscordWebhookHeaders,
 } from "./routes/discord-webhook.routes";
 import { gapRouter } from "./routes/gap.routes";
+import { gammaResearchRouter } from "./routes/gamma-research.routes";
 import { gexRouter } from "./routes/gex.routes";
 import {
   historicalReplayRouter,
@@ -39,6 +40,10 @@ import {
   setDeterministicJournalHeaders,
 } from "./routes/journal.routes";
 import { marketBiasRouter } from "./routes/market-bias.routes";
+import {
+  pointInTimeBacktestRouter,
+  setPointInTimeBacktestHeaders,
+} from "./routes/point-in-time-backtest.routes";
 import { marketContextRouter } from "./routes/market-context.routes";
 import { marketStateRouter } from "./routes/market-state.routes";
 import { openingRangeRouter } from "./routes/opening-range.routes";
@@ -85,7 +90,7 @@ app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "spy-0dte-copilot-api",
-    releaseVersion: "1.3.0",
+    releaseVersion: "1.5.0",
     uptimeSeconds: Math.max(0, Math.floor(process.uptime())),
   });
 });
@@ -97,6 +102,7 @@ app.use("/api/snapshot", snapshotRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/journal", journalRouter);
 app.use("/api/replay", historicalReplayRouter);
+app.use("/api/backtest", pointInTimeBacktestRouter);
 app.use("/api/market-context", marketContextRouter);
 app.use("/api/market-bias", marketBiasRouter);
 app.use("/api/market-state", marketStateRouter);
@@ -117,6 +123,7 @@ app.use("/api/dex", dexRouter);
 app.use("/api/discord", discordWebhookRouter);
 app.use("/api/gap", gapRouter);
 app.use("/api/gex", gexRouter);
+app.use("/api/gamma-research", gammaResearchRouter);
 app.use("/api/session-data", sessionDataRouter);
 app.use("/api/session-levels", sessionLevelsRouter);
 app.use("/api/session-structure", sessionStructureRouter);
@@ -161,6 +168,15 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
   ) {
     setHistoricalReplayHeaders(res);
     res.status(400).json({ error: "INVALID_HISTORICAL_REPLAY_JSON" });
+    return;
+  }
+  if (
+    req.originalUrl.startsWith("/api/backtest/spy/runs") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setPointInTimeBacktestHeaders(res);
+    res.status(400).json({ error: "INVALID_POINT_IN_TIME_BACKTEST_JSON" });
     return;
   }
   if (

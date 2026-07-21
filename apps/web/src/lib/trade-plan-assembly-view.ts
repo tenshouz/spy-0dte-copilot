@@ -22,12 +22,12 @@ const STATE_COPY: Record<
   },
   NO_QUALIFIED_CONTRACT: {
     title: "No qualified contract",
-    description: "The underlying setup qualified, but no contract passed the current CONTRACT_V1 liquidity rules.",
+    description: "The underlying setup qualified, but no contract passed the current CONTRACT_V2 liquidity rules.",
     tone: "wait",
   },
   NOT_QUALIFIED: {
     title: "Underlying setup not qualified",
-    description: "The setup did not meet the deterministic RISK_V1 framework.",
+    description: "The setup did not meet the deterministic RISK_V2 framework.",
     tone: "wait",
   },
   NO_SETUP: {

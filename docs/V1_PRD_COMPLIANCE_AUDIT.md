@@ -1,5 +1,8 @@
 # SPY 0DTE Copilot V1.3.0 PRD Compliance Audit
 
+> **V1.4.0 note:** This V1.3.0 audit is retained as historical baseline documentation. V1.4.0 supersedes its Trade Plan, exposure-confidence, risk, contract-selection, and decision-audit descriptions. See `V1_4_EXECUTION_QUALITY.md`.
+
+
 ## Release conclusion
 
 The local SPY-only V1.3.0 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.

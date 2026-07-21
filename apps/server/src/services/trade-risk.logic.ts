@@ -14,7 +14,7 @@ import {
   type SpyZeroDteObjectiveRiskResponse,
 } from "@spy-copilot/shared";
 
-export const RISK_METHODOLOGY_VERSION = "RISK_V1" as const;
+export const RISK_METHODOLOGY_VERSION = "RISK_V2" as const;
 export const MINIMUM_REWARD_RISK_RATIO = 2;
 
 export const OBJECTIVE_SOURCE_TYPES = [
@@ -24,12 +24,15 @@ export const OBJECTIVE_SOURCE_TYPES = [
   "PREMARKET_LOW",
   "EXPECTED_MOVE_UPPER",
   "EXPECTED_MOVE_LOWER",
+  "OPENING_RANGE_EXTENSION",
+  "GAMMA_WALL_CONTEXT",
 ] as const;
 
 export const INVALIDATION_SOURCE_TYPES = [
   "CURRENT_RTH_VWAP",
   "OPENING_RANGE_HIGH",
   "OPENING_RANGE_LOW",
+  "BUFFERED_TRIGGER_FAILURE",
 ] as const;
 
 export const OBJECTIVE_TIE_BREAK_ORDER = [
@@ -39,15 +42,19 @@ export const OBJECTIVE_TIE_BREAK_ORDER = [
   "PREVIOUS_DAY_LOW",
   "EXPECTED_MOVE_UPPER",
   "EXPECTED_MOVE_LOWER",
+  "OPENING_RANGE_EXTENSION",
+  "GAMMA_WALL_CONTEXT",
 ] as const;
 
 export const INVALIDATION_TIE_BREAK_ORDER_CALLS = [
+  "BUFFERED_TRIGGER_FAILURE",
   "CURRENT_RTH_VWAP",
   "OPENING_RANGE_HIGH",
   "OPENING_RANGE_LOW",
 ] as const;
 
 export const INVALIDATION_TIE_BREAK_ORDER_PUTS = [
+  "BUFFERED_TRIGGER_FAILURE",
   "CURRENT_RTH_VWAP",
   "OPENING_RANGE_LOW",
   "OPENING_RANGE_HIGH",
@@ -95,7 +102,14 @@ function emptyPlanningReference(): SpyZeroDteObjectiveRiskResponse["planningRefe
 }
 
 function emptySelectedInvalidation(): SpyZeroDteObjectiveRiskResponse["selectedInvalidation"] {
-  return { candidateId: null, levelType: null, level: null, riskDistancePoints: null };
+  return {
+    candidateId: null,
+    levelType: null,
+    level: null,
+    rawStructuralLevel: null,
+    noiseBufferPoints: null,
+    riskDistancePoints: null,
+  };
 }
 
 function emptySelectedObjective(): SpyZeroDteObjectiveRiskResponse["selectedObjective"] {
@@ -161,7 +175,10 @@ interface ObjectiveSource {
 interface InvalidationSource {
   candidateId: InvalidationLevelCandidate["candidateId"];
   levelType: InvalidationLevelCandidate["levelType"];
+  levelSemantic: InvalidationLevelCandidate["levelSemantic"];
   level: number | null;
+  rawStructuralLevel: number | null;
+  noiseBufferPoints: number | null;
   sourceStatus: RiskCandidateSourceStatus;
   sourceFeatureId: InvalidationLevelCandidate["sourceFeatureId"];
   sourceComponents: InvalidationLevelCandidate["sourceComponents"];
@@ -178,6 +195,7 @@ function objectiveSources(
   const prior = marketState.features.priceVsPriorDayRange;
   const premarket = marketState.features.priceVsPremarketRange;
   const expected = marketState.features.priceVsExpectedMoveRange;
+  const opening = marketState.features.priceVsOpeningRange;
 
   const priorLevel = direction === "CALLS" ? prior.inputs.previousDayHigh : prior.inputs.previousDayLow;
   const priorNativeState = direction === "CALLS"
@@ -208,6 +226,33 @@ function objectiveSources(
     expected.inputs.expirationDate === marketState.currentMarketDate &&
     expected.inputs.currentMarketDate === marketState.currentMarketDate &&
     expected.referenceDateRelation === "CURRENT_EXPIRATION";
+
+  const openingStatus = sourceStatusFromFeature(opening.status, [
+    opening.inputs.metricState,
+    opening.inputs.sourceState,
+    opening.inputs.coverageState,
+  ]);
+  const openingDateCompatible =
+    opening.referenceDate === marketState.currentMarketDate &&
+    opening.inputs.currentMarketDate === marketState.currentMarketDate &&
+    opening.referenceDateRelation === "CURRENT_MARKET_DATE";
+  const openingWidth = finitePositive(opening.inputs.openingRangeHigh) && finitePositive(opening.inputs.openingRangeLow)
+    ? opening.inputs.openingRangeHigh - opening.inputs.openingRangeLow
+    : null;
+  const openingExtension = finitePositive(openingWidth)
+    ? direction === "CALLS"
+      ? opening.inputs.openingRangeHigh! + openingWidth
+      : opening.inputs.openingRangeLow! - openingWidth
+    : null;
+
+  const exposure = marketState.exposureStructure;
+  const wall = direction === "CALLS" ? exposure?.callWalls[0] ?? null : exposure?.putWalls[0] ?? null;
+  const wallStatus: RiskCandidateSourceStatus = !exposure || exposure.sourceGexMetricState === "UNAVAILABLE" || exposure.sourceGexCoverageState === "UNAVAILABLE"
+    ? "UNAVAILABLE"
+    : exposure.sourceGexMetricState === "STALE" || exposure.sourceGexCoverageState === "PARTIAL"
+      ? "PARTIAL"
+      : "AVAILABLE";
+  const wallDateCompatible = exposure?.expirationDate === marketState.currentMarketDate;
 
   return [
     {
@@ -258,11 +303,49 @@ function objectiveSources(
       dateRejection: expectedDateCompatible ? null : "EXPIRATION_MISMATCH",
       warningCode: expected.warningCode,
     },
+    {
+      candidateId: "OBJECTIVE_OPENING_RANGE_EXTENSION",
+      levelType: "OPENING_RANGE_EXTENSION",
+      levelSemantic: "PROJECTED_STRUCTURE_LEVEL",
+      level: openingExtension,
+      sourceStatus: openingStatus,
+      sourceFeatureId: "PRICE_VS_OPENING_RANGE",
+      sourceComponents: [...opening.sourceComponents],
+      referenceDate: opening.referenceDate,
+      referenceDateRelation: opening.referenceDateRelation,
+      dateCompatible: openingDateCompatible,
+      dateRejection: openingDateCompatible ? null : "REFERENCE_DATE_MISMATCH",
+      warningCode: opening.warningCode,
+    },
+    {
+      candidateId: "OBJECTIVE_GAMMA_WALL_CONTEXT",
+      levelType: "GAMMA_WALL_CONTEXT",
+      levelSemantic: "MODEL_DERIVED_EXPOSURE_LEVEL",
+      level: wall?.strikePrice ?? null,
+      sourceStatus: wallStatus,
+      sourceFeatureId: "RETURNED_WINDOW_NET_GEX_SIGN",
+      sourceComponents: ["GEX"],
+      referenceDate: exposure?.expirationDate ?? null,
+      referenceDateRelation: "CURRENT_EXPIRATION",
+      dateCompatible: wallDateCompatible,
+      dateRejection: wallDateCompatible ? null : "EXPIRATION_MISMATCH",
+      warningCode: exposure?.warnings[0] ?? null,
+    },
   ];
+}
+
+function setupNoiseBufferPoints(
+  marketState: SpyZeroDteDeterministicMarketStateResponse,
+): number {
+  return Math.max(
+    0.05,
+    Math.min(0.3, (marketState.executionContext?.medianRangePoints ?? 0.25) * 0.2),
+  );
 }
 
 function invalidationSources(
   marketState: SpyZeroDteDeterministicMarketStateResponse,
+  tradePlan: SpyZeroDteDeterministicTradePlanResponse,
 ): InvalidationSource[] {
   const vwap = marketState.features.priceVsVwap;
   const opening = marketState.features.priceVsOpeningRange;
@@ -280,12 +363,38 @@ function invalidationSources(
     opening.inputs.sourceState,
     opening.inputs.coverageState,
   ]);
+  const buffer = setupNoiseBufferPoints(marketState);
+  const rawTrigger = tradePlan.trigger.level;
+  const bufferedTrigger = finitePositive(rawTrigger) && ["CALLS", "PUTS"].includes(tradePlan.setupDirection)
+    ? tradePlan.setupDirection === "CALLS"
+      ? rawTrigger - buffer
+      : rawTrigger + buffer
+    : null;
+  const triggerStatus: RiskCandidateSourceStatus = finitePositive(rawTrigger) ? "AVAILABLE" : "UNAVAILABLE";
 
   return [
     {
+      candidateId: "INVALIDATION_BUFFERED_TRIGGER_FAILURE",
+      levelType: "BUFFERED_TRIGGER_FAILURE",
+      levelSemantic: "BUFFERED_STRUCTURAL_INVALIDATION",
+      level: bufferedTrigger,
+      rawStructuralLevel: finitePositive(rawTrigger) ? rawTrigger : null,
+      noiseBufferPoints: finitePositive(rawTrigger) ? buffer : null,
+      sourceStatus: triggerStatus,
+      sourceFeatureId: "PRICE_VS_OPENING_RANGE",
+      sourceComponents: ["QUOTE", "VWAP", "OPENING_RANGE", "CANDLES"],
+      referenceDate: marketState.currentMarketDate,
+      referenceDateRelation: "CURRENT_MARKET_DATE",
+      dateCompatible: true,
+      warningCode: null,
+    },
+    {
       candidateId: "INVALIDATION_CURRENT_RTH_VWAP",
       levelType: "CURRENT_RTH_VWAP",
+      levelSemantic: "STRUCTURAL_LEVEL",
       level: vwap.inputs.vwap,
+      rawStructuralLevel: finitePositive(vwap.inputs.vwap) ? vwap.inputs.vwap : null,
+      noiseBufferPoints: null,
       sourceStatus: sourceStatusFromFeature(vwap.status, [
         vwap.inputs.vwapMetricState,
         vwap.inputs.vwapSourceState,
@@ -300,7 +409,10 @@ function invalidationSources(
     {
       candidateId: "INVALIDATION_OPENING_RANGE_HIGH",
       levelType: "OPENING_RANGE_HIGH",
+      levelSemantic: "STRUCTURAL_LEVEL",
       level: opening.inputs.openingRangeHigh,
+      rawStructuralLevel: finitePositive(opening.inputs.openingRangeHigh) ? opening.inputs.openingRangeHigh : null,
+      noiseBufferPoints: null,
       sourceStatus: openingStatus,
       sourceFeatureId: "PRICE_VS_OPENING_RANGE",
       sourceComponents: [...opening.sourceComponents],
@@ -312,7 +424,10 @@ function invalidationSources(
     {
       candidateId: "INVALIDATION_OPENING_RANGE_LOW",
       levelType: "OPENING_RANGE_LOW",
+      levelSemantic: "STRUCTURAL_LEVEL",
       level: opening.inputs.openingRangeLow,
+      rawStructuralLevel: finitePositive(opening.inputs.openingRangeLow) ? opening.inputs.openingRangeLow : null,
+      noiseBufferPoints: null,
       sourceStatus: openingStatus,
       sourceFeatureId: "PRICE_VS_OPENING_RANGE",
       sourceComponents: [...opening.sourceComponents],
@@ -443,8 +558,10 @@ function buildInvalidationCandidate(
   return {
     candidateId: source.candidateId,
     levelType: source.levelType,
-    levelSemantic: "STRUCTURAL_LEVEL",
+    levelSemantic: source.levelSemantic,
     level: finite(source.level) ? source.level : null,
+    rawStructuralLevel: source.rawStructuralLevel,
+    noiseBufferPoints: source.noiseBufferPoints,
     sourceStatus: source.sourceStatus,
     eligibilityStatus,
     selectable,
@@ -468,7 +585,9 @@ function buildInvalidationCandidate(
 function objectivePriority(levelType: ObjectiveLevelType): number {
   if (levelType === "PREMARKET_HIGH" || levelType === "PREMARKET_LOW") return 0;
   if (levelType === "PREVIOUS_DAY_HIGH" || levelType === "PREVIOUS_DAY_LOW") return 1;
-  return 2;
+  if (levelType === "OPENING_RANGE_EXTENSION") return 2;
+  if (levelType === "GAMMA_WALL_CONTEXT") return 3;
+  return 4;
 }
 
 function rankObjectiveCandidates(candidates: ObjectiveLevelCandidate[]): ObjectiveLevelCandidate[] {
@@ -502,8 +621,8 @@ function rankInvalidationCandidates(
   const ranked = candidates
     .filter((candidate) => candidate.selectable && candidate.riskDistancePoints !== null)
     .sort((a, b) =>
-      (a.riskDistancePoints! - b.riskDistancePoints!) ||
-      (invalidationPriority(direction, a.levelType) - invalidationPriority(direction, b.levelType)),
+      (invalidationPriority(direction, a.levelType) - invalidationPriority(direction, b.levelType)) ||
+      (a.riskDistancePoints! - b.riskDistancePoints!),
     );
   const rankById = new Map(ranked.map((candidate, index) => [candidate.candidateId, index + 1]));
   return candidates.map((candidate) => ({
@@ -525,6 +644,8 @@ function selectedInvalidationFrom(
     candidateId: selected.candidateId,
     levelType: selected.levelType,
     level: selected.level,
+    rawStructuralLevel: selected.rawStructuralLevel ?? selected.level,
+    noiseBufferPoints: selected.noiseBufferPoints ?? null,
     riskDistancePoints: selected.riskDistancePoints,
   };
 }
@@ -653,6 +774,13 @@ function baseResponse(
     priceSource: marketState.priceSource,
     quoteTimestamp: marketState.quoteTimestamp,
     planningReference,
+    sourceTradeSetupType: tradePlan.trigger.setupType ?? "UNAVAILABLE",
+    setupSpecificNoiseBufferPoints: setupNoiseBufferPoints(marketState),
+    timeRiskPolicy: {
+      maximumMinutesWithoutProgress: 15,
+      minimumProgressFraction: 0.25,
+      advisoryOnly: true,
+    },
     minimumRewardRiskRatio: MINIMUM_REWARD_RISK_RATIO,
     invalidationCandidates,
     selectedInvalidation,
@@ -666,12 +794,14 @@ function baseResponse(
       objectiveTieBreakOrder: [...OBJECTIVE_TIE_BREAK_ORDER],
       invalidationTieBreakOrderCalls: [...INVALIDATION_TIE_BREAK_ORDER_CALLS],
       invalidationTieBreakOrderPuts: [...INVALIDATION_TIE_BREAK_ORDER_PUTS],
-      invalidationSelection: "NEAREST_VALID_ADVERSE_STRUCTURAL_LEVEL",
+      invalidationSelection: "SETUP_SPECIFIC_BUFFERED_TRIGGER_THEN_NEAREST",
       objectiveSelection: "NEAREST_QUALIFIED_FAVORABLE_LEVEL",
       minimumRewardRiskRatio: MINIMUM_REWARD_RISK_RATIO,
       calculationsUse: "SPY_UNDERLYING_PRICE_POINTS",
       duplicateLevelPolicy: "PRESERVE_SEPARATE_CANDIDATES_EXACT_EQUALITY_ONLY",
       partialSelectionPolicy: "PARTIAL_CANDIDATES_VISIBLE_BUT_NOT_SELECTABLE",
+      setupSpecificNoiseBufferPolicy: "MAX_0_05_MIN_0_30_MEDIAN_RANGE_X_0_20",
+      optionAwareQualificationDelegatedToContractEngine: true,
     },
   });
 }
@@ -874,7 +1004,7 @@ export function buildSpyZeroDteObjectiveRiskFramework(
     ),
   );
   const invalidationCandidates = rankInvalidationCandidates(
-    invalidationSources(marketState).map((source) =>
+    invalidationSources(marketState, tradePlan).map((source) =>
       buildInvalidationCandidate(source, direction, planningReference.price!),
     ),
     direction,

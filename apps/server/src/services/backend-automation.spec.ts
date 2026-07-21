@@ -657,6 +657,33 @@ test("ambiguous trade outcome commits a persistent suppression key", async () =>
   assert.equal(repository.logs[0]?.deliveryState, "AMBIGUOUS");
 });
 
+test("disabled trade-plan delivery still evaluates one capture-only candidate", async () => {
+  const repository = new FakeRepository();
+  repository.settings.tradePlanAlertsEnabled = false;
+  repository.settings.scheduledReportsEnabled = false;
+  let candidateEvaluations = 0;
+  let providerRequests = 0;
+  const result = await runBackendAutomationTickWithDependencies({
+    dependencies: dependencies(repository, {
+      getCandidate: async () => {
+        candidateEvaluations += 1;
+        return candidateReady();
+      },
+      fetch: async () => {
+        providerRequests += 1;
+        return new Response(null, { status: 204 });
+      },
+    }),
+    owner: OWNER,
+    force: true,
+  });
+  assert.equal(candidateEvaluations, 1);
+  assert.equal(providerRequests, 0);
+  assert.equal(result.tradePlanAlerts.outcome, "NO_DELIVERY");
+  assert.equal(result.tradePlanAlerts.reasonCode, "POINT_IN_TIME_CAPTURE_ONLY");
+  assert.equal(repository.runtime.lastTradePlanReasonCode, "POINT_IN_TIME_CAPTURE_ONLY");
+});
+
 test("non-due schedule performs no report delivery", async () => {
   const repository = new FakeRepository();
   repository.settings.tradePlanAlertsEnabled = false;

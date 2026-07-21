@@ -1,0 +1,67 @@
+SPY 0DTE Copilot V1.5.0 — Changed Files
+Baseline: supplied V1.4.1 empirical-gamma-research ZIP
+Scope: point-in-time forward capture, historical-boundary replay, and objective outcome grading
+
+NEW FILES (17)
++ IMPLEMENTATION_SUMMARY_v1.5.0.md
++ README_APPLY_v1.5.0.txt
++ RELEASE_NOTES_v1.5.0.md
++ VERIFICATION_REPORT_v1.5.0.md
++ apps/server/prisma/migrations/20260721040000_add_point_in_time_backtesting/migration.sql
++ apps/server/src/routes/point-in-time-backtest.routes.spec.ts
++ apps/server/src/routes/point-in-time-backtest.routes.ts
++ apps/server/src/services/point-in-time-backtest.logic.ts
++ apps/server/src/services/point-in-time-backtest.service.ts
++ apps/server/src/services/point-in-time-backtest.spec.ts
++ apps/server/src/services/trade-plan-assembly.service.spec.ts
++ apps/web/src/app/backtest/page.tsx
++ apps/web/src/hooks/use-point-in-time-backtest.ts
++ apps/web/src/lib/point-in-time-backtest-view.spec.ts
++ apps/web/src/lib/point-in-time-backtest-view.ts
++ docs/V1_5_POINT_IN_TIME_BACKTESTING.md
++ packages/shared/src/backtest-schemas.ts
+
+MODIFIED FILES (29)
+* .gitignore
+* README.md
+* README_APPLY.txt
+* STRONGEST_NEXT_VERSION.md
+* apps/server/package.json
+* apps/server/prisma/schema.prisma
+* apps/server/src/index.ts
+* apps/server/src/services/backend-automation.service.ts
+* apps/server/src/services/backend-automation.spec.ts
+* apps/server/src/services/decision-cycle-audit.service.ts
+* apps/server/src/services/decision-cycle-audit.spec.ts
+* apps/server/src/services/system-readiness.logic.ts
+* apps/server/src/services/system-readiness.spec.ts
+* apps/server/src/services/trade-plan-assembly.service.ts
+* apps/web/README.md
+* apps/web/next.config.ts
+* apps/web/package.json
+* apps/web/src/components/guide/dashboard-guide.tsx
+* apps/web/src/components/layout/mobile-nav.tsx
+* apps/web/src/components/layout/sidebar.tsx
+* apps/web/src/lib/api-client.ts
+* apps/web/src/lib/dashboard-guide-content.ts
+* apps/web/src/lib/dashboard-guide-view.spec.ts
+* package-lock.json
+* package.json
+* packages/shared/package.json
+* packages/shared/src/index.ts
+* packages/shared/src/schemas.ts
+* scripts/verify-v1.mjs
+
+DELETED FILES (0)
+None
+
+RELEASE-GENERATED FILES
++ CHANGED_FILES_v1.5.0.txt
++ SOURCE_MANIFEST_SHA256_v1.5.0.txt
+
+COMPATIBILITY
+- No dependency or devDependency changes.
+- Prisma schema changed; migration and Prisma generation are required.
+- No environment-variable names changed.
+- Existing V1.4 execution-quality gates remain in place.
+- Existing V1.4.1 empirical Gamma research remains research-only.

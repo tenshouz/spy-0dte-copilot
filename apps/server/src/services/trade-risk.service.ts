@@ -9,7 +9,7 @@ import { buildSpyZeroDteObjectiveRiskFramework } from "./trade-risk.logic";
 
 /**
  * Retrieves exactly one Market-State response, derives BIAS_V1 and
- * TRADE_PLAN_V2 from that same object, then calculates RISK_V1.
+ * TRADE_PLAN_V3 from that same object, then calculates RISK_V2.
  */
 export async function getSpyZeroDteObjectiveRiskFramework(): Promise<SpyZeroDteObjectiveRiskResponse> {
   const marketState = await getSpyZeroDteDeterministicMarketState();

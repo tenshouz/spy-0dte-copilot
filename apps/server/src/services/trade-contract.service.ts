@@ -36,8 +36,8 @@ const defaultDependencies: TradeContractServiceDependencies = {
 };
 
 /**
- * Retrieves one Market-State response and derives BIAS_V1, TRADE_PLAN_V2, and
- * RISK_V1 from that same object. The Options Chain is requested at most once,
+ * Retrieves one Market-State response and derives BIAS_V1, TRADE_PLAN_V3, and
+ * RISK_V2 from that same object. The Options Chain is requested at most once,
  * and only when the Risk result is READY + QUALIFIED and currently eligible.
  */
 export async function getSpyZeroDteContractSelectionWithDependencies(

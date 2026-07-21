@@ -15,7 +15,7 @@ export const TRADE_PLAN_TRANSPORT_WARNING =
 
 export function useSpyZeroDteDeterministicTradePlan() {
   return useQuery({
-    queryKey: ["spy-zero-dte-deterministic-trade-plan", "TRADE_PLAN_V2"],
+    queryKey: ["spy-zero-dte-deterministic-trade-plan", "TRADE_PLAN_V3"],
     queryFn: apiClient.getSpyZeroDteDeterministicTradePlan,
     refetchInterval: () => getSpyDerivedPollIntervalMs(),
     ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,

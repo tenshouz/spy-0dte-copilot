@@ -485,23 +485,43 @@ await test("candidate text is decision support and contains no buy or sell instr
   }
 });
 
-await test("service retrieves Assembly exactly once", async () => {
+await test("service retrieves Assembly exactly once and audits the same snapshot", async () => {
   let assemblyCalls = 0;
   let fallbackCalls = 0;
+  let captureCalls = 0;
+  const assembly = baseAssembly();
   const result = await getSpyZeroDteTradePlanAlertCandidateWithDependencies({
     getAssembly: async () => {
       assemblyCalls += 1;
-      return baseAssembly();
+      return assembly;
     },
     getLastResortAssembly: () => {
       fallbackCalls += 1;
       return assemblyForState("UNAVAILABLE");
+    },
+    captureDecisionCycle: async (capturedAssembly) => {
+      captureCalls += 1;
+      assert.equal(capturedAssembly, assembly);
     },
     now: () => ALERT_AT_MS,
   });
   assert.equal(result.alertState, "CANDIDATE");
   assert.equal(assemblyCalls, 1);
   assert.equal(fallbackCalls, 0);
+  assert.equal(captureCalls, 1);
+});
+
+
+await test("decision-cycle audit failures never block the alert candidate", async () => {
+  const result = await getSpyZeroDteTradePlanAlertCandidateWithDependencies({
+    getAssembly: async () => baseAssembly(),
+    getLastResortAssembly: () => assemblyForState("UNAVAILABLE"),
+    captureDecisionCycle: async () => {
+      throw new Error("audit unavailable");
+    },
+    now: () => ALERT_AT_MS,
+  });
+  assert.equal(result.alertState, "CANDIDATE");
 });
 
 await test("service failure uses last-resort Assembly without retrying", async () => {

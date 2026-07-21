@@ -8,6 +8,7 @@ import {
   type ExposureWall,
   type GammaCliff,
   type GammaFlipProxy,
+  type GammaSignTransition,
   type GexStrikeRow,
   type SpyZeroDteDexProxyResponse,
   type SpyZeroDteExposureStructureResponse,
@@ -230,6 +231,58 @@ export function rankGammaCliffs(
     .map((cliff, index) => ({ rank: index + 1, ...cliff }));
 }
 
+export function rankGammaSignTransitions(
+  rows: readonly GexStrikeRow[],
+  underlyingPrice: number,
+  grossGamma: number,
+): GammaSignTransition[] {
+  const sorted = [...rows].sort((a, b) => a.strikePrice - b.strikePrice);
+  const transitions: Omit<GammaSignTransition, "rank">[] = [];
+
+  for (let index = 0; index < sorted.length - 1; index += 1) {
+    const lower = sorted[index];
+    const upper = sorted[index + 1];
+    if (!lower || !upper) continue;
+    const lowerNet = lower.netGammaExposureProxy;
+    const upperNet = upper.netGammaExposureProxy;
+    const strictCross =
+      (lowerNet < 0 && upperNet > 0) ||
+      (lowerNet > 0 && upperNet < 0);
+    if (!strictCross) continue;
+
+    const fraction = -lowerNet / (upperNet - lowerNet);
+    const estimatedStrike =
+      lower.strikePrice + fraction * (upper.strikePrice - lower.strikePrice);
+    const absoluteGammaChange = Math.abs(upperNet - lowerNet);
+    transitions.push({
+      lowerStrike: lower.strikePrice,
+      upperStrike: upper.strikePrice,
+      estimatedStrike,
+      netGammaAtLower: lowerNet,
+      netGammaAtUpper: upperNet,
+      absoluteGammaChange,
+      shareOfGrossGammaPercent:
+        grossGamma <= 0 ? 0 : (absoluteGammaChange / grossGamma) * 100,
+      direction:
+        lowerNet < 0 ? "NEGATIVE_TO_POSITIVE" : "POSITIVE_TO_NEGATIVE",
+      ...distanceFromUnderlying(estimatedStrike, underlyingPrice),
+    });
+  }
+
+  return transitions
+    .sort((left, right) => {
+      const leftDistance = Math.abs(left.estimatedStrike - underlyingPrice);
+      const rightDistance = Math.abs(right.estimatedStrike - underlyingPrice);
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+      if (right.absoluteGammaChange !== left.absoluteGammaChange) {
+        return right.absoluteGammaChange - left.absoluteGammaChange;
+      }
+      return left.estimatedStrike - right.estimatedStrike;
+    })
+    .slice(0, MAX_RANKED_LEVELS)
+    .map((transition, index) => ({ rank: index + 1, ...transition }));
+}
+
 function largestStrikeBy(
   rows: readonly GexStrikeRow[],
   selector: (row: GexStrikeRow) => number,
@@ -317,6 +370,7 @@ export function buildUnavailableSpyZeroDteExposureStructureResponse(
     largestNegativeNetGexStrike: null,
     gammaFlipProxy: unavailableGammaFlip(),
     gammaCliffs: [],
+    gammaSignTransitions: [],
     returnedWindowNetDeltaExposureProxy: null,
     dexRegime: "UNAVAILABLE",
     dexRegimeRatioPercent: null,
@@ -333,6 +387,7 @@ export function buildUnavailableSpyZeroDteExposureStructureResponse(
       openInterestMayBeStaleIntraday: true,
       analyticalCallPositivePutNegativeConvention: true,
       gammaFlipIsCumulativeBalanceProxy: true,
+      gammaSignTransitionsAreAdjacentStrictCrossings: true,
       notObservedDealerInventory: true,
       noStandaloneSignal: true,
       noPrivateAccountData: true,
@@ -398,6 +453,11 @@ export function deriveSpyZeroDteExposureStructure(
 
   const gammaFlipProxy = deriveGammaFlipProxy(gex.strikes, underlyingPrice);
   const gammaCliffs = rankGammaCliffs(gex.strikes, underlyingPrice);
+  const gammaSignTransitions = rankGammaSignTransitions(
+    gex.strikes,
+    underlyingPrice,
+    grossGamma,
+  );
   const warnings = new Set<ExposureStructureWarningCode>();
   if (gex.coverageState === "PARTIAL") warnings.add("PARTIAL_GEX_COVERAGE");
   if (gex.metricState === "STALE") warnings.add("RETAINED_STALE_CHAIN");
@@ -479,6 +539,7 @@ export function deriveSpyZeroDteExposureStructure(
     ),
     gammaFlipProxy,
     gammaCliffs,
+    gammaSignTransitions,
     returnedWindowNetDeltaExposureProxy,
     dexRegime,
     dexRegimeRatioPercent,
@@ -495,6 +556,7 @@ export function deriveSpyZeroDteExposureStructure(
       openInterestMayBeStaleIntraday: true,
       analyticalCallPositivePutNegativeConvention: true,
       gammaFlipIsCumulativeBalanceProxy: true,
+      gammaSignTransitionsAreAdjacentStrictCrossings: true,
       notObservedDealerInventory: true,
       noStandaloneSignal: true,
       noPrivateAccountData: true,

@@ -19,6 +19,9 @@ model User {
   automationDeliveryKeys BackendAutomationDeliveryKey[]
   automationDeliveryLogs BackendAutomationDeliveryLog[]
   historicalReplayRuns HistoricalReplayRun[]
+  decisionCycles DeterministicDecisionCycle[]
+  pointInTimeOptionsChains PointInTimeOptionsChainSnapshot[]
+  pointInTimeBacktestRuns PointInTimeBacktestRun[]
   createdAt    DateTime     @default(now())
 }
 
@@ -217,4 +220,74 @@ model HistoricalReplayRun {
 
   @@index([userId, createdAt])
   @@index([userId, auditState, createdAt])
+}
+
+model DeterministicDecisionCycle {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceReferenceKey       String
+  currentMarketDate        String
+  sourceCalculatedAt       DateTime
+  capturedAt               DateTime @default(now())
+  engineState              String
+  planState                String
+  direction                String
+  setupType                String?
+  triggerLifecycleState    String?
+  confirmationPassed       Boolean?
+  executionAlignmentScore  Float?
+  snapshotIntegrityState   String?
+  selectedContractSymbol   String?
+  primaryReasonCode        String
+  warningCode              String?
+  sourceAssembly           Json
+  sourceMarketState        Json?
+  optionsChainSnapshotId   String?
+  optionsChainSnapshot     PointInTimeOptionsChainSnapshot? @relation(fields: [optionsChainSnapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, sourceReferenceKey])
+  @@index([userId, capturedAt])
+  @@index([userId, currentMarketDate, capturedAt])
+  @@index([userId, planState, capturedAt])
+  @@index([userId, setupType, capturedAt])
+}
+
+
+
+model PointInTimeOptionsChainSnapshot {
+  id                String   @id
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceKey         String
+  currentMarketDate String
+  fetchedAt         DateTime
+  capturedAt        DateTime @default(now())
+  metricState       String
+  sourceState       String
+  payload           Json
+  decisionCycles    DeterministicDecisionCycle[]
+
+  @@unique([userId, sourceKey])
+  @@index([userId, fetchedAt])
+  @@index([userId, currentMarketDate, fetchedAt])
+}
+
+model PointInTimeBacktestRun {
+  id                   String   @id
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt            DateTime @default(now())
+  startMarketDate      String?
+  endMarketDate        String?
+  maximumHoldMinutes   Int
+  decisionCycleCount   Int
+  episodeCount         Int
+  targetFirstCount     Int
+  stopFirstCount       Int
+  winRatePercent       Float?
+  averageRMultiple     Float?
+  result               Json
+
+  @@index([userId, createdAt])
 }

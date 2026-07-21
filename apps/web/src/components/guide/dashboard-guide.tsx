@@ -104,7 +104,7 @@ export function DashboardGuide() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <BadgeLike tone="accent">Start here</BadgeLike>
-                <BadgeLike tone="default">Release 1.3.0</BadgeLike>
+                <BadgeLike tone="default">Release 1.5.0</BadgeLike>
               </div>
               <h2 className="font-mono text-lg font-semibold">
                 The dashboard reads the market, explains the structure, and waits for a complete plan.

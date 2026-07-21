@@ -1,83 +1,46 @@
-# SPY 0DTE Copilot — Local V1.3.0 Complete
+# SPY 0DTE Copilot — V1.5.0 Point-in-Time Backtesting
 
-SPY 0DTE Copilot is a local, single-user decision-support dashboard for discretionary SPY same-day options trading. It combines backend-only Schwab connectivity, deterministic market structure, 0DTE options analytics, Trade Plan assembly, read-only sizing support, Discord notifications, persistent journaling, performance analytics, and captured-snapshot historical replay.
+SPY 0DTE Copilot is a local, deterministic, read-only trading decision-support dashboard. V1.5.0 adds the strongest backtesting foundation that can be built before connecting a licensed historical options dataset: exact **forward capture**, historical-boundary recomputation, objective outcome grading, and a dedicated Point-in-Time Backtesting page.
 
-**V1.3.0 does not create, route, modify, or execute brokerage orders.** It is not investment advice.
+V1.5.0 does not place, route, modify, or cancel brokerage orders. Backtest results are research outputs, not guarantees of future performance.
 
-## V1.3.0 capabilities
+## What V1.5.0 adds
 
-- Encrypted Schwab OAuth token storage and refresh recovery
-- Normalized SPY quote, bounded five-minute candles, and current-date options chain
-- Fast live refresh policy: 5-second quotes, 10-second official candle refresh, 15-second derived Trade Plan refresh, focus/reconnect refetch, and an independent live quote chart marker
-- Built-in searchable Dashboard Guide with first-time workflow, page-by-page explanations, status dictionary, Trade Plan flow, alert checklist, glossary, and safe-sharing guidance
-- Provider-aligned 07:00–09:30 ET premarket levels, RTH VWAP, gaps, 5/15/30-minute opening ranges, and Traditional daily/weekly pivots
-- ATM straddle-Mark expected move
-- Returned-window GEX/DEX proxies, ranked walls, Gamma-balance proxy, cliffs, and DEX anchor
-- Deterministic Market Context, Market State, bias, Trade Plan, risk, contract selection, and assembly
-- Soft GEX/DEX exposure confirmation that adjusts plan confidence without creating direction or blocking eligibility
-- Manual and read-only Schwab-assisted position sizing
-- Deterministic scheduled reports and Discord delivery
-- Persistent backend automation with lease protection, restart-safe deduplication, and sanitized audit history
-- Persistent Journal snapshots, user-entered outcomes, P&L annotations, and performance analytics
-- Captured-snapshot historical replay with no-look-ahead timestamp validation
-- V1 System Readiness page and explicit live-data probe
+- Stores the exact deterministic Market State used by every captured decision cycle.
+- Deduplicates and stores the exact same-day SPY Options Chain snapshot when the contract engine requested it.
+- Recomputes the current deterministic bias, plan, risk, contract, and Assembly at each historical source boundary.
+- Audits timestamps and rejects any source containing data after the simulated boundary.
+- Creates one episode from the first `READY` observation per unique plan signature.
+- Grades target-first, stop-first, ambiguous same-candle, timeout, session-end, and insufficient-coverage outcomes.
+- Calculates MFE, MAE, duration, underlying points, realized R, and estimated option P&L.
+- Uses future completed five-minute candles for target/stop ordering; quote samples can improve excursion measurements but never decide first touch.
+- Separates the frozen historical plan from the later outcome in the user interface.
+- Preserves empirical Gamma as an observational research dimension only.
+- Saves backtest runs and breakdowns by setup, direction, and Gamma regime.
 
-## Repository structure
+## Critical limitation
 
-```text
-spy-0dte-copilot/
-├── apps/
-│   ├── web/       Next.js 15 / React 19 dashboard
-│   └── server/    Express / Prisma deterministic API
-├── packages/
-│   └── shared/    Shared Zod contracts and TypeScript types
-├── docs/
-│   ├── V1_RELEASE_RUNBOOK.md
-│   ├── V1_PRD_COMPLIANCE_AUDIT.md
-│   ├── V1_1_GEX_DEX_SOFT_CONFIRMATION.md
-│   ├── V1_1_1_PROVIDER_ALIGNED_PREMARKET.md
-│   ├── V1_2_LIVE_MARKET_REFRESH.md
-│   └── V1_3_DASHBOARD_GUIDE.md
-└── scripts/
-    ├── run-specs.mjs
-    └── verify-v1.mjs
-```
+Exact V1.5 replay begins **after this release is installed and the new migration is applied**. Earlier V1.4 decision-cycle rows did not store the full Market State and Options Chain payloads required for exact recomputation. V1.5 does not invent those missing inputs.
 
-## Prerequisites
+A historical options dataset can be connected later through a dedicated adapter without changing the replay methodology.
 
-- Node.js 20+
-- npm 10+
-- Docker Desktop
-- A Schwab developer application
-- An HTTPS tunnel for the exact Schwab callback during local development
-- Optional Discord incoming webhook
+## Installation
 
-## Initial local setup
+Preserve the existing hidden `.git` directory and `apps/server/.env`, then copy the V1.5.0 files over the project.
 
-```powershell
-npm install
-docker compose up -d
-Copy-Item apps\server\.env.example apps\server\.env
-```
-
-Edit `apps/server/.env` locally. Never commit or upload it.
-
-Generate an encryption key:
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Load `DATABASE_URL` from the ignored backend environment file without displaying it, then deploy migrations and generate Prisma:
+Stop the backend before running Prisma commands. From the repository root in PowerShell:
 
 ```powershell
 $databaseLine = Get-Content apps\server\.env |
   Where-Object { $_ -match '^\s*DATABASE_URL\s*=' -and $_ -notmatch '^\s*#' } |
   Select-Object -First 1
 
-if (!$databaseLine) { throw "DATABASE_URL is missing from apps/server/.env." }
+if (!$databaseLine) {
+  throw "DATABASE_URL is missing from apps/server/.env."
+}
 
 $databaseValue = ($databaseLine -split '=', 2)[1].Trim()
+
 if (
   ($databaseValue.StartsWith('"') -and $databaseValue.EndsWith('"')) -or
   ($databaseValue.StartsWith("'") -and $databaseValue.EndsWith("'"))
@@ -92,9 +55,9 @@ npx prisma migrate deploy --schema apps/server/prisma/schema.prisma
 npx prisma generate --schema apps/server/prisma/schema.prisma
 ```
 
-## Run locally
+No npm dependency or environment-variable name changed. If the existing `node_modules` folder is intact, `npm install` is not required solely for V1.5.0.
 
-Use separate terminals:
+Restart the application:
 
 ```powershell
 npm run dev:server
@@ -104,39 +67,54 @@ npm run dev:server
 npm run dev:web
 ```
 
-Open `http://localhost:3000`. The API defaults to `http://localhost:4000`.
+## Building the capture history
 
-For Schwab OAuth, keep the HTTPS tunnel pointed at backend port 4000 and register this exact path:
+For continuous capture, keep the backend running and enable **Persistent Backend Automation** in Settings. V1.5 evaluates and captures one deterministic candidate each automation cadence even when Trade Plan Discord alerts are disabled or the webhook is not configured. No outbound message is required for research capture.
 
-```text
-https://<stable-tunnel-host>/api/auth/schwab/callback
-```
+The capture system is best effort: a database failure never changes the live trading output.
 
-## V1.3.0 readiness and verification
+## Point-in-Time Backtesting page
 
-Open:
+Open **Point-in-Time Backtest** from the navigation. Select optional market-date bounds and a maximum hold time, then run the test.
 
-```text
-http://localhost:3000/system
-```
+The page shows:
 
-The page separates configuration/runtime readiness from an explicit provider probe. The probe may call Schwab but never sends Discord messages, writes Journal entries, accesses private account data, sizes a position, or creates an order.
+- Source decision-cycle and date coverage.
+- Recomputed trade episodes.
+- Win rate among target-first and stop-first outcomes.
+- Average R and estimated option P&L.
+- MFE and MAE.
+- Setup, direction, and Gamma-regime breakdowns.
+- Audit issues and incomplete-capture warnings.
+- A per-episode frozen plan panel separate from the post-plan outcome.
 
-After Prisma generation, run the complete source verification:
+## Methodology safeguards
+
+- Historical clock: stored `sourceCalculatedAt`.
+- No look-ahead: all source timestamps and completed-candle boundaries must be at or before the replay clock.
+- Entry: first `READY` occurrence per unique plan signature.
+- Underlying fill: captured current price.
+- Option fill: captured ask.
+- Target/stop ordering: completed five-minute OHLC first touch.
+- Same-candle target and stop: ambiguous; no favorable or unfavorable ordering is invented.
+- Missing future coverage: `INSUFFICIENT_FUTURE_DATA`, not a fabricated timeout.
+- Option exit: first observed later bid within the allowed lag, otherwise the stored conservative target/stop scenario when applicable.
+
+## Verification
+
+After Prisma generation, run:
 
 ```powershell
 npm run verify:v1
 ```
 
-This executes every backend and frontend specification, server and frontend TypeScript validation, lint, the production frontend build, tracked-secret checks, route safety checks, and whitespace validation.
+The focused backtest tests can also be run directly:
 
-## Important operational notes
+```powershell
+npx --no-install tsx apps/server/src/services/point-in-time-backtest.spec.ts
+npx --no-install tsx apps/server/src/services/trade-plan-assembly.service.spec.ts
+npx --no-install tsx apps/server/src/routes/point-in-time-backtest.routes.spec.ts
+npx --no-install tsx apps/web/src/lib/point-in-time-backtest-view.spec.ts
+```
 
-- Market-data payloads explicitly identify LIVE, STALE, MOCK, or UNAVAILABLE state.
-- A current-date options chain can be legitimately not applicable on weekends, holidays, or dates without a same-day SPY expiration.
-- Persistent automation is safely disabled by default.
-- The backend must remain running for scheduled automation.
-- Keep real Schwab credentials, tokens, the encryption key, Discord webhook URL, database dumps, and account identifiers private.
-- The legacy typed mock compatibility endpoints are not used by the primary deterministic V1.3.0 panels.
-
-See [the V1.3.0 release runbook](docs/V1_RELEASE_RUNBOOK.md) for backup, restore, recovery, incident handling, and shutdown procedures. See [the V1.3.0 PRD compliance audit](docs/V1_PRD_COMPLIANCE_AUDIT.md) for scope and known limitations, and [the GEX/DEX soft-confirmation methodology](docs/V1_1_GEX_DEX_SOFT_CONFIRMATION.md) for the fixed weights and safety boundaries. See [the provider-aligned premarket methodology](docs/V1_1_1_PROVIDER_ALIGNED_PREMARKET.md) for the 07:00 ET coverage policy and [the V1.2.0 live refresh policy](docs/V1_2_LIVE_MARKET_REFRESH.md) for polling, cache, chart-marker, and data-age behavior. See [the V1.3.0 Dashboard Guide methodology](docs/V1_3_DASHBOARD_GUIDE.md) for onboarding scope and public-sharing boundaries.
+See [the complete methodology](docs/V1_5_POINT_IN_TIME_BACKTESTING.md), [release notes](RELEASE_NOTES_v1.5.0.md), [implementation summary](IMPLEMENTATION_SUMMARY_v1.5.0.md), [verification report](VERIFICATION_REPORT_v1.5.0.md), and [the strongest next-version roadmap](STRONGEST_NEXT_VERSION.md).

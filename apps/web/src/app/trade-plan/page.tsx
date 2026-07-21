@@ -113,7 +113,7 @@ export default function TradePlanPage() {
           </Panel>
 
           <Panel
-            title="GEX / DEX Soft Confirmation"
+            title="Execution Quality & Exposure Context"
             className="min-w-0 lg:col-span-2"
             action={
               exposureView ? (
@@ -129,15 +129,15 @@ export default function TradePlanPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   <MetricCard
-                    label="Adjusted Plan Confidence"
+                    label="Execution Quality Alignment"
                     value={formatNullablePercent(plan.planConfidence?.adjustedConfidenceScore ?? null)}
-                    sublabel="Structural confidence plus soft exposure adjustment"
+                    sublabel="Uncalibrated alignment score — not win probability"
                     tone={exposureView.tone}
                   />
                   <MetricCard
-                    label="Confidence Adjustment"
+                    label="Exposure Adjustment"
                     value={formatSignedConfidencePoints(exposure.adjustmentPoints)}
-                    sublabel="Never an eligibility gate"
+                    sublabel="Disabled until calibration; context only"
                     tone={exposure.adjustmentPoints > 0 ? "bull" : exposure.adjustmentPoints < 0 ? "bear" : "default"}
                   />
                   <MetricCard label="Source Quality" value={exposure.sourceQuality} />
@@ -180,6 +180,14 @@ export default function TradePlanPage() {
             ) : (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <MetricCard label="Condition" value={plan.entryCondition.state} tone={plan.entryCondition.state === "WAITING" ? "wait" : "bull"} />
+                <MetricCard label="Setup Type" value={plan.entryCondition.setupType?.replaceAll("_", " ") ?? "—"} />
+                <MetricCard label="Trigger Lifecycle" value={plan.entryCondition.triggerLifecycleState?.replaceAll("_", " ") ?? "—"} tone={plan.entryCondition.confirmationPassed ? "bull" : "wait"} />
+                <MetricCard label="Confirmation Passed" value={plan.entryCondition.confirmationPassed === null || plan.entryCondition.confirmationPassed === undefined ? "—" : plan.entryCondition.confirmationPassed ? "Yes" : "No"} />
+                <MetricCard label="Buffered Trigger" value={formatNullablePrice(plan.entryCondition.bufferedTriggerLevel ?? null)} sublabel={`Buffer ${formatNullableNumber(plan.entryCondition.dynamicBufferPoints ?? null, 4)} SPY points`} />
+                <MetricCard label="Latest Completed Close" value={formatNullablePrice(plan.entryCondition.latestCompletedClose ?? null)} />
+                <MetricCard label="Recross Count" value={formatNullableNumber(plan.entryCondition.recrossCount ?? null, 0)} />
+                <MetricCard label="Breakout Volume Ratio" value={formatNullableNumber(plan.entryCondition.latestVolumeRatio ?? null, 2)} />
+                <MetricCard label="Chase Distance" value={formatNullableNumber(plan.entryCondition.chaseDistancePoints ?? null, 4)} sublabel="SPY points beyond raw trigger" />
                 <MetricCard
                   label={plan.entryCondition.state === "WAITING" ? "Trigger Level" : "Current Planning Reference"}
                   value={formatNullablePrice(plan.entryCondition.planningReferencePrice)}
@@ -241,6 +249,12 @@ export default function TradePlanPage() {
                 <MetricCard label="Volume" value={formatNullableNumber(plan.selectedContract.volume, 0)} />
                 <MetricCard label="Delta" value={formatNullableNumber(plan.selectedContract.delta, 4)} />
                 <MetricCard label="Selection Rank" value={formatNullableNumber(plan.selectedContract.selectionRank, 0)} />
+                <MetricCard label="Option Scenario" value={plan.optionRiskReward?.state ?? "—"} tone={plan.optionRiskReward?.state === "QUALIFIED" ? "bull" : "wait"} />
+                <MetricCard label="Estimated Premium R:R" value={formatNullableNumber(plan.optionRiskReward?.estimatedPremiumRewardRiskRatio ?? null, 2)} sublabel={`Minimum ${formatNullableNumber(plan.optionRiskReward?.minimumRequiredPremiumRewardRiskRatio ?? null, 2)}`} />
+                <MetricCard label="Estimated Premium Risk" value={formatNullablePrice(plan.optionRiskReward?.estimatedPremiumRiskPerShare ?? null)} sublabel="Per option share; scenario estimate" />
+                <MetricCard label="Estimated Premium Reward" value={formatNullablePrice(plan.optionRiskReward?.estimatedPremiumRewardPerShare ?? null)} sublabel="Per option share; scenario estimate" />
+                <MetricCard label="Estimated Stop Premium" value={formatNullablePrice(plan.optionRiskReward?.estimatedInvalidationExitPremium ?? null)} sublabel="Not a guaranteed fill" />
+                <MetricCard label="Estimated Objective Premium" value={formatNullablePrice(plan.optionRiskReward?.estimatedObjectiveExitPremium ?? null)} sublabel="Not a guaranteed fill" />
               </div>
             </Panel>
           ) : null}

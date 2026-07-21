@@ -1,39 +1,43 @@
-SPY 0DTE COPILOT — CUMULATIVE UX UPDATE FOR BASELINE 8ab30c8
+SPY 0DTE COPILOT V1.5.0 — APPLY INSTRUCTIONS
 
-This changed-files package contains both:
-1. The previously delivered chart-level visibility controls.
-2. The new pivot ordering/color and compact Dashboard structure-card improvements.
+1. Preserve the hidden .git directory and apps/server/.env.
+2. Copy the V1.5.0 files over the existing project.
+3. Stop the backend before Prisma generation.
+4. From the repository root, load DATABASE_URL and run:
 
-It is safe to apply whether or not the earlier chart-toggle package was already copied into the project.
+$databaseLine = Get-Content apps\server\.env |
+  Where-Object { $_ -match '^\s*DATABASE_URL\s*=' -and $_ -notmatch '^\s*#' } |
+  Select-Object -First 1
 
-WHAT CHANGED
-- Dashboard and Market Data charts: shared per-level visibility menu with Core, All, and None presets.
-- Daily and Weekly pivot tables: R2 → R1 → Pivot → S1 → S2.
-- Pivot colors: resistance values are red; support values are green; Pivot remains neutral.
-- Structural Bias: bullish/bearish/neutral counts, primary driver, and counterweight.
-- Structural Confidence: bull score, bear score, contradiction, data quality, and confidence-limiter explanation.
-- Market Structure: deterministic directional read and nearest validated key level with distance.
-- Compact Dashboard 0DTE Exposure Structure: responsive 2×2 desktop metric layout and collapsed Methodology disclosure.
-- Full Market Data Exposure Structure remains detailed.
+if (!$databaseLine) {
+  throw "DATABASE_URL is missing from apps/server/.env."
+}
 
-HOW TO APPLY
-1. Close the frontend development terminal, or stop it with Ctrl+C.
-2. Extract this ZIP into a temporary folder.
-3. Copy the included apps folder into the root of the real project:
-   C:\Users\navam\Downloads\spy-0dte-copilot (1)\spy-0dte-copilot
-4. Allow Windows to merge folders and replace files.
-5. From the real project root, restart the frontend:
-   npm run dev:web
+$databaseValue = ($databaseLine -split '=', 2)[1].Trim()
 
-NOT REQUIRED
-- npm install
-- Prisma generate or migrate
-- Docker/database changes
-- Backend restart
-- Environment-variable changes
+if (
+  ($databaseValue.StartsWith('"') -and $databaseValue.EndsWith('"')) -or
+  ($databaseValue.StartsWith("'") -and $databaseValue.EndsWith("'"))
+) {
+  $databaseValue = $databaseValue.Substring(1, $databaseValue.Length - 2)
+}
 
-VERIFICATION COMPLETED
-- ESLint passed.
-- Frontend TypeScript no-emit validation passed.
-- All 21 frontend spec files passed.
-- Production build reached the existing next/font step, then was blocked only because the isolated environment could not reach fonts.googleapis.com for Inter and JetBrains Mono.
+$env:DATABASE_URL = $databaseValue
+Remove-Variable databaseLine, databaseValue
+
+npx prisma migrate deploy --schema apps/server/prisma/schema.prisma
+npx prisma generate --schema apps/server/prisma/schema.prisma
+
+5. Restart in separate PowerShell terminals:
+
+npm run dev:server
+npm run dev:web
+
+6. Open System Readiness, then Settings. Enable Persistent Backend Automation to collect continuous point-in-time research snapshots.
+7. Open Point-in-Time Backtest after enough snapshots have accumulated.
+8. Verify locally with:
+
+npm run verify:v1
+
+No npm package or environment-variable name changed in V1.5.0.
+Exact point-in-time history starts only after the V1.5.0 migration is active.

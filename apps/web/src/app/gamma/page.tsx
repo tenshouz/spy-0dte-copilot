@@ -7,6 +7,7 @@ import type {
 import { DexProxyChart } from "@/components/dashboard/dex-proxy-chart";
 import { GexProxyChart } from "@/components/dashboard/gex-proxy-chart";
 import { ExposureStructurePanel } from "@/components/dashboard/exposure-structure-panel";
+import { EmpiricalGammaResearchPanel } from "@/components/dashboard/empirical-gamma-research-panel";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable, type DataTableColumn } from "@/components/panels/data-table";
 import { MetricCard } from "@/components/panels/metric-card";
@@ -145,7 +146,7 @@ export default function GammaPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="GEX / DEX"
-        description="Live returned-window SPY 0DTE exposure structure, ranked Gamma walls and cliffs, cumulative Gamma-balance proxy, and GEX/DEX calculations from one normalized Options Chain snapshot."
+        description="Live returned-window SPY 0DTE exposure structure plus research-only, setup-matched outcome evidence for Gamma regimes, walls, cliffs, and strict sign transitions."
         action={
           <div className="flex items-center gap-2">
             <Badge variant={gexBadge.variant}>GEX {gexBadge.label}</Badge>
@@ -165,6 +166,8 @@ export default function GammaPage() {
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         <ExposureStructurePanel className="lg:col-span-4" />
+
+        <EmpiricalGammaResearchPanel className="lg:col-span-4" />
 
         <Panel title="Returned-Window Call GEX" isLoading={gexLoading} isError={gexError}>
           <MetricCard

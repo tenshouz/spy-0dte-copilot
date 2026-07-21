@@ -30,6 +30,15 @@ const EMPTY_ENTRY_CONDITION = {
   signedDistancePoints: null,
   sourceFeatureIds: [],
   sourceValues: { vwap: null, openingRangeBoundary: null },
+  setupType: "UNAVAILABLE" as const,
+  triggerLifecycleState: null,
+  confirmationPassed: null,
+  dynamicBufferPoints: null,
+  bufferedTriggerLevel: null,
+  latestCompletedClose: null,
+  recrossCount: null,
+  latestVolumeRatio: null,
+  chaseDistancePoints: null,
   disclosureCode: "PLANNING_REFERENCE_ONLY" as const,
 };
 
@@ -79,6 +88,13 @@ const EMPTY_SELECTED_CONTRACT = {
   tradeAt: null,
   quoteAgeMilliseconds: null,
   quoteFreshnessState: null,
+  optionScenarioState: null,
+  estimatedInvalidationExitPremium: null,
+  estimatedObjectiveExitPremium: null,
+  estimatedPremiumRiskPerShare: null,
+  estimatedPremiumRewardPerShare: null,
+  estimatedPremiumRewardRiskRatio: null,
+  scenarioMinutes: null,
   strikeDistancePoints: null,
   selectionRank: null,
 } as const;
@@ -94,12 +110,13 @@ const DISCLOSURES = {
   structuralInvalidation: "STRUCTURAL_INVALIDATION_REFERENCE_ONLY" as const,
   underlyingObjective: "UNDERLYING_OBJECTIVE_REFERENCE_ONLY" as const,
   premiumReference: "MIDPOINT_REFERENCE_ONLY" as const,
-  confidence: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" as const,
+  confidence: "EXECUTION_QUALITY_ALIGNMENT_EXPOSURE_CONTEXT_ONLY" as const,
   noOrderExecution: true as const,
   noPositionSizing: true as const,
   noGuaranteedFill: true as const,
   noPremiumTarget: true as const,
   noPremiumStop: true as const,
+  premiumScenarioEstimateOnly: true as const,
 };
 
 const METHODOLOGY = {
@@ -110,7 +127,7 @@ const METHODOLOGY = {
     "SPY_ZERO_DTE_DETERMINISTIC_OBJECTIVE_RISK_FRAMEWORK",
     "SPY_ZERO_DTE_DETERMINISTIC_CONTRACT_SELECTION_LIQUIDITY",
   ] as const,
-  sourceMethodologies: ["V1", "BIAS_V1", "TRADE_PLAN_V2", "RISK_V1", "CONTRACT_V1"] as const,
+  sourceMethodologies: ["V1", "BIAS_V1", "TRADE_PLAN_V3", "RISK_V2", "CONTRACT_V2"] as const,
   calculationUnit: "SPY_UNDERLYING_PRICE_POINTS" as const,
   assemblyOnly: true as const,
   contractCandidateDetailsRoute: "/api/trade-contract/spy" as const,
@@ -388,6 +405,15 @@ function entryCondition(
       signedDistancePoints: tradePlan.trigger.signedDistancePoints,
       sourceFeatureIds: tradePlan.trigger.sourceFeatureIds,
       sourceValues: tradePlan.trigger.sourceValues,
+      setupType: tradePlan.setupType ?? tradePlan.trigger.setupType ?? "UNAVAILABLE",
+      triggerLifecycleState: tradePlan.trigger.confirmation?.lifecycleState ?? null,
+      confirmationPassed: tradePlan.trigger.confirmation?.confirmationPassed ?? null,
+      dynamicBufferPoints: tradePlan.trigger.confirmation?.dynamicBufferPoints ?? null,
+      bufferedTriggerLevel: tradePlan.trigger.confirmation?.bufferedTriggerLevel ?? null,
+      latestCompletedClose: tradePlan.trigger.confirmation?.latestCompletedClose ?? null,
+      recrossCount: tradePlan.trigger.confirmation?.recrossCount ?? null,
+      latestVolumeRatio: tradePlan.trigger.confirmation?.latestVolumeRatio ?? null,
+      chaseDistancePoints: tradePlan.trigger.confirmation?.chaseDistancePoints ?? null,
       disclosureCode: "PLANNING_REFERENCE_ONLY" as const,
     };
   }
@@ -403,6 +429,15 @@ function entryCondition(
       signedDistancePoints: tradePlan.trigger.signedDistancePoints,
       sourceFeatureIds: tradePlan.trigger.sourceFeatureIds,
       sourceValues: tradePlan.trigger.sourceValues,
+      setupType: tradePlan.setupType ?? tradePlan.trigger.setupType ?? "UNAVAILABLE",
+      triggerLifecycleState: tradePlan.trigger.confirmation?.lifecycleState ?? null,
+      confirmationPassed: tradePlan.trigger.confirmation?.confirmationPassed ?? null,
+      dynamicBufferPoints: tradePlan.trigger.confirmation?.dynamicBufferPoints ?? null,
+      bufferedTriggerLevel: tradePlan.trigger.confirmation?.bufferedTriggerLevel ?? null,
+      latestCompletedClose: tradePlan.trigger.confirmation?.latestCompletedClose ?? null,
+      recrossCount: tradePlan.trigger.confirmation?.recrossCount ?? null,
+      latestVolumeRatio: tradePlan.trigger.confirmation?.latestVolumeRatio ?? null,
+      chaseDistancePoints: tradePlan.trigger.confirmation?.chaseDistancePoints ?? null,
       disclosureCode: "PLANNING_REFERENCE_ONLY" as const,
     };
   }
@@ -500,6 +535,13 @@ function selectedContractSummary(candidate: ContractSelectionCandidate | null) {
     tradeAt: candidate.tradeAt,
     quoteAgeMilliseconds: candidate.quoteAgeMilliseconds,
     quoteFreshnessState: candidate.quoteFreshnessState,
+    optionScenarioState: candidate.optionScenarioState ?? null,
+    estimatedInvalidationExitPremium: candidate.estimatedInvalidationExitPremium ?? null,
+    estimatedObjectiveExitPremium: candidate.estimatedObjectiveExitPremium ?? null,
+    estimatedPremiumRiskPerShare: candidate.estimatedPremiumRiskPerShare ?? null,
+    estimatedPremiumRewardPerShare: candidate.estimatedPremiumRewardPerShare ?? null,
+    estimatedPremiumRewardRiskRatio: candidate.estimatedPremiumRewardRiskRatio ?? null,
+    scenarioMinutes: candidate.scenarioMinutes ?? null,
     strikeDistancePoints: candidate.strikeDistancePoints,
     selectionRank: candidate.selectionRank,
   };
@@ -522,6 +564,9 @@ function sourceSummary(
       calculatedAt: marketState.calculatedAt,
       engineState: marketState.engineState,
       warningCode: marketState.warningCode,
+      snapshotIntegrityState: marketState.snapshotIntegrity?.state ?? null,
+      marketStructureSkewMilliseconds:
+        marketState.snapshotIntegrity?.marketStructureSkewMilliseconds ?? null,
     },
     bias: {
       product: bias.product,
@@ -605,6 +650,30 @@ function riskRewardSummary(
   };
 }
 
+function optionRiskRewardSummary(
+  candidate: ContractSelectionCandidate | null,
+) {
+  return {
+    state: candidate?.optionScenarioState ?? "UNAVAILABLE",
+    estimatedInvalidationExitPremium: candidate?.estimatedInvalidationExitPremium ?? null,
+    estimatedObjectiveExitPremium: candidate?.estimatedObjectiveExitPremium ?? null,
+    estimatedPremiumRiskPerShare: candidate?.estimatedPremiumRiskPerShare ?? null,
+    estimatedPremiumRewardPerShare: candidate?.estimatedPremiumRewardPerShare ?? null,
+    estimatedPremiumRewardRiskRatio: candidate?.estimatedPremiumRewardRiskRatio ?? null,
+    minimumRequiredPremiumRewardRiskRatio:
+      contractMinimumPremiumRewardRiskRatio(candidate),
+    scenarioMinutes: candidate?.scenarioMinutes ?? null,
+    calculationUnit: "OPTION_PREMIUM_PER_SHARE_ESTIMATE" as const,
+    disclosureCode: "CONSERVATIVE_SCENARIO_ESTIMATE_NOT_GUARANTEED" as const,
+  };
+}
+
+function contractMinimumPremiumRewardRiskRatio(
+  _candidate: ContractSelectionCandidate | null,
+): number {
+  return 1.25;
+}
+
 function consistencyFailureForReady(
   risk: SpyZeroDteObjectiveRiskResponse,
   contract: SpyZeroDteContractSelectionResponse,
@@ -647,6 +716,16 @@ function consistencyFailureForReady(
   if (resolved.contract.selectionRank !== 1) {
     return {
       reason: "SOURCE_SELECTED_CONTRACT_NOT_RANK_ONE",
+      warning: "SOURCE_SELECTED_VALUE_INCONSISTENT",
+    };
+  }
+  if (
+    resolved.contract.optionScenarioState !== "QUALIFIED" ||
+    resolved.contract.estimatedPremiumRewardRiskRatio == null ||
+    resolved.contract.estimatedPremiumRewardRiskRatio < 1.25
+  ) {
+    return {
+      reason: "SOURCE_CONTRACT_SELECTION_INCONSISTENT",
       warning: "SOURCE_SELECTED_VALUE_INCONSISTENT",
     };
   }
@@ -754,11 +833,17 @@ export function buildSpyZeroDteTradePlanAssembly(
     planConfidence: {
       methodologyVersion: exposureConfirmation.methodologyVersion,
       structuralConfidenceScore: bias.confidenceScore,
+      executionQualityAlignmentScore:
+        tradePlan.tradeQuality?.finalAlignmentScore ?? exposureConfirmation.adjustedConfidenceScore,
       exposureAdjustmentPoints: exposureConfirmation.adjustmentPoints,
-      adjustedConfidenceScore: exposureConfirmation.adjustedConfidenceScore,
-      scope: "STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" as const,
+      adjustedConfidenceScore:
+        tradePlan.tradeQuality?.finalAlignmentScore ?? exposureConfirmation.adjustedConfidenceScore,
+      scope: tradePlan.tradeQuality
+        ? ("EXECUTION_QUALITY_ALIGNMENT_EXPOSURE_CONTEXT_ONLY" as const)
+        : ("STRUCTURAL_PLUS_SOFT_EXPOSURE_CONFIRMATION" as const),
     },
     exposureConfirmation,
+    gammaResearchContext: marketState.exposureStructure ?? null,
     entryCondition: entryCondition(risk, tradePlan, planState),
     structuralInvalidation:
       planState === "UNAVAILABLE" ? EMPTY_INVALIDATION : invalidationSummary(resolved.invalidation),
@@ -770,6 +855,7 @@ export function buildSpyZeroDteTradePlanAssembly(
       planState === "UNAVAILABLE"
         ? riskRewardSummary(risk, null, null)
         : riskRewardSummary(risk, resolved.invalidation, resolved.objective),
+    optionRiskReward: optionRiskRewardSummary(selectedCandidate),
     selectedContract: selectedContractSummary(selectedCandidate),
     premiumReference:
       planState === "READY" ? contract.premiumReference : EMPTY_PREMIUM_REFERENCE,

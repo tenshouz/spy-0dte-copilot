@@ -552,6 +552,49 @@ async function deliverTradePlanTransition(args: {
   }
 }
 
+async function evaluateTradePlanCaptureOnly(args: {
+  userId: string;
+  evaluatedAt: Date;
+  owner: string;
+  dependencies: BackendAutomationDependencies;
+}): Promise<BackendAutomationTaskStatus> {
+  try {
+    const candidate = SpyZeroDteTradePlanAlertCandidateResponseSchema.safeParse(
+      await args.dependencies.getCandidate(),
+    );
+    const reasonCode = candidate.success
+      ? "POINT_IN_TIME_CAPTURE_ONLY"
+      : "SOURCE_CANDIDATE_INCONSISTENT";
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: candidate.success ? "NO_DELIVERY" : "UNAVAILABLE",
+      reasonCode,
+      errorCode: candidate.success ? null : "SOURCE_CANDIDATE_INCONSISTENT",
+    });
+    return taskStatus(
+      args.evaluatedAt,
+      candidate.success ? "NO_DELIVERY" : "UNAVAILABLE",
+      reasonCode,
+    );
+  } catch {
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: "UNAVAILABLE",
+      reasonCode: "SOURCE_CANDIDATE_SERVICE_FAILURE",
+      errorCode: "SOURCE_CANDIDATE_SERVICE_FAILURE",
+    });
+    return taskStatus(
+      args.evaluatedAt,
+      "UNAVAILABLE",
+      "SOURCE_CANDIDATE_SERVICE_FAILURE",
+    );
+  }
+}
+
 async function evaluateTradePlanTask(args: {
   userId: string;
   runtime: BackendAutomationRuntimeRow;
@@ -560,26 +603,6 @@ async function evaluateTradePlanTask(args: {
   dependencies: BackendAutomationDependencies;
 }): Promise<BackendAutomationTaskStatus> {
   const config = args.dependencies.getWebhookConfig();
-  if (config.status === "missing") {
-    await args.dependencies.repository.updateTradePlanStatus({
-      userId: args.userId,
-      owner: args.owner,
-      evaluatedAt: args.evaluatedAt,
-      outcome: "NO_DELIVERY",
-      reasonCode: "WEBHOOK_NOT_CONFIGURED",
-    });
-    return taskStatus(args.evaluatedAt, "NO_DELIVERY", "WEBHOOK_NOT_CONFIGURED");
-  }
-  if (config.status === "invalid") {
-    await args.dependencies.repository.updateTradePlanStatus({
-      userId: args.userId,
-      owner: args.owner,
-      evaluatedAt: args.evaluatedAt,
-      outcome: "NO_DELIVERY",
-      reasonCode: "WEBHOOK_CONFIG_INVALID",
-    });
-    return taskStatus(args.evaluatedAt, "NO_DELIVERY", "WEBHOOK_CONFIG_INVALID");
-  }
 
   const previousState = parsePersistentTradePlanTransitionState(
     args.runtime.tradePlanTransitionState,
@@ -634,6 +657,30 @@ async function evaluateTradePlanTask(args: {
       "UNAVAILABLE",
       transition.primaryReasonCode,
     );
+  }
+
+  // Candidate evaluation intentionally occurs before webhook gating so the
+  // exact deterministic decision cycle can be captured for point-in-time replay
+  // even when outbound Discord delivery is disabled or not configured.
+  if (config.status === "missing") {
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: "NO_DELIVERY",
+      reasonCode: "WEBHOOK_NOT_CONFIGURED",
+    });
+    return taskStatus(args.evaluatedAt, "NO_DELIVERY", "WEBHOOK_NOT_CONFIGURED");
+  }
+  if (config.status === "invalid") {
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: "NO_DELIVERY",
+      reasonCode: "WEBHOOK_CONFIG_INVALID",
+    });
+    return taskStatus(args.evaluatedAt, "NO_DELIVERY", "WEBHOOK_CONFIG_INVALID");
   }
 
   const evaluation = evaluateSpyZeroDteTradePlanAlertTransition(
@@ -955,6 +1002,15 @@ export async function runBackendAutomationTickWithDependencies(args: {
     tradePlanAlerts = await evaluateTradePlanTask({
       userId,
       runtime,
+      evaluatedAt: calculatedAt,
+      owner: args.owner,
+      dependencies: args.dependencies,
+    });
+  } else {
+    // Persistent automation still evaluates the deterministic candidate so
+    // V1.5 captures a point-in-time research boundary without sending alerts.
+    tradePlanAlerts = await evaluateTradePlanCaptureOnly({
+      userId,
       evaluatedAt: calculatedAt,
       owner: args.owner,
       dependencies: args.dependencies,

@@ -10,7 +10,7 @@ import {
 } from "@spy-copilot/shared";
 
 export const EXPOSURE_CONFIRMATION_METHODOLOGY_VERSION =
-  "EXPOSURE_CONFIRMATION_V1" as const;
+  "EXPOSURE_CONFIRMATION_V2" as const;
 
 export const GEX_REGIME_MAX_ADJUSTMENT_POINTS = 8;
 export const DEX_REGIME_MAX_ADJUSTMENT_POINTS = 6;
@@ -110,34 +110,16 @@ function gexComponent(
     );
   }
 
-  let status: TradePlanExposureComponentStatus = "NEUTRAL";
-  let reasonCode: TradePlanExposureComponentReasonCode = "GEX_BALANCED";
-  if (direction === "CALLS" && exposure.gammaRegime === "CALL_DOMINANT") {
-    status = "SUPPORTIVE";
-    reasonCode = "CALL_GEX_SUPPORTS_CALLS";
-  } else if (direction === "PUTS" && exposure.gammaRegime === "PUT_DOMINANT") {
-    status = "SUPPORTIVE";
-    reasonCode = "PUT_GEX_SUPPORTS_PUTS";
-  } else if (direction === "CALLS" && exposure.gammaRegime === "PUT_DOMINANT") {
-    status = "CONFLICTING";
-    reasonCode = "PUT_GEX_CONFLICTS_WITH_CALLS";
-  } else if (direction === "PUTS" && exposure.gammaRegime === "CALL_DOMINANT") {
-    status = "CONFLICTING";
-    reasonCode = "CALL_GEX_CONFLICTS_WITH_PUTS";
-  }
-
+  // GEX describes modeled convexity/hedging context, not a validated directional vote.
+  // Until historical calibration proves a directional edge, it cannot adjust confidence.
   return {
     componentId: "GEX_REGIME",
-    status,
+    status: "NEUTRAL",
     rawState: exposure.gammaRegime,
-    contributionPoints: contribution(
-      status,
-      GEX_REGIME_MAX_ADJUSTMENT_POINTS,
-      quality,
-    ),
+    contributionPoints: 0,
     maximumAbsoluteContributionPoints: GEX_REGIME_MAX_ADJUSTMENT_POINTS,
     sourceQuality: quality,
-    reasonCode,
+    reasonCode: "GEX_REGIME_CONTEXT_ONLY",
   };
 }
 
@@ -167,34 +149,16 @@ function dexComponent(
     );
   }
 
-  let status: TradePlanExposureComponentStatus = "NEUTRAL";
-  let reasonCode: TradePlanExposureComponentReasonCode = "DEX_BALANCED";
-  if (direction === "CALLS" && exposure.dexRegime === "POSITIVE") {
-    status = "SUPPORTIVE";
-    reasonCode = "POSITIVE_DEX_SUPPORTS_CALLS";
-  } else if (direction === "PUTS" && exposure.dexRegime === "NEGATIVE") {
-    status = "SUPPORTIVE";
-    reasonCode = "NEGATIVE_DEX_SUPPORTS_PUTS";
-  } else if (direction === "CALLS" && exposure.dexRegime === "NEGATIVE") {
-    status = "CONFLICTING";
-    reasonCode = "NEGATIVE_DEX_CONFLICTS_WITH_CALLS";
-  } else if (direction === "PUTS" && exposure.dexRegime === "POSITIVE") {
-    status = "CONFLICTING";
-    reasonCode = "POSITIVE_DEX_CONFLICTS_WITH_PUTS";
-  }
-
+  // DEX is preserved as location/pressure context only. Its sign is not assumed
+  // to be a calibrated CALL/PUT predictor.
   return {
     componentId: "DEX_REGIME",
-    status,
+    status: "NEUTRAL",
     rawState: exposure.dexRegime,
-    contributionPoints: contribution(
-      status,
-      DEX_REGIME_MAX_ADJUSTMENT_POINTS,
-      quality,
-    ),
+    contributionPoints: 0,
     maximumAbsoluteContributionPoints: DEX_REGIME_MAX_ADJUSTMENT_POINTS,
     sourceQuality: quality,
-    reasonCode,
+    reasonCode: "DEX_REGIME_CONTEXT_ONLY",
   };
 }
 
@@ -233,43 +197,18 @@ function wallComponent(
     };
   }
 
-  const nearby =
-    Math.abs(wall.distanceFromUnderlyingPercent) <=
-    NEARBY_DIRECTIONAL_WALL_THRESHOLD_PERCENT;
-  const directionalSide =
-    direction === "CALLS"
-      ? wall.distanceFromUnderlyingPoints > 0
-      : wall.distanceFromUnderlyingPoints < 0;
-  const opposingSide =
-    direction === "CALLS"
-      ? wall.distanceFromUnderlyingPoints < 0
-      : wall.distanceFromUnderlyingPoints > 0;
-
-  let status: TradePlanExposureComponentStatus = "NEUTRAL";
-  let reasonCode: TradePlanExposureComponentReasonCode =
-    "DIRECTIONAL_WALL_NOT_NEARBY";
-  if (nearby && directionalSide) {
-    status = "SUPPORTIVE";
-    reasonCode = "DIRECTIONAL_WALL_NEARBY";
-  } else if (nearby && opposingSide) {
-    status = "CONFLICTING";
-    reasonCode = "DIRECTIONAL_WALL_OPPOSING_SIDE";
-  }
-
+  // A wall may be a target, resistance, support, pin, or breakout threshold.
+  // Its direction is intentionally not inferred from its label alone.
   return {
     component: {
       componentId: "DIRECTIONAL_WALL",
-      status,
+      status: "NEUTRAL",
       rawState: `${wall.strikePrice}`,
-      contributionPoints: contribution(
-        status,
-        DIRECTIONAL_WALL_MAX_ADJUSTMENT_POINTS,
-        quality,
-      ),
+      contributionPoints: 0,
       maximumAbsoluteContributionPoints:
         DIRECTIONAL_WALL_MAX_ADJUSTMENT_POINTS,
       sourceQuality: quality,
-      reasonCode,
+      reasonCode: "DIRECTIONAL_WALL_CONTEXT_ONLY",
     },
     wall,
   };
@@ -413,6 +352,7 @@ export function buildTradePlanExposureConfirmation(
       noPrivateAccountData: true,
       noPositionSizing: true,
       noOrderExecution: true,
+      confidenceAdjustmentDisabledUntilCalibrated: true,
     },
   });
 }

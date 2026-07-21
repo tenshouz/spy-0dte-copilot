@@ -42,6 +42,7 @@ test("guide contains every user-facing page exactly once", () => {
     "/alerts",
     "/journal",
     "/replay",
+    "/backtest",
     "/system",
     "/settings",
     "/guide",

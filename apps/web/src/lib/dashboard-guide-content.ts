@@ -204,6 +204,24 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
     searchTerms: ["backtest", "history", "audit", "look ahead", "timeline", "past"],
   },
   {
+    href: "/backtest",
+    title: "Point-in-Time Backtesting",
+    shortTitle: "Backtest",
+    purpose: "Recomputes the current deterministic engine at exact forward-captured historical boundaries and grades what happened afterward.",
+    useWhen: "Use it to test whether the dashboard rules produce reliable outcomes without allowing future information into the plan.",
+    features: [
+      "Exact stored Market State and deduplicated Options Chain snapshots",
+      "Current-rule recomputation at each historical source timestamp",
+      "First READY plan per unique setup episode",
+      "Target-before-stop, stop-before-target, ambiguous-candle, MFE, MAE, and R-multiple outcomes",
+      "Observed or model-based option P&L estimates clearly labeled by source",
+      "Breakdowns by setup, direction, and Gamma regime",
+    ],
+    remember:
+      "V1.5 starts exact forward capture after installation. It cannot reconstruct option-chain data from dates before those snapshots were stored, and its results are research rather than a promise of future performance.",
+    searchTerms: ["backtest", "point in time", "outcomes", "mfe", "mae", "calibration", "historical plan"],
+  },
+  {
     href: "/system",
     title: "System Readiness",
     shortTitle: "System",

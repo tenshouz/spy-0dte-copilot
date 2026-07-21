@@ -15,7 +15,7 @@ export const TRADE_RISK_TRANSPORT_WARNING =
 
 export function useSpyZeroDteObjectiveRiskFramework() {
   return useQuery({
-    queryKey: ["spy-zero-dte-objective-risk-framework", "RISK_V1"],
+    queryKey: ["spy-zero-dte-objective-risk-framework", "RISK_V2"],
     queryFn: apiClient.getSpyZeroDteObjectiveRiskFramework,
     refetchInterval: () => getSpyDerivedPollIntervalMs(),
     ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,
