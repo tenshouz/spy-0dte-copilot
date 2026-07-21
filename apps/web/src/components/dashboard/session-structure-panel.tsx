@@ -45,11 +45,11 @@ function PivotGrid({ pivots }: { pivots: TraditionalPivotSet }) {
         </Badge>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <MetricCard label="R2" value={formatStructurePrice(pivots.resistance2)} tone="bear" />
+        <MetricCard label="R1" value={formatStructurePrice(pivots.resistance1)} tone="bear" />
         <MetricCard label="Pivot" value={formatStructurePrice(pivots.pivot)} />
-        <MetricCard label="R1" value={formatStructurePrice(pivots.resistance1)} tone="bull" />
-        <MetricCard label="S1" value={formatStructurePrice(pivots.support1)} tone="bear" />
-        <MetricCard label="R2" value={formatStructurePrice(pivots.resistance2)} tone="bull" />
-        <MetricCard label="S2" value={formatStructurePrice(pivots.support2)} tone="bear" />
+        <MetricCard label="S1" value={formatStructurePrice(pivots.support1)} tone="bull" />
+        <MetricCard label="S2" value={formatStructurePrice(pivots.support2)} tone="bull" />
       </div>
       {pivots.warningCode && (
         <p className="text-[11px] text-wait">

@@ -142,6 +142,16 @@ assert.match(panelSource, /Weekly Traditional Pivots/);
 assert.match(panelSource, /openingRanges\.fiveMinute/);
 assert.match(panelSource, /openingRanges\.fifteenMinute/);
 assert.match(panelSource, /openingRanges\.thirtyMinute/);
+const r2Index = panelSource.indexOf('label="R2"');
+const r1Index = panelSource.indexOf('label="R1"');
+const pivotIndex = panelSource.indexOf('label="Pivot"');
+const s1Index = panelSource.indexOf('label="S1"');
+const s2Index = panelSource.indexOf('label="S2"');
+assert.equal(r2Index < r1Index && r1Index < pivotIndex && pivotIndex < s1Index && s1Index < s2Index, true);
+assert.match(panelSource, /label="R2"[^>]*tone="bear"/);
+assert.match(panelSource, /label="R1"[^>]*tone="bear"/);
+assert.match(panelSource, /label="S1"[^>]*tone="bull"/);
+assert.match(panelSource, /label="S2"[^>]*tone="bull"/);
 assert.doesNotMatch(panelSource, /Buy|Sell|Submit Order|Execute Order/);
 
 const liveChartSource = readFileSync(
@@ -162,4 +172,4 @@ const apiClientSource = readFileSync("apps/web/src/lib/api-client.ts", "utf8");
 assert.match(apiClientSource, /\/api\/session-structure\/spy/);
 assert.match(apiClientSource, /SpyDeterministicSessionStructureResponseSchema/);
 
-console.log("Session Structure view tests: 20 passed, 0 failed");
+console.log("Session Structure view tests: 25 passed, 0 failed");

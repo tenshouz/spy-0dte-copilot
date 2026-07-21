@@ -1,4 +1,11 @@
 import { create } from "zustand";
+import {
+  DEFAULT_CHART_LEVEL_VISIBILITY,
+  getChartLevelPreset,
+  type ChartLevelKey,
+  type ChartLevelPreset,
+  type ChartLevelVisibility,
+} from "@/lib/chart-level-visibility";
 
 /**
  * Client-only UI state. Server/mock data (snapshots, reports, journal, alerts)
@@ -11,6 +18,10 @@ interface UiState {
 
   activeReportId: string | null;
   setActiveReportId: (id: string | null) => void;
+
+  chartLevelVisibility: ChartLevelVisibility;
+  setChartLevelVisibility: (key: ChartLevelKey, visible: boolean) => void;
+  setChartLevelPreset: (preset: ChartLevelPreset) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -19,4 +30,12 @@ export const useUiStore = create<UiState>((set) => ({
 
   activeReportId: null,
   setActiveReportId: (id) => set({ activeReportId: id }),
+
+  chartLevelVisibility: { ...DEFAULT_CHART_LEVEL_VISIBILITY },
+  setChartLevelVisibility: (key, visible) =>
+    set((state) => ({
+      chartLevelVisibility: { ...state.chartLevelVisibility, [key]: visible },
+    })),
+  setChartLevelPreset: (preset) =>
+    set({ chartLevelVisibility: getChartLevelPreset(preset) }),
 }));

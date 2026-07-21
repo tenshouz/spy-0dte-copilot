@@ -6,6 +6,7 @@ import type {
   VwapMetricState,
 } from "@spy-copilot/shared";
 import { useMemo } from "react";
+import { ChartLevelControls } from "@/components/dashboard/chart-level-controls";
 import { ChartContainer } from "@/components/panels/chart-container";
 import { Panel } from "@/components/panels/panel";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +33,13 @@ import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import { filterChartReferenceLines } from "@/lib/chart-level-visibility";
 import { getExposureStructureReferenceLines } from "@/lib/exposure-structure-view";
 import {
   getEasternMarketDate,
   getSessionStructureReferenceLines,
 } from "@/lib/session-structure-view";
+import { useUiStore } from "@/stores/ui-store";
 
 /** Candle-dataset-scoped labels — never a bare LIVE that could describe the whole dashboard. */
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
@@ -66,6 +69,7 @@ export function LiveChart() {
   const { display: openingRangeDisplay } = useDisplaySpyOpeningRange();
   const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
   const exposureStructureQuery = useDisplaySpyZeroDteExposureStructure();
+  const chartLevelVisibility = useUiStore((state) => state.chartLevelVisibility);
   const isMockCandles = display?.response.sourceState === "MOCK";
 
   // Never draw a MOCK VWAP over LIVE/STALE provider candles, or a provider
@@ -134,8 +138,18 @@ export function LiveChart() {
         ? getExposureStructureReferenceLines(exposureStructure)
         : [];
 
-    return [...sessionReferenceLines, ...exposureReferenceLines];
-  }, [chartMarketDate, display, exposureStructure, isMockCandles, sessionStructure]);
+    return filterChartReferenceLines(
+      [...sessionReferenceLines, ...exposureReferenceLines],
+      chartLevelVisibility,
+    );
+  }, [
+    chartLevelVisibility,
+    chartMarketDate,
+    display,
+    exposureStructure,
+    isMockCandles,
+    sessionStructure,
+  ]);
 
   return (
     <Panel
@@ -146,7 +160,8 @@ export function LiveChart() {
       noPadding
       action={
         display && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ChartLevelControls />
             <Badge variant={SOURCE_BADGE[display.response.sourceState].variant}>
               {SOURCE_BADGE[display.response.sourceState].label}
             </Badge>
@@ -166,16 +181,44 @@ export function LiveChart() {
         <div>
           <ChartContainer
             candles={display.chartCandles}
-            vwapSeries={vwapSeries}
-            livePrice={liveQuote?.lastPrice}
+            vwapSeries={chartLevelVisibility.vwap ? vwapSeries : undefined}
+            livePrice={chartLevelVisibility.livePrice ? liveQuote?.lastPrice : undefined}
             livePriceSourceState={liveQuote?.sourceState}
-            openingRangeHigh={openingRange?.openingRangeHigh ?? undefined}
-            openingRangeLow={openingRange?.openingRangeLow ?? undefined}
-            premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
-            premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
-            previousClose={levels ? renderableLevel(levels.previousDayClose) : undefined}
-            previousHigh={levels ? renderableLevel(levels.previousDayHigh) : undefined}
-            previousLow={levels ? renderableLevel(levels.previousDayLow) : undefined}
+            openingRangeHigh={
+              chartLevelVisibility.openingRange15High
+                ? openingRange?.openingRangeHigh ?? undefined
+                : undefined
+            }
+            openingRangeLow={
+              chartLevelVisibility.openingRange15Low
+                ? openingRange?.openingRangeLow ?? undefined
+                : undefined
+            }
+            premarketHigh={
+              chartLevelVisibility.premarketHigh && levels
+                ? renderableLevel(levels.premarketHigh)
+                : undefined
+            }
+            premarketLow={
+              chartLevelVisibility.premarketLow && levels
+                ? renderableLevel(levels.premarketLow)
+                : undefined
+            }
+            previousClose={
+              chartLevelVisibility.previousClose && levels
+                ? renderableLevel(levels.previousDayClose)
+                : undefined
+            }
+            previousHigh={
+              chartLevelVisibility.previousHigh && levels
+                ? renderableLevel(levels.previousDayHigh)
+                : undefined
+            }
+            previousLow={
+              chartLevelVisibility.previousLow && levels
+                ? renderableLevel(levels.previousDayLow)
+                : undefined
+            }
             additionalPriceLines={additionalPriceLines}
             showDerivedSessionExtremes={false}
           />

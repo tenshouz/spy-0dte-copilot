@@ -13,6 +13,7 @@ import {
   formatExposureState,
 } from "@/lib/exposure-structure-view";
 import { formatCompactCurrency, formatPrice, formatSigned } from "@/lib/format";
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ExposureStructurePanelProps {
@@ -43,9 +44,10 @@ export function ExposureStructurePanel({ className, compact = false }: ExposureS
     >
       {response && (
         <div className="space-y-3">
-          <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4")}>
+          <div className={cn("grid gap-2", compact ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 lg:grid-cols-4")}>
             <MetricCard
               label="Gamma Regime"
+              className={compact ? "p-2.5" : undefined}
               value={formatExposureState(response.gammaRegime)}
               sublabel={`${percentage(response.gammaRegimeRatioPercent)} of gross returned-window Gamma`}
               tone={
@@ -58,6 +60,7 @@ export function ExposureStructurePanel({ className, compact = false }: ExposureS
             />
             <MetricCard
               label="Primary Call Wall"
+              className={compact ? "p-2.5" : undefined}
               value={price(response.callWalls[0]?.strikePrice)}
               sublabel={
                 response.callWalls[0]
@@ -68,6 +71,7 @@ export function ExposureStructurePanel({ className, compact = false }: ExposureS
             />
             <MetricCard
               label="Primary Put Wall"
+              className={compact ? "p-2.5" : undefined}
               value={price(response.putWalls[0]?.strikePrice)}
               sublabel={
                 response.putWalls[0]
@@ -78,6 +82,7 @@ export function ExposureStructurePanel({ className, compact = false }: ExposureS
             />
             <MetricCard
               label="Gamma Balance Proxy"
+              className={compact ? "p-2.5" : undefined}
               value={price(response.gammaFlipProxy.estimatedStrike)}
               sublabel={`${formatExposureState(response.gammaFlipProxy.state)} · cumulative balance, not a dealer flip`}
             />
@@ -150,9 +155,21 @@ export function ExposureStructurePanel({ className, compact = false }: ExposureS
             </div>
           )}
 
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Returned-window analytical structure only. Call-positive and Put-negative Gamma conventions do not reveal observed dealer inventory. The Gamma balance level is a cumulative Net GEX zero-crossing proxy, not a true dealer Gamma Flip or standalone trading signal.
-          </p>
+          {compact ? (
+            <details className="rounded-md border border-panel-border bg-background/30 px-2.5 py-2 text-[11px] text-muted-foreground">
+              <summary className="flex cursor-pointer items-center gap-1.5 font-medium text-foreground">
+                <Info className="h-3.5 w-3.5" />
+                Methodology
+              </summary>
+              <p className="mt-2 leading-relaxed">
+                Returned-window analytical structure only. Call-positive and Put-negative Gamma conventions do not reveal observed dealer inventory. The Gamma balance level is a cumulative Net GEX zero-crossing proxy, not a true dealer Gamma Flip or standalone trading signal.
+              </p>
+            </details>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Returned-window analytical structure only. Call-positive and Put-negative Gamma conventions do not reveal observed dealer inventory. The Gamma balance level is a cumulative Net GEX zero-crossing proxy, not a true dealer Gamma Flip or standalone trading signal.
+            </p>
+          )}
         </div>
       )}
     </Panel>

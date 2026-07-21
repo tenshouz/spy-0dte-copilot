@@ -5,13 +5,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { SpyZeroDteGexProxyResponse } from "@spy-copilot/shared";
+import type {
+  SpyZeroDteDeterministicBiasResponse,
+  SpyZeroDteDeterministicMarketStateResponse,
+  SpyZeroDteGexProxyResponse,
+} from "@spy-copilot/shared";
 import {
   formatDashboardCompact,
   formatDashboardPrice,
+  formatDashboardReferenceDistance,
+  getDashboardBiasEvidenceSummary,
   getDashboardBiasView,
+  getDashboardConfidenceExplanation,
   getDashboardPlanStateLabel,
   getDashboardSignLabel,
+  getNearestDashboardMarketReference,
   summarizeGexConcentrations,
 } from "./dashboard-deterministic-view";
 
@@ -28,6 +36,55 @@ function test(name: string, fn: () => void): void {
     console.error(error);
   }
 }
+
+
+const biasFixture = {
+  biasState: "BEARISH",
+  confidenceScore: 67,
+  sourceQualityState: "COMPLETE",
+  contradictionRatio: 0,
+  neutralEvidenceRatio: 0.33,
+  sufficiencyRatio: 1,
+  bearishEvidence: [
+    {
+      rationaleCode: "PRICE_BELOW_PREMARKET_RANGE",
+      weightedContribution: -2,
+      appliedWeight: 2,
+    },
+    {
+      rationaleCode: "PRICE_BELOW_OPENING_RANGE",
+      weightedContribution: -1,
+      appliedWeight: 1,
+    },
+  ],
+  bullishEvidence: [
+    {
+      rationaleCode: "PRICE_ABOVE_VWAP",
+      weightedContribution: 0.5,
+      appliedWeight: 0.5,
+    },
+  ],
+  neutralEvidence: [],
+} as unknown as SpyZeroDteDeterministicBiasResponse;
+
+const marketStateFixture = {
+  price: 100,
+  features: {
+    priceVsVwap: { status: "AVAILABLE", inputs: { vwap: 99 } },
+    priceVsPriorDayRange: {
+      status: "AVAILABLE",
+      inputs: { previousDayHigh: 105, previousDayLow: 98 },
+    },
+    priceVsPremarketRange: {
+      status: "AVAILABLE",
+      inputs: { premarketHigh: 103, premarketLow: 100.25 },
+    },
+    priceVsOpeningRange: {
+      status: "AVAILABLE",
+      inputs: { phase: "COMPLETE", openingRangeHigh: 101, openingRangeLow: 99.5 },
+    },
+  },
+} as unknown as SpyZeroDteDeterministicMarketStateResponse;
 
 const baseGex = {
   metricState: "LIVE",
@@ -69,6 +126,29 @@ test("sign and null-safe formatters are deterministic", () => {
   assert.equal(formatDashboardPrice(123.456), "$123.46");
   assert.equal(formatDashboardCompact(1_500_000), "+1.5M");
   assert.equal(formatDashboardCompact(-2_000), "-2.0K");
+});
+
+test("bias evidence summary exposes the strongest driver and counterweight", () => {
+  assert.deepEqual(getDashboardBiasEvidenceSummary(biasFixture), {
+    primaryDriver: "Price below premarket range",
+    counterweight: "Price above VWAP",
+  });
+});
+
+test("confidence explanation identifies neutral directional weight", () => {
+  assert.equal(
+    getDashboardConfidenceExplanation(biasFixture),
+    "33% of usable directional weight is neutral.",
+  );
+});
+
+test("nearest market reference selects the closest validated level", () => {
+  assert.deepEqual(getNearestDashboardMarketReference(marketStateFixture), {
+    label: "Premarket Low",
+    level: 100.25,
+    distancePoints: -0.25,
+  });
+  assert.equal(formatDashboardReferenceDistance(-0.25), "0.25 pts below");
 });
 
 test("GEX concentration summary finds largest positive and negative rows", () => {
@@ -144,6 +224,27 @@ test("Dashboard child cards no longer consume legacy snapshot or report history"
     "snapshot.spotPrice",
   ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} must not appear`);
+  }
+});
+
+test("Dashboard structure cards expose compact explanatory content", () => {
+  const files = [
+    "apps/web/src/components/dashboard/bias-card.tsx",
+    "apps/web/src/components/dashboard/confidence-card.tsx",
+    "apps/web/src/components/dashboard/market-regime-card.tsx",
+    "apps/web/src/components/dashboard/exposure-structure-panel.tsx",
+  ];
+  const source = files
+    .map((file) => readFileSync(resolve(process.cwd(), file), "utf8"))
+    .join("\n");
+  for (const required of [
+    "Primary driver",
+    "Confidence limiter",
+    "Nearest key level",
+    "grid-cols-2",
+    "Methodology",
+  ]) {
+    assert.equal(source.includes(required), true, `${required} must appear`);
   }
 });
 

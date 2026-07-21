@@ -10,6 +10,7 @@ import type {
   VwapMetricState,
 } from "@spy-copilot/shared";
 import { useMemo } from "react";
+import { ChartLevelControls } from "@/components/dashboard/chart-level-controls";
 import { ExposureStructurePanel } from "@/components/dashboard/exposure-structure-panel";
 import { SessionStructurePanel } from "@/components/dashboard/session-structure-panel";
 import { PageHeader } from "@/components/layout/page-header";
@@ -50,6 +51,7 @@ import {
   RTH_VWAP_TRANSPORT_WARNING,
   useDisplaySpyRthVwap,
 } from "@/hooks/use-spy-rth-vwap";
+import { filterChartReferenceLines } from "@/lib/chart-level-visibility";
 import { getExposureStructureReferenceLines } from "@/lib/exposure-structure-view";
 import { formatEasternTime, formatPrice, formatSigned, formatVolume } from "@/lib/format";
 import {
@@ -66,6 +68,7 @@ import {
   getEasternMarketDate,
   getSessionStructureReferenceLines,
 } from "@/lib/session-structure-view";
+import { useUiStore } from "@/stores/ui-store";
 
 const SOURCE_BADGE: Record<QuoteSourceState, { variant: "bull" | "wait" | "bear"; label: string }> = {
   LIVE: { variant: "bull", label: "SPY LIVE" },
@@ -153,6 +156,7 @@ export default function MarketDataPage() {
   const marketStateQuery = useDisplaySpyZeroDteDeterministicMarketState();
   const sessionStructureQuery = useDisplaySpyDeterministicSessionStructure();
   const exposureStructureQuery = useDisplaySpyZeroDteExposureStructure();
+  const chartLevelVisibility = useUiStore((state) => state.chartLevelVisibility);
 
   const quote = quoteQuery.display?.quote ?? null;
   const candleDisplay = candleQuery.display;
@@ -219,8 +223,18 @@ export default function MarketDataPage() {
         ? getExposureStructureReferenceLines(exposureStructure)
         : [];
 
-    return [...sessionReferenceLines, ...exposureReferenceLines];
-  }, [candleDisplay, chartMarketDate, exposureStructure, isMockCandles, sessionStructure]);
+    return filterChartReferenceLines(
+      [...sessionReferenceLines, ...exposureReferenceLines],
+      chartLevelVisibility,
+    );
+  }, [
+    candleDisplay,
+    chartLevelVisibility,
+    chartMarketDate,
+    exposureStructure,
+    isMockCandles,
+    sessionStructure,
+  ]);
 
   const structureColumns: DataTableColumn<StructureLevelRow>[] = [
     { key: "label", header: "Level", render: (row) => row.label },
@@ -387,7 +401,8 @@ export default function MarketDataPage() {
           className="lg:col-span-3"
           action={
             candleResponse && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <ChartLevelControls />
                 <Badge variant={SOURCE_BADGE[candleResponse.sourceState].variant}>
                   {SOURCE_BADGE[candleResponse.sourceState].label}
                 </Badge>
@@ -404,16 +419,44 @@ export default function MarketDataPage() {
             <div>
               <ChartContainer
                 candles={candleDisplay.chartCandles}
-                vwapSeries={vwapSeries}
-                livePrice={liveQuote?.lastPrice}
+                vwapSeries={chartLevelVisibility.vwap ? vwapSeries : undefined}
+                livePrice={chartLevelVisibility.livePrice ? liveQuote?.lastPrice : undefined}
                 livePriceSourceState={liveQuote?.sourceState}
-                openingRangeHigh={openingRange?.openingRangeHigh}
-                openingRangeLow={openingRange?.openingRangeLow}
-                premarketHigh={levels ? renderableLevel(levels.premarketHigh) : undefined}
-                premarketLow={levels ? renderableLevel(levels.premarketLow) : undefined}
-                previousClose={levels ? renderableLevel(levels.previousDayClose) : undefined}
-                previousHigh={levels ? renderableLevel(levels.previousDayHigh) : undefined}
-                previousLow={levels ? renderableLevel(levels.previousDayLow) : undefined}
+                openingRangeHigh={
+                  chartLevelVisibility.openingRange15High
+                    ? openingRange?.openingRangeHigh
+                    : undefined
+                }
+                openingRangeLow={
+                  chartLevelVisibility.openingRange15Low
+                    ? openingRange?.openingRangeLow
+                    : undefined
+                }
+                premarketHigh={
+                  chartLevelVisibility.premarketHigh && levels
+                    ? renderableLevel(levels.premarketHigh)
+                    : undefined
+                }
+                premarketLow={
+                  chartLevelVisibility.premarketLow && levels
+                    ? renderableLevel(levels.premarketLow)
+                    : undefined
+                }
+                previousClose={
+                  chartLevelVisibility.previousClose && levels
+                    ? renderableLevel(levels.previousDayClose)
+                    : undefined
+                }
+                previousHigh={
+                  chartLevelVisibility.previousHigh && levels
+                    ? renderableLevel(levels.previousDayHigh)
+                    : undefined
+                }
+                previousLow={
+                  chartLevelVisibility.previousLow && levels
+                    ? renderableLevel(levels.previousDayLow)
+                    : undefined
+                }
                 additionalPriceLines={additionalPriceLines}
                 showDerivedSessionExtremes={false}
                 height={420}
