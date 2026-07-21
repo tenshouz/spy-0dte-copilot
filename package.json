@@ -1,8 +1,8 @@
 {
   "name": "spy-0dte-copilot",
   "private": true,
-  "version": "1.5.0",
-  "description": "Local SPY 0DTE deterministic decision-support platform \u2014 V1.5.0 Point-in-Time Backtesting",
+  "version": "1.5.1",
+  "description": "Local SPY 0DTE deterministic decision-support platform — V1.5.1 Historical Replay Recovery",
   "workspaces": [
     "apps/*",
     "packages/*"

@@ -153,7 +153,10 @@ import { z } from "zod";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+async function getJson<T>(
+  path: string,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`);
   if (!res.ok) {
     throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
@@ -164,7 +167,7 @@ async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
 
 async function getPrivateNoStoreJson<T>(
   path: string,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
 ): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
   if (!res.ok) {
@@ -177,7 +180,7 @@ async function postJson<TRequest, TResponse>(
   path: string,
   body: TRequest,
   requestSchema: z.ZodType<TRequest>,
-  responseSchema: z.ZodType<TResponse>,
+  responseSchema: z.ZodType<TResponse, z.ZodTypeDef, unknown>,
 ): Promise<TResponse> {
   const validatedBody = requestSchema.parse(body);
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -196,7 +199,7 @@ async function patchJson<TRequest, TResponse>(
   path: string,
   body: TRequest,
   requestSchema: z.ZodType<TRequest>,
-  responseSchema: z.ZodType<TResponse>,
+  responseSchema: z.ZodType<TResponse, z.ZodTypeDef, unknown>,
 ): Promise<TResponse> {
   const validatedBody = requestSchema.parse(body);
   const res = await fetch(`${API_BASE_URL}${path}`, {

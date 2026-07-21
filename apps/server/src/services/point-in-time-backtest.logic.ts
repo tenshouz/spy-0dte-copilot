@@ -6,6 +6,7 @@ import {
   type PointInTimeBacktestBreakdown,
   type PointInTimeBacktestEpisode,
   type PointInTimeBacktestIssue,
+  type PointInTimeBacktestReplaySourceMode,
   type PointInTimeBacktestRunPayload,
   type PointInTimeBacktestRunRequest,
   type SpyCandle,
@@ -19,6 +20,7 @@ import { buildSpyZeroDteDeterministicTradePlan } from "./trade-plan.logic";
 import { buildSpyZeroDteTradePlanAssembly } from "./trade-plan-assembly.logic";
 import { buildSpyZeroDteObjectiveRiskFramework } from "./trade-risk.logic";
 import { evaluateNyseTradingSessionCalendar } from "./nyse-session-calendar.logic";
+import { buildHistoricalUnderlyingOnlyContractSelection } from "./historical-underlying-contract.logic";
 
 export const POINT_IN_TIME_BACKTEST_SOURCE_LIMIT = 5000;
 export const POINT_IN_TIME_BACKTEST_ISSUE_LIMIT = 500;
@@ -35,14 +37,16 @@ export interface PointInTimeDecisionCycleSource {
   sourceMarketState: unknown | null;
   optionsChainSnapshotId: string | null;
   optionsChainPayload: unknown | null;
+  sourceKind?: "CAPTURED" | "HISTORICAL_UNDERLYING";
 }
 
 interface RecomputedCycle {
   source: PointInTimeDecisionCycleSource;
   boundaryMs: number;
-  marketState: SpyZeroDteDeterministicMarketStateResponse;
+  marketState: SpyZeroDteDeterministicMarketStateResponse | null;
   optionsChain: SpyZeroDteOptionsChainResponse | null;
   assembly: SpyZeroDteTradePlanAssemblyResponse;
+  replaySourceMode: PointInTimeBacktestReplaySourceMode;
 }
 
 interface PriceObservation {
@@ -103,12 +107,14 @@ function addIssue(
   source: PointInTimeDecisionCycleSource,
   issueCode: PointInTimeBacktestIssue["issueCode"],
   message: string,
+  severity: PointInTimeBacktestIssue["severity"] = "ERROR",
 ): boolean {
   if (issues.length >= POINT_IN_TIME_BACKTEST_ISSUE_LIMIT) return true;
   issues.push({
     decisionCycleId: source.id,
     marketDate: source.currentMarketDate,
     issueCode,
+    severity,
     message: message.slice(0, 320),
   });
   return false;
@@ -153,6 +159,28 @@ function timestampAudit(
   return null;
 }
 
+function zodIssueSummary(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
+  return error.issues
+    .slice(0, 3)
+    .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+    .join("; ");
+}
+
+function assemblyTimestampAudit(
+  assembly: SpyZeroDteTradePlanAssemblyResponse,
+  boundaryMs: number,
+): string | null {
+  const calculatedAt = finiteMs(assembly.calculatedAt);
+  const quoteAt = finiteMs(assembly.quoteTimestamp);
+  if (calculatedAt !== null && calculatedAt > boundaryMs) {
+    return "stored Assembly calculatedAt occurs after the decision-cycle boundary";
+  }
+  if (quoteAt !== null && quoteAt > boundaryMs) {
+    return "stored Assembly quoteTimestamp occurs after the decision-cycle boundary";
+  }
+  return null;
+}
+
 function recomputeCycle(
   source: PointInTimeDecisionCycleSource,
   issues: PointInTimeBacktestIssue[],
@@ -170,21 +198,6 @@ function recomputeCycle(
     };
   }
 
-  const parsedState = SpyZeroDteDeterministicMarketStateResponseSchema.safeParse(
-    source.sourceMarketState,
-  );
-  if (!parsedState.success) {
-    return {
-      cycle: null,
-      issuesTruncated: addIssue(
-        issues,
-        source,
-        "SOURCE_MARKET_STATE_INVALID",
-        "Stored point-in-time Market State failed schema validation.",
-      ),
-    };
-  }
-
   let chain: SpyZeroDteOptionsChainResponse | null = null;
   if (source.optionsChainPayload !== null) {
     const parsedChain = SpyZeroDteOptionsChainResponseSchema.safeParse(
@@ -197,11 +210,54 @@ function recomputeCycle(
           issues,
           source,
           "SOURCE_OPTIONS_CHAIN_INVALID",
-          "Stored point-in-time Options Chain failed schema validation.",
+          `Stored point-in-time Options Chain failed schema validation: ${zodIssueSummary(parsedChain.error)}`,
         ),
       };
     }
     chain = parsedChain.data;
+  }
+
+  const parsedState = SpyZeroDteDeterministicMarketStateResponseSchema.safeParse(
+    source.sourceMarketState,
+  );
+  if (!parsedState.success) {
+    const parsedAssembly = SpyZeroDteTradePlanAssemblyResponseSchema.safeParse(
+      source.sourceAssembly,
+    );
+    if (!parsedAssembly.success) {
+      return {
+        cycle: null,
+        issuesTruncated: addIssue(
+          issues,
+          source,
+          "SOURCE_MARKET_STATE_INVALID",
+          `Market State and frozen Assembly are both invalid. Market State: ${zodIssueSummary(parsedState.error)}. Assembly: ${zodIssueSummary(parsedAssembly.error)}.`,
+        ),
+      };
+    }
+    const timestampError = assemblyTimestampAudit(parsedAssembly.data, boundaryMs);
+    if (timestampError !== null) {
+      return {
+        cycle: null,
+        issuesTruncated: addIssue(
+          issues,
+          source,
+          "SOURCE_TIMESTAMP_AFTER_CYCLE",
+          timestampError,
+        ),
+      };
+    }
+    return {
+      cycle: {
+        source,
+        boundaryMs,
+        marketState: null,
+        optionsChain: chain,
+        assembly: parsedAssembly.data,
+        replaySourceMode: "LEGACY_FROZEN_ASSEMBLY",
+      },
+      issuesTruncated: false,
+    };
   }
 
   const timestampError = timestampAudit(parsedState.data, chain, boundaryMs);
@@ -230,7 +286,10 @@ function recomputeCycle(
       plan,
       boundaryMs,
     );
-    const contract = buildSpyZeroDteContractSelection(risk, chain, boundaryMs);
+    const contract =
+      source.sourceKind === "HISTORICAL_UNDERLYING" && chain === null
+        ? buildHistoricalUnderlyingOnlyContractSelection(risk, boundaryMs)
+        : buildSpyZeroDteContractSelection(risk, chain, boundaryMs);
     const assembly = buildSpyZeroDteTradePlanAssembly(
       parsedState.data,
       bias,
@@ -242,7 +301,9 @@ function recomputeCycle(
     const parsedAssembly = SpyZeroDteTradePlanAssemblyResponseSchema.safeParse(
       assembly,
     );
-    if (!parsedAssembly.success) throw new Error("assembly validation failed");
+    if (!parsedAssembly.success) {
+      throw new Error(zodIssueSummary(parsedAssembly.error));
+    }
     return {
       cycle: {
         source,
@@ -250,17 +311,21 @@ function recomputeCycle(
         marketState: parsedState.data,
         optionsChain: chain,
         assembly: parsedAssembly.data,
+        replaySourceMode:
+          source.sourceKind === "HISTORICAL_UNDERLYING"
+            ? "HISTORICAL_UNDERLYING_ONLY"
+            : "EXACT_MARKET_STATE_RECOMPUTE",
       },
       issuesTruncated: false,
     };
-  } catch {
+  } catch (error) {
     return {
       cycle: null,
       issuesTruncated: addIssue(
         issues,
         source,
         "RECOMPUTED_ASSEMBLY_INVALID",
-        "Current deterministic rules could not produce a valid Assembly from the stored boundary.",
+        `Current deterministic rules could not produce a valid Assembly from the stored boundary: ${(error as Error).message}`,
       ),
     };
   }
@@ -271,7 +336,7 @@ function candleObservations(
   entryMs: number,
   cutoffMs: number,
 ): PriceObservation[] {
-  return (cycle.marketState.executionContext?.recentCompletedCandles ?? [])
+  return (cycle.marketState?.executionContext?.recentCompletedCandles ?? [])
     .map((candle: SpyCandle) => ({
       atMs: candle.timestamp + FIVE_MINUTES_MS,
       price: candle.close,
@@ -280,6 +345,45 @@ function candleObservations(
       kind: "CANDLE" as const,
     }))
     .filter((item) => item.atMs > entryMs && item.atMs <= cutoffMs);
+}
+
+function quoteObservation(cycle: RecomputedCycle): PriceObservation | null {
+  const price = cycle.marketState?.price ?? cycle.assembly.currentPrice;
+  const quoteAt =
+    finiteMs(cycle.marketState?.quoteTimestamp) ??
+    finiteMs(cycle.assembly.quoteTimestamp) ??
+    cycle.boundaryMs;
+  if (price === null || quoteAt === null) return null;
+  return {
+    atMs: quoteAt,
+    price,
+    high: price,
+    low: price,
+    kind: "QUOTE",
+  };
+}
+
+function reconstructedQuoteCandles(
+  observations: readonly PriceObservation[],
+): PriceObservation[] {
+  const groups = new Map<number, PriceObservation[]>();
+  for (const observation of observations.filter((item) => item.kind === "QUOTE")) {
+    const bucketEnd =
+      Math.floor(Math.max(0, observation.atMs - 1) / FIVE_MINUTES_MS) *
+        FIVE_MINUTES_MS +
+      FIVE_MINUTES_MS;
+    groups.set(bucketEnd, [...(groups.get(bucketEnd) ?? []), observation]);
+  }
+  return [...groups.entries()].map(([atMs, items]) => {
+    const sorted = [...items].sort((left, right) => left.atMs - right.atMs);
+    return {
+      atMs,
+      price: sorted.at(-1)!.price,
+      high: Math.max(...sorted.map((item) => item.price)),
+      low: Math.min(...sorted.map((item) => item.price)),
+      kind: "CANDLE" as const,
+    };
+  });
 }
 
 function futureObservations(
@@ -297,21 +401,26 @@ function futureObservations(
     for (const observation of candleObservations(cycle, entryMs, cutoffMs)) {
       byKey.set(`CANDLE:${observation.atMs}`, observation);
     }
-    const quoteAt = finiteMs(cycle.marketState.quoteTimestamp) ?? cycle.boundaryMs;
-    if (
-      quoteAt > entryMs &&
-      quoteAt <= cutoffMs &&
-      cycle.marketState.price !== null
-    ) {
-      byKey.set(`QUOTE:${quoteAt}`, {
-        atMs: quoteAt,
-        price: cycle.marketState.price,
-        high: cycle.marketState.price,
-        low: cycle.marketState.price,
-        kind: "QUOTE",
-      });
+    const quote = quoteObservation(cycle);
+    if (quote !== null && quote.atMs > entryMs && quote.atMs <= cutoffMs) {
+      byKey.set(`QUOTE:${quote.atMs}`, quote);
     }
   }
+
+  const observed = [...byKey.values()];
+  const realCandleTimes = new Set(
+    observed.filter((item) => item.kind === "CANDLE").map((item) => item.atMs),
+  );
+  for (const candle of reconstructedQuoteCandles(observed)) {
+    if (
+      candle.atMs > entryMs &&
+      candle.atMs <= cutoffMs &&
+      !realCandleTimes.has(candle.atMs)
+    ) {
+      byKey.set(`RECONSTRUCTED_CANDLE:${candle.atMs}`, candle);
+    }
+  }
+
   return [...byKey.values()].sort((left, right) =>
     left.atMs === right.atMs
       ? left.kind === "CANDLE"
@@ -390,6 +499,19 @@ function episodeSignature(assembly: SpyZeroDteTradePlanAssemblyResponse): string
   ].join("|");
 }
 
+function cycleIsEpisodeEligible(cycle: RecomputedCycle): boolean {
+  const assembly = cycle.assembly;
+  if (assembly.planState === "READY") return true;
+  return (
+    cycle.replaySourceMode === "HISTORICAL_UNDERLYING_ONLY" &&
+    assembly.planState === "NO_QUALIFIED_CONTRACT" &&
+    assembly.entryCondition.confirmationPassed === true &&
+    assembly.structuralInvalidation.level !== null &&
+    assembly.primaryObjective.level !== null &&
+    assembly.underlyingRiskReward.rewardRiskRatio !== null
+  );
+}
+
 function outcomeForEpisode(
   cycles: RecomputedCycle[],
   sourceIndex: number,
@@ -404,7 +526,7 @@ function outcomeForEpisode(
   const rewardDistance = assembly.underlyingRiskReward.rewardDistancePoints;
   const rewardRisk = assembly.underlyingRiskReward.rewardRiskRatio;
   if (
-    assembly.planState !== "READY" ||
+    !cycleIsEpisodeEligible(sourceCycle) ||
     !["CALLS", "PUTS"].includes(assembly.direction) ||
     entryPrice === null ||
     invalidation === null ||
@@ -536,7 +658,10 @@ function outcomeForEpisode(
       ? (exitPremiumBid - entryAsk) * multiplier
       : null;
 
-  const exposure = sourceCycle.marketState.exposureStructure;
+  const exposure =
+    sourceCycle.marketState?.exposureStructure ??
+    sourceCycle.assembly.gammaResearchContext ??
+    null;
   const nearestCliff = exposure?.gammaCliffs.length
     ? [...exposure.gammaCliffs].sort(
         (left, right) =>
@@ -548,6 +673,7 @@ function outcomeForEpisode(
   return {
     episodeId: `${sourceCycle.source.id}:${episodeSignature(assembly)}`,
     sourceDecisionCycleId: sourceCycle.source.id,
+    replaySourceMode: sourceCycle.replaySourceMode,
     marketDate: assembly.currentMarketDate,
     setupType: assembly.entryCondition.setupType ?? null,
     direction,
@@ -669,14 +795,16 @@ export function buildPointInTimeBacktestRun(args: {
   createdAt: Date | string;
   request: PointInTimeBacktestRunRequest;
   sourceRows: PointInTimeDecisionCycleSource[];
+  externalIssues?: PointInTimeBacktestIssue[];
 }): PointInTimeBacktestRunPayload {
   const sourceRows = [...args.sourceRows].sort(
     (left, right) =>
       (finiteMs(left.sourceCalculatedAt) ?? 0) -
       (finiteMs(right.sourceCalculatedAt) ?? 0),
   );
-  const issues: PointInTimeBacktestIssue[] = [];
-  let issuesTruncated = false;
+  const issues: PointInTimeBacktestIssue[] = [...(args.externalIssues ?? [])];
+  let issuesTruncated = issues.length > POINT_IN_TIME_BACKTEST_ISSUE_LIMIT;
+  if (issuesTruncated) issues.splice(POINT_IN_TIME_BACKTEST_ISSUE_LIMIT);
   const recomputed: RecomputedCycle[] = [];
   for (const source of sourceRows) {
     const result = recomputeCycle(source, issues);
@@ -684,12 +812,56 @@ export function buildPointInTimeBacktestRun(args: {
     issuesTruncated ||= result.issuesTruncated;
   }
 
+  const legacyDates = [
+    ...new Set(
+      recomputed
+        .filter((cycle) => cycle.replaySourceMode === "LEGACY_FROZEN_ASSEMBLY")
+        .map((cycle) => cycle.source.currentMarketDate),
+    ),
+  ];
+  for (const marketDate of legacyDates) {
+    if (issues.length >= POINT_IN_TIME_BACKTEST_ISSUE_LIMIT) {
+      issuesTruncated = true;
+      break;
+    }
+    issues.push({
+      decisionCycleId: `LEGACY:${marketDate}`,
+      marketDate,
+      issueCode: "LEGACY_FROZEN_ASSEMBLY_USED",
+      severity: "WARNING",
+      message:
+        "Pre-V1.5 rows did not store the full Market State. The backtest used the exact frozen trade plan and reconstructed five-minute outcome bars from captured prices instead of discarding the date.",
+    });
+  }
+
+  const historicalDates = [
+    ...new Set(
+      recomputed
+        .filter((cycle) => cycle.replaySourceMode === "HISTORICAL_UNDERLYING_ONLY")
+        .map((cycle) => cycle.source.currentMarketDate),
+    ),
+  ];
+  for (const marketDate of historicalDates) {
+    if (issues.length >= POINT_IN_TIME_BACKTEST_ISSUE_LIMIT) {
+      issuesTruncated = true;
+      break;
+    }
+    issues.push({
+      decisionCycleId: `HISTORICAL:${marketDate}`,
+      marketDate,
+      issueCode: "HISTORICAL_UNDERLYING_DATA_USED",
+      severity: "INFO",
+      message:
+        "No captured decision cycles existed for this date, so current price-action rules were replayed from Schwab five-minute history. Historical options, GEX, DEX, contract selection, and premium P&L remain unavailable.",
+    });
+  }
+
   const episodes: PointInTimeBacktestEpisode[] = [];
   const usedSignatures = new Set<string>();
   for (let index = 0; index < recomputed.length; index += 1) {
-    const assembly = recomputed[index]!.assembly;
-    if (assembly.planState !== "READY") continue;
-    const signature = episodeSignature(assembly);
+    const cycle = recomputed[index]!;
+    if (!cycleIsEpisodeEligible(cycle)) continue;
+    const signature = episodeSignature(cycle.assembly);
     if (usedSignatures.has(signature)) continue;
     usedSignatures.add(signature);
     const episode = outcomeForEpisode(recomputed, index, args.request);
@@ -697,13 +869,35 @@ export function buildPointInTimeBacktestRun(args: {
   }
 
   const dates = [...new Set(sourceRows.map((row) => row.currentMarketDate))].sort();
+  const exactMarketStateBoundaryCount = recomputed.filter(
+    (cycle) => cycle.replaySourceMode === "EXACT_MARKET_STATE_RECOMPUTE",
+  ).length;
+  const legacyFrozenAssemblyBoundaryCount = recomputed.filter(
+    (cycle) => cycle.replaySourceMode === "LEGACY_FROZEN_ASSEMBLY",
+  ).length;
+  const historicalUnderlyingBoundaryCount = recomputed.filter(
+    (cycle) => cycle.replaySourceMode === "HISTORICAL_UNDERLYING_ONLY",
+  ).length;
+  const historicalUnderlyingDatasetUsed = historicalUnderlyingBoundaryCount > 0;
+  const capturedBoundaryCount =
+    exactMarketStateBoundaryCount + legacyFrozenAssemblyBoundaryCount;
+  const sourceProduct = historicalUnderlyingDatasetUsed
+    ? capturedBoundaryCount > 0
+      ? "MIXED_CAPTURED_AND_HISTORICAL_UNDERLYING"
+      : "HISTORICAL_UNDERLYING_PRICE_HISTORY"
+    : "FORWARD_CAPTURED_DETERMINISTIC_DECISION_CYCLES";
+
   const payload: PointInTimeBacktestRunPayload = {
     id: args.id,
     createdAt: iso(args.createdAt),
     request: args.request,
     source: {
       decisionCycleCount: sourceRows.length,
-      validMarketStateCount: recomputed.length,
+      validMarketStateCount:
+        exactMarketStateBoundaryCount + historicalUnderlyingBoundaryCount,
+      exactMarketStateBoundaryCount,
+      legacyFrozenAssemblyBoundaryCount,
+      historicalUnderlyingBoundaryCount,
       optionsChainSnapshotCount: new Set(
         sourceRows
           .map((row) => row.optionsChainSnapshotId)
@@ -712,7 +906,8 @@ export function buildPointInTimeBacktestRun(args: {
       marketDateCount: dates.length,
       dataStartMarketDate: dates[0] ?? null,
       dataEndMarketDate: dates.at(-1) ?? null,
-      sourceProduct: "FORWARD_CAPTURED_DETERMINISTIC_DECISION_CYCLES",
+      sourceProduct,
+      historicalUnderlyingDatasetUsed,
       historicalOptionsDatasetConnected: false,
     },
     summary: summarize(episodes),
@@ -727,10 +922,12 @@ export function buildPointInTimeBacktestRun(args: {
     methodology: {
       replayClock: "SOURCE_CALCULATED_AT",
       planRecomputation:
-        "CURRENT_DETERMINISTIC_ENGINE_FROM_STORED_MARKET_STATE",
-      entryPolicy: "FIRST_READY_PER_UNIQUE_PLAN_SIGNATURE",
-      fillPolicy: "UNDERLYING_AT_CAPTURE_AND_OPTION_AT_ASK",
-      targetStopPolicy: "FUTURE_COMPLETED_5M_OHLC_FIRST_TOUCH",
+        "HYBRID_CURRENT_ENGINE_LEGACY_FROZEN_AND_HISTORICAL_UNDERLYING",
+      entryPolicy:
+        "FIRST_QUALIFIED_UNDERLYING_OR_READY_PER_UNIQUE_PLAN_SIGNATURE",
+      fillPolicy: "UNDERLYING_AT_BOUNDARY_OPTION_AT_ASK_WHEN_AVAILABLE",
+      targetStopPolicy:
+        "FUTURE_COMPLETED_OR_RECONSTRUCTED_5M_OHLC_FIRST_TOUCH",
       sameCandlePolicy: "AMBIGUOUS_NO_ASSUMED_ORDER",
       optionExitPolicy: "NEXT_OBSERVED_BID_OR_STORED_MODEL_SCENARIO",
       futureCoveragePolicy: "REQUIRE_HOLD_BOUNDARY_OR_SESSION_END",
@@ -739,3 +936,4 @@ export function buildPointInTimeBacktestRun(args: {
   };
   return PointInTimeBacktestRunPayloadSchema.parse(payload);
 }
+

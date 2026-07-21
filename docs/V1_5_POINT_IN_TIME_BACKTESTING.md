@@ -1,5 +1,7 @@
 # V1.5.0 Point-in-Time Backtesting Methodology
 
+> **V1.5.1 patch:** Pre-V1.5 rows may now replay through their exact frozen Assembly, and dates with no captures may use Schwab historical five-minute underlying data. See `V1_5_1_HISTORICAL_REPLAY_RECOVERY.md`. Historical options remain unavailable.
+
 ## Objective
 
 V1.5.0 determines what the dashboard's deterministic engine would produce at a past captured boundary and then grades what occurred afterward. It is designed to prevent hindsight from entering the plan.

@@ -83,6 +83,7 @@ function RunResult({ run }: { run: PointInTimeBacktestRunPayload }) {
         <div className="space-y-1">
           <Badge variant={row.direction === "CALLS" ? "bull" : "bear"}>{row.direction}</Badge>
           <div className="max-w-[190px] text-[11px] text-muted-foreground">{row.setupType ?? "UNAVAILABLE"}</div>
+          <div className="text-[10px] text-muted-foreground">{row.replaySourceMode.replaceAll("_", " ")}</div>
         </div>
       ),
     },
@@ -136,10 +137,16 @@ function RunResult({ run }: { run: PointInTimeBacktestRunPayload }) {
     <>
       <Panel title="Backtest Scorecard" className="mb-3" action={<Badge variant="accent">POINT-IN-TIME V1</Badge>}>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Captured Cycles" value={run.source.decisionCycleCount} detail={`${run.source.marketDateCount} market dates`} />
-          <Metric label="Trade Episodes" value={run.summary.episodeCount} detail="First READY per unique plan" />
+          <Metric label="Replay Boundaries" value={run.source.decisionCycleCount} detail={`${run.source.marketDateCount} market dates`} />
+          <Metric label="Trade Episodes" value={run.summary.episodeCount} detail="First qualified plan per unique signature" />
           <Metric label="Resolved Win Rate" value={formatBacktestPercent(run.summary.winRatePercent)} detail={`${run.summary.resolvedDirectionalCount} target/stop outcomes`} />
           <Metric label="Average R" value={formatBacktestNumber(run.summary.averageRMultiple)} detail="Only episodes with a defined exit" />
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Metric label="Exact Market-State" value={run.source.exactMarketStateBoundaryCount} />
+          <Metric label="Legacy Frozen Plans" value={run.source.legacyFrozenAssemblyBoundaryCount} />
+          <Metric label="Historical Underlying" value={run.source.historicalUnderlyingBoundaryCount} />
+          <Metric label="Option-Chain Snapshots" value={run.source.optionsChainSnapshotCount} />
         </div>
         <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Metric label="Target First" value={run.summary.targetFirstCount} />
@@ -148,20 +155,21 @@ function RunResult({ run }: { run: PointInTimeBacktestRunPayload }) {
           <Metric label="Insufficient Coverage" value={run.summary.insufficientFutureDataCount} />
         </div>
         <div className="mt-3 rounded-md border border-accent/20 bg-accent/5 p-3 text-xs leading-relaxed text-muted-foreground">
-          The engine recomputes the current deterministic rules at each stored historical boundary and sees only data timestamped at or before that boundary. Entry uses the captured SPY price and option ask. Target and stop ordering uses future completed five-minute candles; if both occur in one candle, no order is assumed. Historical options data is not connected, so this page currently replays only forward-captured V1.5 data.
+          The engine uses the strongest available point-in-time source for each date. V1.5+ captures are recomputed from their stored Market State. Pre-V1.5 captures use the exact frozen plan and reconstruct outcome candles from captured prices. Dates with no captures are replayed from Schwab five-minute price history using current price-action rules. Historical options, GEX, DEX, contract selection, and premium P&L remain unavailable until a historical options dataset is connected. No future candle is visible to the plan.
         </div>
       </Panel>
 
       <Panel title="Historical Trade Episodes" className="mb-3" noPadding>
-        <DataTable columns={episodeColumns} rows={run.episodes} rowKey={(row) => row.episodeId} emptyMessage="No READY trade episodes were found in the selected captured period." />
+        <DataTable columns={episodeColumns} rows={run.episodes} rowKey={(row) => row.episodeId} emptyMessage="No qualified trade episodes were found in the selected replay period." />
       </Panel>
 
       {selectedEpisode ? (
         <Panel title="Recomputed Historical Trade Plan" className="mb-3" action={<Badge variant={selectedEpisode.direction === "CALLS" ? "bull" : "bear"}>{selectedEpisode.direction}</Badge>}>
           <div className="mb-3 text-xs text-muted-foreground">
-            This plan panel is the frozen deterministic plan produced at {formatBacktestEasternTime(selectedEpisode.entryAt)}. The outcome below was calculated afterward and did not influence the plan.
+            This plan was produced at {formatBacktestEasternTime(selectedEpisode.entryAt)} using {selectedEpisode.replaySourceMode.replaceAll("_", " ").toLowerCase()}. The outcome below was calculated afterward and did not influence the plan.
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <DetailItem label="Replay Source" value={selectedEpisode.replaySourceMode.replaceAll("_", " ")} />
             <DetailItem label="Plan State" value={selectedEpisode.sourceAssembly.planState} />
             <DetailItem label="Setup" value={selectedEpisode.setupType ?? "UNAVAILABLE"} />
             <DetailItem label="Trigger" value={formatBacktestNumber(selectedEpisode.triggerLevel)} />
@@ -200,12 +208,24 @@ function RunResult({ run }: { run: PointInTimeBacktestRunPayload }) {
           <div className="text-sm text-muted-foreground">No source validation or no-look-ahead issues were detected.</div>
         ) : (
           <div className="space-y-2">
-            {run.issues.map((issue) => (
-              <div key={`${issue.decisionCycleId}:${issue.issueCode}`} className="rounded-md border border-bear/20 bg-bear/5 p-3">
-                <div className="font-mono text-xs text-bear">{issue.issueCode}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{issue.marketDate} · {issue.message}</div>
-              </div>
-            ))}
+            {run.issues.map((issue) => {
+              const issueClass = issue.severity === "ERROR"
+                ? "border-bear/20 bg-bear/5"
+                : issue.severity === "WARNING"
+                  ? "border-wait/20 bg-wait/5"
+                  : "border-accent/20 bg-accent/5";
+              const textClass = issue.severity === "ERROR"
+                ? "text-bear"
+                : issue.severity === "WARNING"
+                  ? "text-wait"
+                  : "text-accent";
+              return (
+                <div key={`${issue.decisionCycleId}:${issue.issueCode}`} className={`rounded-md border p-3 ${issueClass}`}>
+                  <div className={`font-mono text-xs ${textClass}`}>{issue.severity} · {issue.issueCode}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{issue.marketDate} · {issue.message}</div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Panel>
@@ -237,7 +257,7 @@ export default function PointInTimeBacktestPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Point-in-Time Backtesting" description="Recompute the deterministic trade plan from exact forward-captured boundaries, then grade what happened without future-data leakage." />
+      <PageHeader title="Point-in-Time Backtesting" description="Replay exact captures when available and use Schwab historical five-minute candles for uncaptured dates, without future-data leakage." />
 
       <Panel title="Run Backtest" action={<FlaskConical className="h-4 w-4 text-accent" />}>
         <div className="grid gap-3 md:grid-cols-4">

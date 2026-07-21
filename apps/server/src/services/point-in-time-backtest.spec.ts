@@ -7,7 +7,11 @@ import {
 import {
   makeV140MarketState,
   makeV140OptionsChain,
+  makeV140BiasPlanRisk,
+  V140_CONTRACT_EVAL_MS,
 } from "./trade-engine-v140.test-fixtures";
+import { buildSpyZeroDteContractSelection } from "./trade-contract.logic";
+import { buildSpyZeroDteTradePlanAssembly } from "./trade-plan-assembly.logic";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -80,6 +84,23 @@ function runWithFuture(state: SpyZeroDteDeterministicMarketStateResponse) {
       row("future", state.calculatedAt, state),
     ],
   });
+}
+
+function readyAssembly() {
+  const { marketState, bias, tradePlan, risk } = makeV140BiasPlanRisk("CALLS");
+  const contract = buildSpyZeroDteContractSelection(
+    risk,
+    makeV140OptionsChain("CALLS"),
+    V140_CONTRACT_EVAL_MS,
+  );
+  return buildSpyZeroDteTradePlanAssembly(
+    marketState,
+    bias,
+    tradePlan,
+    risk,
+    contract,
+    V140_CONTRACT_EVAL_MS,
+  );
 }
 
 test("target-first uses future completed five-minute candle", () => {
@@ -162,6 +183,72 @@ test("duplicate READY captures create one episode", () => {
     ],
   });
   assert.equal(run.episodes.length, 1);
+});
+
+test("pre-V1.5 rows replay from their frozen Assembly instead of failing validation", () => {
+  const future = futureState({
+    calculatedAt: "2026-07-17T14:05:10.000Z",
+    candleStart: "2026-07-17T14:00:00.000Z",
+    high: 760.1,
+    low: 758.2,
+    close: 760,
+  });
+  const run = buildPointInTimeBacktestRun({
+    id: "run-legacy",
+    createdAt: "2026-07-21T04:00:00.000Z",
+    request: { startMarketDate: null, endMarketDate: null, maximumHoldMinutes: 60 },
+    sourceRows: [
+      {
+        id: "legacy-entry",
+        currentMarketDate: "2026-07-17",
+        sourceCalculatedAt: "2026-07-17T14:00:10.000Z",
+        capturedAt: "2026-07-17T14:00:10.000Z",
+        sourceAssembly: readyAssembly(),
+        sourceMarketState: null,
+        optionsChainSnapshotId: null,
+        optionsChainPayload: null,
+      },
+      row("future", future.calculatedAt, future),
+    ],
+  });
+  assert.equal(run.episodes.length, 1);
+  assert.equal(run.episodes[0]?.replaySourceMode, "LEGACY_FROZEN_ASSEMBLY");
+  assert.equal(run.episodes[0]?.outcomeState, "TARGET_FIRST");
+  assert.equal(run.source.legacyFrozenAssemblyBoundaryCount, 1);
+  assert.equal(run.issues[0]?.issueCode, "LEGACY_FROZEN_ASSEMBLY_USED");
+  assert.equal(run.issues[0]?.severity, "WARNING");
+});
+
+test("historical underlying boundaries can grade a qualified plan without a contract", () => {
+  const entryState = makeV140MarketState("CALLS");
+  const future = futureState({
+    calculatedAt: "2026-07-17T14:05:10.000Z",
+    candleStart: "2026-07-17T14:00:00.000Z",
+    high: 760.1,
+    low: 758.2,
+    close: 760,
+  });
+  const historicalEntry = row(
+    "historical-entry",
+    "2026-07-17T14:00:10.000Z",
+    entryState,
+    false,
+  );
+  historicalEntry.sourceKind = "HISTORICAL_UNDERLYING";
+  const run = buildPointInTimeBacktestRun({
+    id: "run-historical",
+    createdAt: "2026-07-21T04:00:00.000Z",
+    request: { startMarketDate: null, endMarketDate: null, maximumHoldMinutes: 60 },
+    sourceRows: [historicalEntry, row("future", future.calculatedAt, future)],
+  });
+  assert.equal(run.episodes.length, 1);
+  assert.equal(run.episodes[0]?.replaySourceMode, "HISTORICAL_UNDERLYING_ONLY");
+  assert.equal(run.episodes[0]?.selectedContractSymbol, null);
+  assert.equal(run.episodes[0]?.optionOutcomeState, "UNAVAILABLE");
+  assert.equal(run.source.historicalUnderlyingBoundaryCount, 1);
+  assert.equal(run.source.historicalUnderlyingDatasetUsed, true);
+  assert.equal(run.issues[0]?.issueCode, "HISTORICAL_UNDERLYING_DATA_USED");
+  assert.equal(run.issues[0]?.severity, "INFO");
 });
 
 console.log(`Point-in-time backtest: ${passed} tests passed.`);

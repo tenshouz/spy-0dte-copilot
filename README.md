@@ -1,34 +1,65 @@
-# SPY 0DTE Copilot — V1.5.0 Point-in-Time Backtesting
+# SPY 0DTE Copilot — V1.5.1 Historical Replay Recovery
 
-SPY 0DTE Copilot is a local, deterministic, read-only trading decision-support dashboard. V1.5.0 adds the strongest backtesting foundation that can be built before connecting a licensed historical options dataset: exact **forward capture**, historical-boundary recomputation, objective outcome grading, and a dedicated Point-in-Time Backtesting page.
+SPY 0DTE Copilot is a local, deterministic, read-only trading decision-support dashboard. V1.5.1 fixes the two replay problems discovered immediately after V1.5.0:
 
-V1.5.0 does not place, route, modify, or cancel brokerage orders. Backtest results are research outputs, not guarantees of future performance.
+1. Pre-V1.5 captured cycles no longer fail solely because their full Market State was not stored.
+2. A requested date with zero captured cycles can now be replayed from Schwab historical five-minute SPY candles.
 
-## What V1.5.0 adds
+The backtester still does not invent historical option chains, Greeks, GEX, DEX, contracts, or option-premium returns. Those outputs remain unavailable until a point-in-time historical options dataset is connected.
 
-- Stores the exact deterministic Market State used by every captured decision cycle.
-- Deduplicates and stores the exact same-day SPY Options Chain snapshot when the contract engine requested it.
-- Recomputes the current deterministic bias, plan, risk, contract, and Assembly at each historical source boundary.
-- Audits timestamps and rejects any source containing data after the simulated boundary.
-- Creates one episode from the first `READY` observation per unique plan signature.
-- Grades target-first, stop-first, ambiguous same-candle, timeout, session-end, and insufficient-coverage outcomes.
-- Calculates MFE, MAE, duration, underlying points, realized R, and estimated option P&L.
-- Uses future completed five-minute candles for target/stop ordering; quote samples can improve excursion measurements but never decide first touch.
-- Separates the frozen historical plan from the later outcome in the user interface.
-- Preserves empirical Gamma as an observational research dimension only.
-- Saves backtest runs and breakdowns by setup, direction, and Gamma regime.
+## What V1.5.1 changes
 
-## Critical limitation
+### Legacy captured-date recovery
 
-Exact V1.5 replay begins **after this release is installed and the new migration is applied**. Earlier V1.4 decision-cycle rows did not store the full Market State and Options Chain payloads required for exact recomputation. V1.5 does not invent those missing inputs.
+Older decision-cycle rows contain the exact frozen Trade Plan Assembly but not the complete V1.5 Market State payload. V1.5.1 now:
 
-A historical options dataset can be connected later through a dedicated adapter without changing the replay methodology.
+- Validates and uses the frozen Assembly when the stored Market State is missing or incompatible.
+- Reconstructs five-minute OHLC outcome bars from the captured SPY price observations when completed candles are unavailable.
+- Grades target/stop outcomes without allowing later prices to alter the original plan.
+- Emits one yellow `LEGACY_FROZEN_ASSEMBLY_USED` warning per affected market date instead of hundreds of red Market State errors.
+
+This is a faithful frozen-plan replay, not current-rule recomputation, because the original raw Market State did not exist.
+
+### Uncaptured-date historical replay
+
+When both date fields are supplied and a trading date has no saved decision cycles, V1.5.1 now:
+
+- Fetches bounded five-minute SPY price history through the existing Schwab Market Data connection.
+- Reconstructs each historical boundary from completed candles only.
+- Recalculates VWAP, session levels, gap context, opening range, market state, bias, trigger confirmation, risk, and the underlying trade plan using the current deterministic rules.
+- Begins evaluation only after the 15-minute opening range is complete.
+- Grades the resulting underlying plan against later completed five-minute candles.
+- Clearly labels every such episode `HISTORICAL_UNDERLYING_ONLY`.
+
+One request may cover up to 31 calendar days. Use explicit start and end dates. Schwab must be connected for dates that have no local captures.
+
+## Replay source modes
+
+- `EXACT_MARKET_STATE_RECOMPUTE`: V1.5+ capture with the full point-in-time Market State; current rules are recomputed.
+- `LEGACY_FROZEN_ASSEMBLY`: pre-V1.5 capture; the exact stored plan is preserved and later captured prices grade the outcome.
+- `HISTORICAL_UNDERLYING_ONLY`: no capture existed; current price-action rules are rebuilt from historical five-minute SPY candles.
+
+The Backtest Scorecard reports the count for each source mode.
 
 ## Installation
 
-Preserve the existing hidden `.git` directory and `apps/server/.env`, then copy the V1.5.0 files over the project.
+Preserve the hidden `.git` directory and `apps/server/.env`, then copy the V1.5.1 files over the current project.
 
-Stop the backend before running Prisma commands. From the repository root in PowerShell:
+### Already running V1.5.0
+
+No npm dependency, environment variable, Prisma schema, or database migration changed in V1.5.1. Stop and restart the backend and frontend:
+
+```powershell
+npm run dev:server
+```
+
+```powershell
+npm run dev:web
+```
+
+### Upgrading directly from a pre-V1.5 release
+
+Apply the existing V1.5 migration and regenerate Prisma before restarting:
 
 ```powershell
 $databaseLine = Get-Content apps\server\.env |
@@ -55,66 +86,41 @@ npx prisma migrate deploy --schema apps/server/prisma/schema.prisma
 npx prisma generate --schema apps/server/prisma/schema.prisma
 ```
 
-No npm dependency or environment-variable name changed. If the existing `node_modules` folder is intact, `npm install` is not required solely for V1.5.0.
+## How to use the fix
 
-Restart the application:
+1. Keep Schwab connected.
+2. Open **Point-in-Time Backtesting**.
+3. Enter the same explicit date in Start and End for a one-day replay.
+4. Choose a maximum hold time between 5 and 390 minutes.
+5. Run the backtest.
 
-```powershell
-npm run dev:server
-```
-
-```powershell
-npm run dev:web
-```
-
-## Building the capture history
-
-For continuous capture, keep the backend running and enable **Persistent Backend Automation** in Settings. V1.5 evaluates and captures one deterministic candidate each automation cadence even when Trade Plan Discord alerts are disabled or the webhook is not configured. No outbound message is required for research capture.
-
-The capture system is best effort: a database failure never changes the live trading output.
-
-## Point-in-Time Backtesting page
-
-Open **Point-in-Time Backtest** from the navigation. Select optional market-date bounds and a maximum hold time, then run the test.
-
-The page shows:
-
-- Source decision-cycle and date coverage.
-- Recomputed trade episodes.
-- Win rate among target-first and stop-first outcomes.
-- Average R and estimated option P&L.
-- MFE and MAE.
-- Setup, direction, and Gamma-regime breakdowns.
-- Audit issues and incomplete-capture warnings.
-- A per-episode frozen plan panel separate from the post-plan outcome.
+For a date such as July 17, 2026 with no captures, the scorecard should show historical-underlying replay boundaries instead of zero total boundaries. For a pre-V1.5 captured date such as July 20, the page should show legacy frozen-plan boundaries and a single warning rather than repeated red Market State errors.
 
 ## Methodology safeguards
 
-- Historical clock: stored `sourceCalculatedAt`.
-- No look-ahead: all source timestamps and completed-candle boundaries must be at or before the replay clock.
-- Entry: first `READY` occurrence per unique plan signature.
-- Underlying fill: captured current price.
-- Option fill: captured ask.
-- Target/stop ordering: completed five-minute OHLC first touch.
-- Same-candle target and stop: ambiguous; no favorable or unfavorable ordering is invented.
-- Missing future coverage: `INSUFFICIENT_FUTURE_DATA`, not a fabricated timeout.
-- Option exit: first observed later bid within the allowed lag, otherwise the stored conservative target/stop scenario when applicable.
+- No source timestamp may be after the simulated boundary.
+- Only candles completed by the boundary are visible to the plan.
+- Historical-underlying replay begins after the completed 15-minute opening range.
+- A qualified underlying plan may be graded without pretending a historical option contract existed.
+- Target and stop ordering uses future completed or reconstructed five-minute OHLC.
+- If target and stop occur in the same candle, the outcome remains ambiguous.
+- Missing future coverage is not mislabeled as timeout.
+- Historical underlying mode reports no contract, premium P&L, GEX, DEX, or Gamma research result.
+- Backtesting remains research-only and does not place orders.
 
 ## Verification
-
-After Prisma generation, run:
 
 ```powershell
 npm run verify:v1
 ```
 
-The focused backtest tests can also be run directly:
+Focused replay checks:
 
 ```powershell
+npx --no-install tsx apps/server/src/services/historical-underlying-backtest.spec.ts
 npx --no-install tsx apps/server/src/services/point-in-time-backtest.spec.ts
-npx --no-install tsx apps/server/src/services/trade-plan-assembly.service.spec.ts
 npx --no-install tsx apps/server/src/routes/point-in-time-backtest.routes.spec.ts
 npx --no-install tsx apps/web/src/lib/point-in-time-backtest-view.spec.ts
 ```
 
-See [the complete methodology](docs/V1_5_POINT_IN_TIME_BACKTESTING.md), [release notes](RELEASE_NOTES_v1.5.0.md), [implementation summary](IMPLEMENTATION_SUMMARY_v1.5.0.md), [verification report](VERIFICATION_REPORT_v1.5.0.md), and [the strongest next-version roadmap](STRONGEST_NEXT_VERSION.md).
+See `RELEASE_NOTES_v1.5.1.md`, `IMPLEMENTATION_SUMMARY_v1.5.1.md`, `VERIFICATION_REPORT_v1.5.1.md`, and `docs/V1_5_1_HISTORICAL_REPLAY_RECOVERY.md`.

@@ -103,9 +103,19 @@ export const PointInTimeBacktestIssueCodeSchema = z.enum([
   "SOURCE_TIMESTAMP_AFTER_CYCLE",
   "RECOMPUTED_ASSEMBLY_INVALID",
   "NO_USABLE_PRICE_OBSERVATIONS",
+  "LEGACY_FROZEN_ASSEMBLY_USED",
+  "HISTORICAL_UNDERLYING_DATA_USED",
+  "HISTORICAL_CANDLE_FETCH_FAILED",
+  "HISTORICAL_CANDLE_DATE_UNAVAILABLE",
+  "HISTORICAL_FALLBACK_RANGE_LIMIT_EXCEEDED",
 ]);
 export type PointInTimeBacktestIssueCode = z.infer<
   typeof PointInTimeBacktestIssueCodeSchema
+>;
+
+export const PointInTimeBacktestIssueSeveritySchema = z.enum(["INFO", "WARNING", "ERROR"]);
+export type PointInTimeBacktestIssueSeverity = z.infer<
+  typeof PointInTimeBacktestIssueSeveritySchema
 >;
 
 export const PointInTimeBacktestIssueSchema = z
@@ -113,6 +123,7 @@ export const PointInTimeBacktestIssueSchema = z
     decisionCycleId: z.string().min(1),
     marketDate: MarketDateSchema,
     issueCode: PointInTimeBacktestIssueCodeSchema,
+    severity: PointInTimeBacktestIssueSeveritySchema.default("ERROR"),
     message: z.string().min(1).max(320),
   })
   .strict();
@@ -120,10 +131,20 @@ export type PointInTimeBacktestIssue = z.infer<
   typeof PointInTimeBacktestIssueSchema
 >;
 
+export const PointInTimeBacktestReplaySourceModeSchema = z.enum([
+  "EXACT_MARKET_STATE_RECOMPUTE",
+  "LEGACY_FROZEN_ASSEMBLY",
+  "HISTORICAL_UNDERLYING_ONLY",
+]);
+export type PointInTimeBacktestReplaySourceMode = z.infer<
+  typeof PointInTimeBacktestReplaySourceModeSchema
+>;
+
 export const PointInTimeBacktestEpisodeSchema = z
   .object({
     episodeId: z.string().min(1),
     sourceDecisionCycleId: z.string().min(1),
+    replaySourceMode: PointInTimeBacktestReplaySourceModeSchema.default("EXACT_MARKET_STATE_RECOMPUTE"),
     marketDate: MarketDateSchema,
     setupType: TradeSetupTypeSchema.nullable(),
     direction: z.enum(["CALLS", "PUTS"]),
@@ -214,13 +235,19 @@ export const PointInTimeBacktestSourceSummarySchema = z
   .object({
     decisionCycleCount: z.number().int().nonnegative().max(5000),
     validMarketStateCount: z.number().int().nonnegative().max(5000),
+    exactMarketStateBoundaryCount: z.number().int().nonnegative().max(5000).default(0),
+    legacyFrozenAssemblyBoundaryCount: z.number().int().nonnegative().max(5000).default(0),
+    historicalUnderlyingBoundaryCount: z.number().int().nonnegative().max(5000).default(0),
     optionsChainSnapshotCount: z.number().int().nonnegative().max(5000),
     marketDateCount: z.number().int().nonnegative().max(367),
     dataStartMarketDate: MarketDateSchema.nullable(),
     dataEndMarketDate: MarketDateSchema.nullable(),
-    sourceProduct: z.literal(
+    sourceProduct: z.enum([
       "FORWARD_CAPTURED_DETERMINISTIC_DECISION_CYCLES",
-    ),
+      "MIXED_CAPTURED_AND_HISTORICAL_UNDERLYING",
+      "HISTORICAL_UNDERLYING_PRICE_HISTORY",
+    ]),
+    historicalUnderlyingDatasetUsed: z.boolean().default(false),
     historicalOptionsDatasetConnected: z.literal(false),
   })
   .strict();
@@ -231,12 +258,22 @@ export type PointInTimeBacktestSourceSummary = z.infer<
 export const PointInTimeBacktestMethodologySchema = z
   .object({
     replayClock: z.literal("SOURCE_CALCULATED_AT"),
-    planRecomputation: z.literal(
+    planRecomputation: z.enum([
       "CURRENT_DETERMINISTIC_ENGINE_FROM_STORED_MARKET_STATE",
-    ),
-    entryPolicy: z.literal("FIRST_READY_PER_UNIQUE_PLAN_SIGNATURE"),
-    fillPolicy: z.literal("UNDERLYING_AT_CAPTURE_AND_OPTION_AT_ASK"),
-    targetStopPolicy: z.literal("FUTURE_COMPLETED_5M_OHLC_FIRST_TOUCH"),
+      "HYBRID_CURRENT_ENGINE_LEGACY_FROZEN_AND_HISTORICAL_UNDERLYING",
+    ]),
+    entryPolicy: z.enum([
+      "FIRST_READY_PER_UNIQUE_PLAN_SIGNATURE",
+      "FIRST_QUALIFIED_UNDERLYING_OR_READY_PER_UNIQUE_PLAN_SIGNATURE",
+    ]),
+    fillPolicy: z.enum([
+      "UNDERLYING_AT_CAPTURE_AND_OPTION_AT_ASK",
+      "UNDERLYING_AT_BOUNDARY_OPTION_AT_ASK_WHEN_AVAILABLE",
+    ]),
+    targetStopPolicy: z.enum([
+      "FUTURE_COMPLETED_5M_OHLC_FIRST_TOUCH",
+      "FUTURE_COMPLETED_OR_RECONSTRUCTED_5M_OHLC_FIRST_TOUCH",
+    ]),
     sameCandlePolicy: z.literal("AMBIGUOUS_NO_ASSUMED_ORDER"),
     optionExitPolicy: z.literal(
       "NEXT_OBSERVED_BID_OR_STORED_MODEL_SCENARIO",
@@ -271,7 +308,9 @@ export type PointInTimeBacktestRunPayload = z.infer<
 
 export const PointInTimeBacktestDisclosuresSchema = z
   .object({
-    forwardCapturedDataOnly: z.literal(true),
+    forwardCapturedDataOnly: z.boolean(),
+    historicalUnderlyingPriceHistorySupported: z.boolean().default(true),
+    legacyFrozenAssemblyFallbackSupported: z.boolean().default(true),
     historicalOptionsDatasetConnected: z.literal(false),
     noLookahead: z.literal(true),
     currentRulesRecomputedAtHistoricalBoundary: z.literal(true),

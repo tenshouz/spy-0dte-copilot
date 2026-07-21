@@ -5,12 +5,19 @@ import {
   PointInTimeBacktestRunRequestSchema,
   PointInTimeBacktestRunResponseSchema,
   type PointInTimeBacktestHistoryResponse,
+  type PointInTimeBacktestIssue,
   type PointInTimeBacktestRunRequest,
   type PointInTimeBacktestRunResponse,
   type PointInTimeBacktestRunSummary,
 } from "@spy-copilot/shared";
 import { hasDatabaseUrl } from "../config/env";
 import { isDatabaseReachable } from "../lib/db-status";
+import { buildHistoricalUnderlyingDecisionCycles } from "./historical-underlying-backtest.logic";
+import {
+  HISTORICAL_UNDERLYING_MAX_RANGE_DAYS,
+  fetchHistoricalUnderlyingCandles,
+} from "./historical-underlying-backtest.service";
+import { evaluateNyseTradingSessionCalendar } from "./nyse-session-calendar.logic";
 import {
   POINT_IN_TIME_BACKTEST_SOURCE_LIMIT,
   buildPointInTimeBacktestRun,
@@ -41,7 +48,9 @@ interface BacktestRunRow {
 }
 
 const DISCLOSURES = {
-  forwardCapturedDataOnly: true as const,
+  forwardCapturedDataOnly: false,
+  historicalUnderlyingPriceHistorySupported: true,
+  legacyFrozenAssemblyFallbackSupported: true,
   historicalOptionsDatasetConnected: false as const,
   noLookahead: true as const,
   currentRulesRecomputedAtHistoricalBoundary: true as const,
@@ -168,6 +177,117 @@ async function sourceRows(
   return select(request.startMarketDate, request.endMarketDate);
 }
 
+function inclusiveMarketDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  let cursor = Date.parse(`${start}T00:00:00.000Z`);
+  const final = Date.parse(`${end}T00:00:00.000Z`);
+  while (cursor <= final) {
+    const marketDate = new Date(cursor).toISOString().slice(0, 10);
+    const session = evaluateNyseTradingSessionCalendar(marketDate);
+    if (
+      session.coverageState === "SUPPORTED" &&
+      session.tradingDayState === "TRADING_DAY"
+    ) {
+      dates.push(marketDate);
+    }
+    cursor += 86_400_000;
+  }
+  return dates;
+}
+
+function fallbackIssue(
+  marketDate: string,
+  issueCode: PointInTimeBacktestIssue["issueCode"],
+  message: string,
+  severity: PointInTimeBacktestIssue["severity"] = "ERROR",
+): PointInTimeBacktestIssue {
+  return {
+    decisionCycleId: `HISTORICAL_FALLBACK:${marketDate}`,
+    marketDate,
+    issueCode,
+    severity,
+    message,
+  };
+}
+
+async function historicalFallback(args: {
+  request: PointInTimeBacktestRunRequest;
+  capturedRows: PointInTimeDecisionCycleSource[];
+}): Promise<{
+  rows: PointInTimeDecisionCycleSource[];
+  issues: PointInTimeBacktestIssue[];
+}> {
+  const { startMarketDate, endMarketDate } = args.request;
+  if (startMarketDate === null || endMarketDate === null) {
+    return { rows: [], issues: [] };
+  }
+
+  const requestedDates = inclusiveMarketDates(startMarketDate, endMarketDate);
+  const capturedDates = new Set(
+    args.capturedRows.map((row) => row.currentMarketDate),
+  );
+  const missingDates = requestedDates.filter((date) => !capturedDates.has(date));
+  if (missingDates.length === 0) return { rows: [], issues: [] };
+
+  const calendarRangeDays =
+    Math.floor(
+      (Date.parse(`${endMarketDate}T00:00:00.000Z`) -
+        Date.parse(`${startMarketDate}T00:00:00.000Z`)) /
+        86_400_000,
+    ) + 1;
+  if (calendarRangeDays > HISTORICAL_UNDERLYING_MAX_RANGE_DAYS) {
+    return {
+      rows: [],
+      issues: missingDates.map((marketDate) =>
+        fallbackIssue(
+          marketDate,
+          "HISTORICAL_FALLBACK_RANGE_LIMIT_EXCEEDED",
+          `On-demand Schwab underlying replay is limited to ${HISTORICAL_UNDERLYING_MAX_RANGE_DAYS} calendar days per run. Use a smaller date range.`,
+        ),
+      ),
+    };
+  }
+
+  const fetched = await fetchHistoricalUnderlyingCandles(
+    startMarketDate,
+    endMarketDate,
+  );
+  if (fetched.candles === null) {
+    const code =
+      fetched.failureCode === "RANGE_LIMIT_EXCEEDED"
+        ? "HISTORICAL_FALLBACK_RANGE_LIMIT_EXCEEDED"
+        : "HISTORICAL_CANDLE_FETCH_FAILED";
+    return {
+      rows: [],
+      issues: missingDates.map((marketDate) =>
+        fallbackIssue(
+          marketDate,
+          code,
+          `No captured cycles existed and Schwab historical five-minute candles could not be loaded (${fetched.failureCode ?? "UNKNOWN"}). Confirm Schwab is connected and retry.`,
+        ),
+      ),
+    };
+  }
+
+  const rows = buildHistoricalUnderlyingDecisionCycles({
+    candles: fetched.candles,
+    marketDates: missingDates,
+    requestedStartAtMs: fetched.requestedStartAtMs,
+    requestedEndAtMs: fetched.requestedEndAtMs,
+  });
+  const builtDates = new Set(rows.map((row) => row.currentMarketDate));
+  const issues = missingDates
+    .filter((marketDate) => !builtDates.has(marketDate))
+    .map((marketDate) =>
+      fallbackIssue(
+        marketDate,
+        "HISTORICAL_CANDLE_DATE_UNAVAILABLE",
+        "Schwab returned no complete RTH five-minute history for this market date, so no underlying-only replay boundaries could be built.",
+      ),
+    );
+  return { rows, issues };
+}
+
 export async function createPointInTimeBacktestRun(
   rawRequest: unknown,
 ): Promise<PointInTimeBacktestRunResponse> {
@@ -177,7 +297,21 @@ export async function createPointInTimeBacktestRun(
 
   try {
     const userId = await getOrCreateUserId();
-    const rows = await sourceRows(userId, request);
+    const capturedRows = await sourceRows(userId, request);
+    if (capturedRows.length > POINT_IN_TIME_BACKTEST_SOURCE_LIMIT) {
+      return PointInTimeBacktestRunResponseSchema.parse({
+        product: "SPY_POINT_IN_TIME_BACKTEST",
+        methodologyVersion: "POINT_IN_TIME_BACKTEST_V1",
+        calculatedAt: new Date().toISOString(),
+        engineState: "UNAVAILABLE",
+        primaryReasonCode: "BACKTEST_SOURCE_LIMIT_EXCEEDED",
+        run: null,
+        disclosures: DISCLOSURES,
+      });
+    }
+
+    const fallback = await historicalFallback({ request, capturedRows });
+    const rows = [...capturedRows, ...fallback.rows];
     if (rows.length > POINT_IN_TIME_BACKTEST_SOURCE_LIMIT) {
       return PointInTimeBacktestRunResponseSchema.parse({
         product: "SPY_POINT_IN_TIME_BACKTEST",
@@ -197,6 +331,7 @@ export async function createPointInTimeBacktestRun(
       createdAt,
       request,
       sourceRows: rows,
+      externalIssues: fallback.issues,
     });
     const raw = await rawPrisma();
     await raw.$executeRaw`

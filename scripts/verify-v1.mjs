@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 const repositoryRoot = process.cwd();
 const npmCli = process.env.npm_execpath;
 const tscCli = resolve(repositoryRoot, "node_modules", "typescript", "bin", "tsc");
-const expectedVersion = "1.5.0";
+const expectedVersion = "1.5.1";
 
 function run(command, args, label) {
   console.log(`\n=== ${label} ===`);
@@ -122,7 +122,7 @@ function getRepositoryFiles() {
   };
 }
 
-console.log("=== V1.5.0 static release audit ===");
+console.log("=== V1.5.1 static release audit ===");
 
 for (const packageFile of [
   "package.json",
@@ -156,18 +156,23 @@ for (const file of [
   "docs/V1_4_EXECUTION_QUALITY.md",
   "docs/V1_4_1_EMPIRICAL_GAMMA_RESEARCH.md",
   "docs/V1_5_POINT_IN_TIME_BACKTESTING.md",
-  "RELEASE_NOTES_v1.5.0.md",
-  "IMPLEMENTATION_SUMMARY_v1.5.0.md",
-  "VERIFICATION_REPORT_v1.5.0.md",
-  "README_APPLY_v1.5.0.txt",
-  "CHANGED_FILES_v1.5.0.txt",
-  "SOURCE_MANIFEST_SHA256_v1.5.0.txt",
+  "docs/V1_5_1_HISTORICAL_REPLAY_RECOVERY.md",
+  "RELEASE_NOTES_v1.5.1.md",
+  "IMPLEMENTATION_SUMMARY_v1.5.1.md",
+  "VERIFICATION_REPORT_v1.5.1.md",
+  "README_APPLY_v1.5.1.txt",
+  "CHANGED_FILES_v1.5.1.txt",
+  "SOURCE_MANIFEST_SHA256_v1.5.1.txt",
   "STRONGEST_NEXT_VERSION.md",
   "apps/server/prisma/migrations/20260721040000_add_point_in_time_backtesting/migration.sql",
   "packages/shared/src/backtest-schemas.ts",
   "apps/server/src/services/point-in-time-backtest.logic.ts",
   "apps/server/src/services/point-in-time-backtest.service.ts",
   "apps/server/src/services/point-in-time-backtest.spec.ts",
+  "apps/server/src/services/historical-underlying-backtest.logic.ts",
+  "apps/server/src/services/historical-underlying-backtest.service.ts",
+  "apps/server/src/services/historical-underlying-contract.logic.ts",
+  "apps/server/src/services/historical-underlying-backtest.spec.ts",
   "apps/server/src/routes/point-in-time-backtest.routes.ts",
   "apps/server/src/routes/point-in-time-backtest.routes.spec.ts",
   "apps/web/src/app/backtest/page.tsx",
@@ -176,7 +181,7 @@ for (const file of [
   "apps/web/src/lib/point-in-time-backtest-view.spec.ts",
 ]) {
   if (!existsSync(file)) {
-    throw new Error(`Required V1.5.0 artifact is missing: ${file}`);
+    throw new Error(`Required V1.5.1 artifact is missing: ${file}`);
   }
 }
 
@@ -265,4 +270,4 @@ if (hasGit) {
   console.log("\nGit metadata is not present; whitespace diff validation was skipped.");
 }
 
-console.log("\nV1.5.0 verification passed.");
+console.log("\nV1.5.1 verification passed.");
