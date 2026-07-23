@@ -560,7 +560,14 @@ test("release documentation and verification scripts are present", () => {
     resolve(process.cwd(), "scripts/verify-v1.mjs"),
     "utf8",
   );
-  assert.match(readme, /V1\.5\.1 Historical Replay Recovery/i);
+  const rootPackage = JSON.parse(
+    readFileSync(resolve(process.cwd(), "package.json"), "utf8"),
+  ) as { version: string };
+  const escapedVersion = rootPackage.version.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+  assert.match(readme, new RegExp(`V${escapedVersion}`, "i"));
   assert.match(runbook, /Backup and restore/i);
   assert.match(runbook, /Schwab recovery/i);
   assert.match(audit, /No order execution/i);
@@ -576,7 +583,10 @@ test("release documentation and verification scripts are present", () => {
   assert.match(empiricalGammaMethodology, /no automatic directional weighting/i);
   assert.match(pointInTimeBacktestMethodology, /no[- ]look-ahead/i);
   assert.match(pointInTimeBacktestMethodology, /INSUFFICIENT_FUTURE_DATA/i);
-  assert.match(verifier, /V1\.5\.1 verification passed/);
+  assert.match(
+    verifier,
+    new RegExp(`V${escapedVersion} verification passed`, "i"),
+  );
 });
 
 async function run(): Promise<void> {

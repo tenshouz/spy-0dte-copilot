@@ -52,31 +52,39 @@ function sourceAssemblySummary(assembly: SpyZeroDteTradePlanAssemblyResponse) {
   };
 }
 
-function normalizedKeyNumber(value: number | null): string {
-  if (value === null) return "NA";
-  return value.toFixed(4).replace(/\.?0+$/, "");
+function semanticLifecycleKey(
+  assembly: SpyZeroDteTradePlanAssemblyResponse,
+  category: TradePlanAlertCandidate["category"],
+): string {
+  if (category === "PLAN_READY") return "READY";
+  if (category === "NO_QUALIFIED_CONTRACT") return "NO_CONTRACT";
+  if (category === "SETUP_NOT_QUALIFIED") return "RISK_NOT_QUALIFIED";
+
+  const lifecycle = assembly.entryCondition.triggerLifecycleState ?? "ARMED";
+  return lifecycle === "NOT_APPLICABLE" || lifecycle === "UNAVAILABLE"
+    ? "ARMED"
+    : lifecycle;
 }
 
+/**
+ * This key intentionally excludes live floating values such as VWAP, trigger
+ * price, confidence, exposure state, contract quote, invalidation, and target.
+ * Those values refresh the dashboard payload but do not create a new Discord
+ * alert identity. Only a meaningful setup/lifecycle transition changes the key.
+ */
 function stableCandidateKey(
   assembly: SpyZeroDteTradePlanAssemblyResponse,
   category: TradePlanAlertCandidate["category"],
 ): string {
-  const parts = [
+  const setupType = assembly.entryCondition.setupType ?? "UNAVAILABLE";
+  return [
     "SPY",
     assembly.currentMarketDate,
-    category,
     assembly.direction,
-    assembly.exposureConfirmation?.state ?? "EXPOSURE_UNAVAILABLE",
-    assembly.selectedContract.contractSymbol ?? "NO_CONTRACT",
-    normalizedKeyNumber(assembly.entryCondition.planningReferencePrice),
-    normalizedKeyNumber(assembly.entryCondition.triggerLevel),
-    assembly.entryCondition.comparison ?? "NO_COMPARISON",
-    assembly.entryCondition.triggerLifecycleState ?? "NO_TRIGGER_LIFECYCLE",
-    assembly.entryCondition.confirmationPassed === true ? "CONFIRMED" : "UNCONFIRMED",
-    normalizedKeyNumber(assembly.structuralInvalidation.level),
-    normalizedKeyNumber(assembly.primaryObjective.level),
-  ];
-  return parts.join("|");
+    setupType,
+    category,
+    semanticLifecycleKey(assembly, category),
+  ].join("|");
 }
 
 

@@ -1,0 +1,52 @@
+SPY 0DTE Copilot V1.5.2 — Changed Files
+Baseline: user-provided sanitized V1.5.1 project ZIP
+Baseline SHA-256: 258c8418f48f4ae9da5b9c2b35db00f4100f7e77f53635a105140042a474b288
+Scope: semantic Discord Trade Plan alert identity, actionable-only delivery, setup episodes, transient-clear protection, and competing-sender suppression
+
+NEW FILES (4)
++ IMPLEMENTATION_SUMMARY_v1.5.2.md
++ README_APPLY_v1.5.2.txt
++ RELEASE_NOTES_v1.5.2.md
++ docs/V1_5_2_DISCORD_ALERT_HARDENING.md
+
+MODIFIED FILES (22)
+* README.md
+* README_APPLY.txt
+* SANITIZATION_REPORT.txt
+* apps/server/package.json
+* apps/server/src/services/backend-automation.logic.ts
+* apps/server/src/services/backend-automation.service.ts
+* apps/server/src/services/backend-automation.spec.ts
+* apps/server/src/services/discord-trade-plan-alert.logic.ts
+* apps/server/src/services/discord-trade-plan-alert.service.ts
+* apps/server/src/services/discord-trade-plan-alert.spec.ts
+* apps/server/src/services/trade-plan-alert-candidate.logic.ts
+* apps/server/src/services/trade-plan-alert-candidate.spec.ts
+* apps/server/src/services/trade-plan-alert-transition.logic.ts
+* apps/server/src/services/trade-plan-alert-transition.spec.ts
+* apps/web/package.json
+* apps/web/src/components/alerts/trade-plan-alert-monitor.tsx
+* apps/web/src/lib/backend-automation-view.spec.ts
+* apps/web/src/lib/backend-automation-view.ts
+* package-lock.json
+* package.json
+* packages/shared/package.json
+* scripts/verify-v1.mjs
+
+DELETED FILES (0)
+None
+
+RELEASE-GENERATED FILES
++ CHANGED_FILES_v1.5.2.txt
++ SOURCE_MANIFEST_SHA256_v1.5.2.txt
++ VERIFICATION_REPORT_v1.5.2.md
+
+COMPATIBILITY
+- No dependency or devDependency changes.
+- No Prisma schema change and no database migration.
+- No environment-variable names changed.
+- Existing V1.5.1 point-in-time capture and historical replay behavior remains compatible.
+- Existing persisted alert state is normalized with safe defaults for the new episode fields.
+- Persistent Backend Automation capture continues when Trade Plan Alerts are disabled.
+- Scheduled-report delivery is unchanged.
+- No trading-rule, sizing, Gamma, or order-execution logic changed.

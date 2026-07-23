@@ -197,16 +197,28 @@ test("automatic delivery exposes bounded backend retry and shared deduplication 
     "utf8",
   );
 
-  assert.equal(monitor.includes("at most two attempts"), true);
-  assert.equal(monitor.includes("three-second backoff"), true);
-  assert.equal(monitor.includes("shared Discord"), true);
-  assert.equal(monitor.includes("process-memory duplicate state"), true);
+  assert.equal(monitor.includes('value="2 attempts"'), true);
+  assert.equal(
+    monitor.includes('sublabel="3 sec fixed backoff"'),
+    true,
+  );
+  assert.match(
+    monitor,
+    /Persistent backend automation remains the preferred\s+delivery path\./,
+  );
+  assert.match(
+    monitor,
+    /When persistent Trade Plan delivery is active,\s+the server also rejects foreground delivery requests\./,
+  );
+  assert.match(
+    monitor,
+    /Semantic\s+event fingerprints prevent any remaining sender path in the same\s+process from posting the same event\./,
+  );
   assert.equal(
     client.includes("/api/discord/trade-plan-alert/automatic"),
     true,
   );
 });
-
 test("automatic delivery is session-only and has no background scheduler", () => {
   const monitor = readFileSync(
     resolve(

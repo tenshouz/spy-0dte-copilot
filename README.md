@@ -1,9 +1,83 @@
-# SPY 0DTE Copilot — V1.5.1 Historical Replay Recovery
+# SPY 0DTE Copilot — V1.5.4 Trigger Lifecycle & Retest Recovery
 
-SPY 0DTE Copilot is a local, deterministic, read-only trading decision-support dashboard. V1.5.1 fixes the two replay problems discovered immediately after V1.5.0:
+V1.5.4 fixes the false-negative entry behavior where a structurally valid breakout was permanently labeled `INVALIDATED` simply because the first confirmed move was already beyond the maximum chase distance.
+
+The no-chase guard remains intact. An extended confirmation now enters a bounded `WAITING_FOR_RETEST` lifecycle. The engine can requalify only after SPY revisits a volatility-adjusted retest zone, closes back on the correct side of the buffered trigger, remains within the post-retest chase allowance, and still passes risk, target-room, contract-liquidity, and option-premium reward/risk checks.
+
+## V1.5.4 behavior
+
+- Separates a historical/raw trigger cross from the current quote relationship.
+- Retains the full current RTH five-minute session and records the first completed confirmation candle in the active raw-side episode, even when the dashboard opens later in the day.
+- Preserves the maximum-chase protection for immediate entries.
+- Uses `WAITING_FOR_RETEST` instead of permanent invalidation when the breakout is valid but extended.
+- Defines a volatility-adjusted retest zone and a six-completed-bar retest window.
+- Requires the retest candle to overlap the zone, close beyond the buffered trigger, and keep its close within the original maximum-chase allowance.
+- Scopes recross counting to the active buffered-trigger episode so a prior failed breakout does not permanently block a later clean reclaim.
+- Rejects a retest when the raw trigger is lost, the window expires, active-episode recrosses become excessive, participation is insufficient, or the post-retest entry is already extended again.
+- Recalculates the complete current risk, objectives, option contract, liquidity, and premium reward/risk before a plan can become `READY`.
+- Runs the same completed-candle lifecycle in point-in-time and historical-underlying replay.
+- Keeps `WAITING_FOR_RETEST` silent in Discord; only actionable lifecycle events are eligible for delivery under the V1.5.2/V1.5.3 alert hardening.
+
+The Trade Plan page now displays raw-cross state, current raw-side state, confirmation candle/time, confirmation extension, maximum observed completed-close extension for the episode, maximum chase distance, current extension, retest zone, retest progress, and whether the retest held. The former ambiguous `Trigger Satisfied` label is replaced by `Entry Qualification Passed`.
+
+No dependency, environment variable, Prisma schema, database migration, account permission, order route, or automated execution capability changed.
+
+See `RELEASE_NOTES_v1.5.4.md`, `IMPLEMENTATION_SUMMARY_v1.5.4.md`, `VERIFICATION_REPORT_v1.5.4.md`, and `docs/V1_5_4_TRIGGER_LIFECYCLE_RETEST_RECOVERY.md`.
+
+## Installation from V1.5.3
+
+Preserve `.git` and `apps/server/.env`, copy the V1.5.4 files over the current project, then restart:
+
+```powershell
+npm run dev:server
+```
+
+```powershell
+npm run dev:web
+```
+
+No `npm install`, Prisma generation, or migration is required when the existing dependency installation is intact. Run `npm run verify:v1` before relying on the updated lifecycle.
+
+---
+
+# SPY 0DTE Copilot — V1.5.3 Discord Alert Contract Hotfix
+
+V1.5.3 corrects the response-schema contract mismatch discovered by the local V1.5.2 Discord delivery specification. The alert hardening behavior remains unchanged: routine waiting recalculations stay silent, persistent backend delivery owns the webhook when enabled, and duplicate emitted events are suppressed.
+
+## What V1.5.3 fixes
+
+V1.5.2 intentionally returned `NO_EMITTED_TRANSITION` for three safe non-delivery situations:
+
+- Persistent backend automation blocked a competing foreground sender before transition evaluation.
+- A transition was emitted internally but filtered because it was not actionable for Discord.
+- A duplicate emitted transition was blocked by the process-wide fingerprint claim.
+
+The shared Zod response schema still allowed only a `SUPPRESSED` transition for that reason code. This caused three valid non-delivery paths to throw during response construction. V1.5.3 updates the schema to accept exactly these three fail-closed shapes while continuing to reject provider requests, retries, uncommitted emitted transitions, and unavailable transitions.
+
+No trading, backtesting, risk, contract, Gamma, sizing, database, or order logic changed. No dependency, environment variable, Prisma schema, or migration changed.
+
+See `RELEASE_NOTES_v1.5.3.md`, `IMPLEMENTATION_SUMMARY_v1.5.3.md`, `VERIFICATION_REPORT_v1.5.3.md`, and `docs/V1_5_3_DISCORD_ALERT_CONTRACT_HOTFIX.md`.
+
+## Installation from V1.5.2
+
+Preserve `.git` and `apps/server/.env`, keep Trade Plan Alerts off while copying the update, then restart:
+
+```powershell
+npm run dev:server
+```
+
+```powershell
+npm run dev:web
+```
+
+No `npm install`, Prisma generation, or migration is required. Run the focused Discord specification before re-enabling alerts.
+
+## V1.5.1 historical replay capabilities retained
+
+V1.5.1 fixed two replay problems discovered immediately after V1.5.0:
 
 1. Pre-V1.5 captured cycles no longer fail solely because their full Market State was not stored.
-2. A requested date with zero captured cycles can now be replayed from Schwab historical five-minute SPY candles.
+2. A requested date with zero captured cycles can be replayed from Schwab historical five-minute SPY candles.
 
 The backtester still does not invent historical option chains, Greeks, GEX, DEX, contracts, or option-premium returns. Those outputs remain unavailable until a point-in-time historical options dataset is connected.
 
@@ -41,11 +115,11 @@ One request may cover up to 31 calendar days. Use explicit start and end dates. 
 
 The Backtest Scorecard reports the count for each source mode.
 
-## Installation
+## Historical V1.5.1 installation notes
 
-Preserve the hidden `.git` directory and `apps/server/.env`, then copy the V1.5.1 files over the current project.
+For direct upgrades from a pre-V1.5 release, preserve the hidden `.git` directory and `apps/server/.env`, then apply the existing V1.5 database migration as described below.
 
-### Already running V1.5.0
+### Historical V1.5.0 to V1.5.1 path
 
 No npm dependency, environment variable, Prisma schema, or database migration changed in V1.5.1. Stop and restart the backend and frontend:
 
@@ -123,4 +197,4 @@ npx --no-install tsx apps/server/src/routes/point-in-time-backtest.routes.spec.t
 npx --no-install tsx apps/web/src/lib/point-in-time-backtest-view.spec.ts
 ```
 
-See `RELEASE_NOTES_v1.5.1.md`, `IMPLEMENTATION_SUMMARY_v1.5.1.md`, `VERIFICATION_REPORT_v1.5.1.md`, and `docs/V1_5_1_HISTORICAL_REPLAY_RECOVERY.md`.
+Historical replay detail remains in `RELEASE_NOTES_v1.5.1.md`, `IMPLEMENTATION_SUMMARY_v1.5.1.md`, `VERIFICATION_REPORT_v1.5.1.md`, and `docs/V1_5_1_HISTORICAL_REPLAY_RECOVERY.md`.

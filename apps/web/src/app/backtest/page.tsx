@@ -173,7 +173,11 @@ function RunResult({ run }: { run: PointInTimeBacktestRunPayload }) {
             <DetailItem label="Plan State" value={selectedEpisode.sourceAssembly.planState} />
             <DetailItem label="Setup" value={selectedEpisode.setupType ?? "UNAVAILABLE"} />
             <DetailItem label="Trigger" value={formatBacktestNumber(selectedEpisode.triggerLevel)} />
+            <DetailItem label="Lifecycle" value={selectedEpisode.planSnapshot.entryCondition.triggerLifecycleState?.replaceAll("_", " ") ?? "UNAVAILABLE"} />
+            <DetailItem label="Raw Trigger Crossed" value={String(selectedEpisode.planSnapshot.entryCondition.rawCrossSatisfied ?? false)} />
             <DetailItem label="Confirmation" value={String(selectedEpisode.planSnapshot.entryCondition.confirmationPassed ?? false)} />
+            <DetailItem label="Retest Required" value={String(selectedEpisode.planSnapshot.entryCondition.retestRequired ?? false)} />
+            <DetailItem label="Retest Held" value={String(selectedEpisode.planSnapshot.entryCondition.retestHeld ?? false)} />
             <DetailItem label="Entry Price" value={selectedEpisode.entryPrice.toFixed(2)} />
             <DetailItem label="Invalidation" value={selectedEpisode.invalidationLevel.toFixed(2)} />
             <DetailItem label="Primary Objective" value={selectedEpisode.objectiveLevel.toFixed(2)} />

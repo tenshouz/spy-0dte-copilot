@@ -126,6 +126,32 @@ function candidateResponse(
   });
 }
 
+function waitingCandidateResponse(): SpyZeroDteTradePlanAlertCandidateResponse {
+  const ready = candidateResponse();
+  return SpyZeroDteTradePlanAlertCandidateResponseSchema.parse({
+    ...ready,
+    primaryReasonCode: "WAITING_FOR_TRIGGER_CANDIDATE",
+    sourceAssembly: {
+      ...ready.sourceAssembly,
+      planState: "WAITING_FOR_TRIGGER",
+      primaryReasonCode: "TRADE_PLAN_WAITING_FOR_TRIGGER",
+    },
+    candidate: {
+      ...ready.candidate,
+      deduplicationKey:
+        "SPY|2026-07-20|CALLS|VWAP_RECLAIM_BREAKOUT|WAITING_FOR_TRIGGER|ARMED",
+      category: "WAITING_FOR_TRIGGER",
+      severity: "INFO",
+      title: "CALLS setup waiting for its trigger",
+      message: "The deterministic CALLS setup remains conditional.",
+      planningReferenceType: "TRIGGER_LEVEL",
+      selectedContractSymbol: null,
+      selectedContractAsk: null,
+      selectedContractQuoteAt: null,
+    },
+  });
+}
+
 function suppressedResponse(
   marketDate = MARKET_DATE,
 ): SpyZeroDteTradePlanAlertCandidateResponse {
@@ -298,95 +324,209 @@ test("a changed candidate key emits CANDIDATE_CHANGED", () => {
   );
 });
 
-test("an active candidate disappearing emits CANDIDATE_CLEARED", () => {
+test("one missing candidate poll is suppressed without clearing the episode", () => {
   const first = initialEvaluation();
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+  const missing = evaluateSpyZeroDteTradePlanAlertTransition(
     suppressedResponse(),
     first.nextState,
     BASE_AT_MS + 20_000,
   );
-  assert.equal(cleared.response.primaryReasonCode, "CANDIDATE_CLEARED_EMIT");
-  assert.equal(cleared.response.event?.transitionType, "CANDIDATE_CLEARED");
-  assert.equal(cleared.nextState.activeCandidate, null);
-  assert.ok(cleared.nextState.lastClearedCandidate);
+  assert.equal(missing.response.primaryReasonCode, "NO_CANDIDATE_SUPPRESSED");
+  assert.equal(missing.response.transitionState, "SUPPRESSED");
+  assert.equal(missing.response.event, null);
+  assert.ok(missing.nextState.activeCandidate);
+  assert.equal(missing.nextState.consecutiveMissingCandidatePolls, 1);
 });
 
-test("continued absence after a clear is suppressed", () => {
+test("three consecutive missing polls clear the episode silently", () => {
   const first = initialEvaluation();
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+  const missingOne = evaluateSpyZeroDteTradePlanAlertTransition(
     suppressedResponse(),
     first.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const missingTwo = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingOne.nextState,
     BASE_AT_MS + 20_000,
   );
-  const absent = evaluateSpyZeroDteTradePlanAlertTransition(
+  const missingThree = evaluateSpyZeroDteTradePlanAlertTransition(
     suppressedResponse(),
-    cleared.nextState,
+    missingTwo.nextState,
     BASE_AT_MS + 30_000,
   );
-  assert.equal(absent.response.primaryReasonCode, "NO_CANDIDATE_SUPPRESSED");
-  assert.equal(absent.response.state.mutationApplied, false);
+  assert.equal(missingThree.response.primaryReasonCode, "NO_CANDIDATE_SUPPRESSED");
+  assert.equal(missingThree.response.transitionState, "SUPPRESSED");
+  assert.equal(missingThree.response.event, null);
+  assert.equal(missingThree.nextState.activeCandidate, null);
+  assert.ok(missingThree.nextState.lastClearedCandidate);
+  assert.equal(missingThree.nextState.consecutiveMissingCandidatePolls, 0);
 });
 
-test("same candidate reappearance inside cooldown is suppressed", () => {
+test("candidate returning before confirmed clear resets the miss counter", () => {
   const first = initialEvaluation();
-  const clearedAt = BASE_AT_MS + 20_000;
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+  const missing = evaluateSpyZeroDteTradePlanAlertTransition(
     suppressedResponse(),
     first.nextState,
-    clearedAt,
+    BASE_AT_MS + 10_000,
+  );
+  const restored = evaluateSpyZeroDteTradePlanAlertTransition(
+    candidateResponse(),
+    missing.nextState,
+    BASE_AT_MS + 20_000,
+  );
+  assert.equal(restored.response.primaryReasonCode, "ACTIVE_DUPLICATE_SUPPRESSED");
+  assert.ok(restored.nextState.activeCandidate);
+  assert.equal(restored.nextState.consecutiveMissingCandidatePolls, 0);
+});
+
+test("same candidate after confirmed clear is restored silently", () => {
+  const first = initialEvaluation();
+  const missingOne = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    first.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const missingTwo = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingOne.nextState,
+    BASE_AT_MS + 20_000,
+  );
+  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingTwo.nextState,
+    BASE_AT_MS + 30_000,
+  );
+  const restored = evaluateSpyZeroDteTradePlanAlertTransition(
+    candidateResponse(),
+    cleared.nextState,
+    BASE_AT_MS + 40_000,
+  );
+  assert.equal(restored.response.primaryReasonCode, "ACTIVE_DUPLICATE_SUPPRESSED");
+  assert.equal(restored.response.event, null);
+  assert.ok(restored.nextState.activeCandidate);
+  assert.equal(restored.nextState.lastClearedCandidate, null);
+});
+
+test("same candidate after the cooldown starts a new episode and may alert again", () => {
+  const first = initialEvaluation();
+  const missingOne = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    first.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const missingTwo = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingOne.nextState,
+    BASE_AT_MS + 20_000,
+  );
+  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingTwo.nextState,
+    BASE_AT_MS + 30_000,
   );
   const reappeared = evaluateSpyZeroDteTradePlanAlertTransition(
     candidateResponse(),
     cleared.nextState,
-    clearedAt + 10_000,
+    BASE_AT_MS + 30_000 + TRADE_PLAN_ALERT_REAPPEARANCE_COOLDOWN_MS,
   );
+  assert.equal(reappeared.response.transitionState, "EMIT");
   assert.equal(
     reappeared.response.primaryReasonCode,
-    "REAPPEARANCE_COOLDOWN_SUPPRESSED",
+    "CANDIDATE_REAPPEARED_EMIT",
   );
-  assert.equal(
-    reappeared.response.cooldown.remainingMilliseconds,
-    TRADE_PLAN_ALERT_REAPPEARANCE_COOLDOWN_MS - 10_000,
-  );
-  assert.equal(reappeared.nextState.activeCandidate, null);
-});
-
-test("same candidate after cooldown emits CANDIDATE_REAPPEARED", () => {
-  const first = initialEvaluation();
-  const clearedAt = BASE_AT_MS + 20_000;
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
-    suppressedResponse(),
-    first.nextState,
-    clearedAt,
-  );
-  const reappeared = evaluateSpyZeroDteTradePlanAlertTransition(
-    candidateResponse(),
-    cleared.nextState,
-    clearedAt + TRADE_PLAN_ALERT_REAPPEARANCE_COOLDOWN_MS,
-  );
-  assert.equal(reappeared.response.primaryReasonCode, "CANDIDATE_REAPPEARED_EMIT");
   assert.equal(reappeared.response.event?.transitionType, "CANDIDATE_REAPPEARED");
-  assert.equal(reappeared.response.cooldown.remainingMilliseconds, 0);
+  assert.notEqual(
+    reappeared.nextState.activeEpisodeId,
+    cleared.nextState.lastClearedEpisodeId,
+  );
 });
 
-test("a different candidate after clear emits immediately", () => {
+test("READY withdrawal starts a new attempt episode for later requalification", () => {
+  const ready = initialEvaluation();
+  const withdrawn = evaluateSpyZeroDteTradePlanAlertTransition(
+    waitingCandidateResponse(),
+    ready.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const requalified = evaluateSpyZeroDteTradePlanAlertTransition(
+    candidateResponse(),
+    withdrawn.nextState,
+    BASE_AT_MS + 20_000,
+  );
+  const withdrawnAgain = evaluateSpyZeroDteTradePlanAlertTransition(
+    waitingCandidateResponse(),
+    requalified.nextState,
+    BASE_AT_MS + 30_000,
+  );
+  assert.equal(withdrawn.response.transitionState, "EMIT");
+  assert.equal(requalified.response.transitionState, "EMIT");
+  assert.equal(withdrawnAgain.response.transitionState, "EMIT");
+  assert.notEqual(
+    withdrawn.response.event?.transitionFingerprint,
+    withdrawnAgain.response.event?.transitionFingerprint,
+  );
+});
+
+test("a different candidate after confirmed clear emits immediately", () => {
   const first = initialEvaluation();
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+  const missingOne = evaluateSpyZeroDteTradePlanAlertTransition(
     suppressedResponse(),
     first.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const missingTwo = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingOne.nextState,
     BASE_AT_MS + 20_000,
+  );
+  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
+    suppressedResponse(),
+    missingTwo.nextState,
+    BASE_AT_MS + 30_000,
   );
   const changed = evaluateSpyZeroDteTradePlanAlertTransition(
     candidateResponse({
-      deduplicationKey: "SPY|2026-07-20|PLAN_READY|PUTS|NEW",
+      deduplicationKey: "SPY|2026-07-20|PUTS|VWAP_LOSS_BREAKDOWN|PLAN_READY|READY",
       contractSymbol: "SPY   260720P00640000",
       direction: "PUTS",
     }),
     cleared.nextState,
-    BASE_AT_MS + 25_000,
+    BASE_AT_MS + 40_000,
   );
   assert.equal(changed.response.primaryReasonCode, "CANDIDATE_CHANGED_EMIT");
   assert.equal(changed.response.event?.transitionType, "CANDIDATE_CHANGED");
+});
+
+test("an already-emitted transition fingerprint is suppressed on oscillation", () => {
+  const first = initialEvaluation();
+  const puts = candidateResponse({
+    deduplicationKey: "SPY|2026-07-20|PUTS|VWAP_LOSS_BREAKDOWN|PLAN_READY|READY",
+    contractSymbol: "SPY   260720P00640000",
+    direction: "PUTS",
+  });
+  const toPuts = evaluateSpyZeroDteTradePlanAlertTransition(
+    puts,
+    first.nextState,
+    BASE_AT_MS + 10_000,
+  );
+  const backToCalls = evaluateSpyZeroDteTradePlanAlertTransition(
+    candidateResponse(),
+    toPuts.nextState,
+    BASE_AT_MS + 20_000,
+  );
+  const repeatedToPuts = evaluateSpyZeroDteTradePlanAlertTransition(
+    puts,
+    backToCalls.nextState,
+    BASE_AT_MS + 30_000,
+  );
+  assert.equal(toPuts.response.transitionState, "EMIT");
+  assert.equal(backToCalls.response.transitionState, "EMIT");
+  assert.equal(repeatedToPuts.response.transitionState, "SUPPRESSED");
+  assert.equal(
+    repeatedToPuts.response.primaryReasonCode,
+    "ACTIVE_DUPLICATE_SUPPRESSED",
+  );
 });
 
 test("unavailable source does not mutate process state", () => {
@@ -516,21 +656,16 @@ test("schema rejects SUPPRESSED with an event", () => {
   );
 });
 
-test("schema rejects cooldown suppression without remaining time", () => {
+test("schema rejects remaining cooldown on an ordinary suppression", () => {
   const first = initialEvaluation();
-  const cleared = evaluateSpyZeroDteTradePlanAlertTransition(
-    suppressedResponse(),
+  const duplicate = evaluateSpyZeroDteTradePlanAlertTransition(
+    candidateResponse(),
     first.nextState,
     BASE_AT_MS + 10_000,
-  );
-  const cooldown = evaluateSpyZeroDteTradePlanAlertTransition(
-    candidateResponse(),
-    cleared.nextState,
-    BASE_AT_MS + 20_000,
   ).response;
-  cooldown.cooldown.remainingMilliseconds = 0;
+  duplicate.cooldown.remainingMilliseconds = 1;
   assert.equal(
-    SpyZeroDteTradePlanAlertTransitionResponseSchema.safeParse(cooldown).success,
+    SpyZeroDteTradePlanAlertTransitionResponseSchema.safeParse(duplicate).success,
     false,
   );
 });

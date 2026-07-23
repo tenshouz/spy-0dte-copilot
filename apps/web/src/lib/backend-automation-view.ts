@@ -62,6 +62,10 @@ export function backendAutomationReasonCopy(reason: string | null): string {
       "A confirmed delivery key already exists in PostgreSQL.",
     PERSISTED_AMBIGUOUS_OUTCOME_SUPPRESSED:
       "A previous ambiguous provider outcome is persistently suppressed to avoid a duplicate message.",
+    NON_ACTIONABLE_TRANSITION_SUPPRESSED:
+      "Routine waiting and not-qualified updates were captured for replay but intentionally not sent to Discord.",
+    PROCESS_DUPLICATE_SUPPRESSED:
+      "Another delivery path already claimed this exact semantic alert event in the current backend process.",
   };
   return fixed[reason] ?? reason.replaceAll("_", " ").toLowerCase();
 }

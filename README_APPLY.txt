@@ -1,29 +1,26 @@
-SPY 0DTE COPILOT V1.5.1 — APPLY INSTRUCTIONS
+SPY 0DTE Copilot V1.5.4 — Apply Instructions
 
-CURRENT V1.5.0 INSTALLATION
+1. Keep a copy of the current working project.
+2. Stop the backend and frontend terminals.
+3. Preserve the hidden .git directory.
+4. Preserve apps/server/.env.
+5. Extract the V1.5.4 ZIP to a temporary folder.
+6. Copy the V1.5.4 project files over the current project.
+7. No npm install is required when the existing node_modules installation is intact.
+8. No Prisma generation or migration is required.
+9. Restart:
 
-1. Preserve the hidden .git directory and apps/server/.env.
-2. Copy the V1.5.1 files over the existing project.
-3. No npm install is required.
-4. No new Prisma migration is required.
-5. Stop and restart the backend and frontend in separate PowerShell terminals:
+   npm run dev:server
+   npm run dev:web
 
-npm run dev:server
-npm run dev:web
+10. Verify:
 
-6. Confirm Schwab is connected.
-7. Open Point-in-Time Backtesting.
-8. Enter explicit Start and End market dates. Use the same date for a one-day replay.
-9. Run:
+   npm run verify:v1
 
-npm run verify:v1
+Focused checks:
 
-EXPECTED BEHAVIOR
+   npx --no-install tsx apps/server/src/services/trade-plan.spec.ts
+   npx --no-install tsx apps/server/src/services/trade-plan-assembly.spec.ts
+   npx --no-install tsx apps/web/src/lib/trade-plan-assembly-view.spec.ts
 
-- Pre-V1.5 captured dates use LEGACY_FROZEN_ASSEMBLY instead of repeated SOURCE_MARKET_STATE_INVALID errors.
-- Trading dates with no captures use HISTORICAL_UNDERLYING_ONLY when Schwab five-minute history is available.
-- Historical options, GEX, DEX, contract selection, and option-premium P&L remain unavailable until a historical options dataset is connected.
-
-DIRECT UPGRADE FROM PRE-V1.5
-
-The existing V1.5 database migration must still be deployed and Prisma regenerated before starting the app.
+The V1.5.2/V1.5.3 Discord hardening remains active. WAITING_FOR_RETEST is informational and should not produce Discord spam.

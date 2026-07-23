@@ -14,6 +14,7 @@ import {
   buildDiscordTradePlanAlertDeliveryResponse,
   buildDiscordTradePlanAlertPayload,
   mapDiscordTradePlanAlertProviderFailure,
+  resetDiscordTradePlanTransitionFingerprintClaimsForTests,
 } from "./discord-trade-plan-alert.logic";
 import {
   createSerializedDiscordTradePlanAlertSender,
@@ -102,6 +103,34 @@ function candidateResponse(
   });
 }
 
+function waitingResponse(): SpyZeroDteTradePlanAlertCandidateResponse {
+  const value = candidateResponse(
+    "SPY|2026-07-20|CALLS|VWAP_RECLAIM_BREAKOUT|WAITING_FOR_TRIGGER|ARMED",
+  );
+  return SpyZeroDteTradePlanAlertCandidateResponseSchema.parse({
+    ...value,
+    primaryReasonCode: "WAITING_FOR_TRIGGER_CANDIDATE",
+    sourceAssembly: {
+      ...value.sourceAssembly,
+      planState: "WAITING_FOR_TRIGGER",
+      primaryReasonCode: "TRADE_PLAN_WAITING_FOR_TRIGGER",
+    },
+    candidate: {
+      ...value.candidate,
+      category: "WAITING_FOR_TRIGGER",
+      severity: "INFO",
+      title: "CALLS setup waiting for its trigger",
+      message: "The deterministic CALLS setup remains conditional.",
+      planningReferenceType: "TRIGGER_LEVEL",
+      planningReferencePrice: 640,
+      triggerLevel: 640,
+      selectedContractSymbol: null,
+      selectedContractAsk: null,
+      selectedContractQuoteAt: null,
+    },
+  });
+}
+
 function suppressedResponse(): SpyZeroDteTradePlanAlertCandidateResponse {
   const value = candidateResponse();
   return SpyZeroDteTradePlanAlertCandidateResponseSchema.parse({
@@ -123,6 +152,7 @@ function dependencies(args: {
   getCandidate?: () => Promise<unknown>;
   config?: ReturnType<typeof validateDiscordWebhookUrl>;
   now?: () => number;
+  persistentBackendDeliveryActive?: boolean;
 } = {}): DiscordTradePlanAlertDeliveryDependencies {
   return {
     getConfig: () => args.config ?? validateDiscordWebhookUrl(VALID_URL),
@@ -137,6 +167,8 @@ function dependencies(args: {
     timeoutMs: 20,
     cooldownMs: 60_000,
     getMarketDate: () => MARKET_DATE,
+    isPersistentBackendTradePlanDeliveryActive: async () =>
+      args.persistentBackendDeliveryActive ?? false,
   };
 }
 
@@ -208,6 +240,46 @@ test("suppressed candidate commits non-delivery transition state without provide
   assert.equal(response.providerRequestAttempted, false);
   assert.equal(response.state.transitionStateCommitted, true);
   assert.equal(deps.stateStore.read().marketDate, MARKET_DATE);
+  assert.equal(fetchCalls, 0);
+});
+
+
+test("persistent backend delivery suppresses competing foreground sender", async () => {
+  let candidateCalls = 0;
+  let fetchCalls = 0;
+  const response = await sendDiscordTradePlanAlertWithDependencies(
+    dependencies({
+      persistentBackendDeliveryActive: true,
+      getCandidate: async () => {
+        candidateCalls += 1;
+        return candidateResponse();
+      },
+      fetch: (async () => {
+        fetchCalls += 1;
+        return new Response("{}", { status: 200 });
+      }) as typeof fetch,
+    }),
+  );
+  assert.equal(response.primaryReasonCode, "NO_EMITTED_TRANSITION");
+  assert.equal(response.providerRequestAttempted, false);
+  assert.equal(candidateCalls, 0);
+  assert.equal(fetchCalls, 0);
+});
+
+test("non-actionable WAITING transition is captured but never posted", async () => {
+  let fetchCalls = 0;
+  const deps = dependencies({
+    getCandidate: async () => waitingResponse(),
+    fetch: (async () => {
+      fetchCalls += 1;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch,
+  });
+  const response = await sendDiscordTradePlanAlertWithDependencies(deps);
+  assert.equal(response.primaryReasonCode, "NO_EMITTED_TRANSITION");
+  assert.equal(response.providerRequestAttempted, false);
+  assert.equal(response.state.transitionStateCommitted, true);
+  assert.equal(deps.stateStore.read().activeCandidate?.category, "WAITING_FOR_TRIGGER");
   assert.equal(fetchCalls, 0);
 });
 
@@ -285,6 +357,24 @@ test("successful delivery commits state and suppresses the next duplicate", asyn
   assert.equal(first.primaryReasonCode, "ALERT_DELIVERED");
   assert.equal(second.primaryReasonCode, "NO_EMITTED_TRANSITION");
   assert.equal(second.transition?.primaryReasonCode, "ACTIVE_DUPLICATE_SUPPRESSED");
+  assert.equal(fetchCalls, 1);
+});
+
+test("process-wide fingerprint claim blocks competing senders", async () => {
+  let fetchCalls = 0;
+  const sharedFetch = (async () => {
+    fetchCalls += 1;
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const first = await sendDiscordTradePlanAlertWithDependencies(
+    dependencies({ fetch: sharedFetch }),
+  );
+  const second = await sendDiscordTradePlanAlertWithDependencies(
+    dependencies({ fetch: sharedFetch }),
+  );
+  assert.equal(first.primaryReasonCode, "ALERT_DELIVERED");
+  assert.equal(second.primaryReasonCode, "NO_EMITTED_TRANSITION");
+  assert.equal(second.state.transitionStateCommitted, true);
   assert.equal(fetchCalls, 1);
 });
 
@@ -485,7 +575,7 @@ test("API client validates the explicit delivery route", () => {
   );
 });
 
-test("delivery service has no database private account or order dependency", () => {
+test("foreground delivery has no direct Prisma private-account or order dependency", () => {
   const source = readFileSync(
     resolve(
       process.cwd(),
@@ -512,6 +602,7 @@ async function main(): Promise<void> {
 
   for (const [name, fn] of tests) {
     try {
+      resetDiscordTradePlanTransitionFingerprintClaimsForTests();
       await fn();
       passed += 1;
       console.log(`✓ ${name}`);

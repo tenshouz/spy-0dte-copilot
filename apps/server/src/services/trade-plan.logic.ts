@@ -14,6 +14,11 @@ import {
   type TradeTriggerComparison,
 } from "@spy-copilot/shared";
 import { buildTradePlanExposureConfirmation } from "./trade-plan-exposure.logic";
+import {
+  FIVE_MINUTES_MS,
+  getObservedMarketDate,
+  getObservedMarketMinute,
+} from "./session-data.logic";
 
 export const TRADE_PLAN_METHODOLOGY_VERSION = "TRADE_PLAN_V3" as const;
 
@@ -103,24 +108,47 @@ export function calculatePutsTrigger(
 
 const MAXIMUM_ALLOWED_RECROSSES = 2 as const;
 const MINIMUM_VOLUME_RATIO = 0.8 as const;
+const MAXIMUM_RETEST_BARS = 6 as const;
+const OPENING_RANGE_COMPLETION_MINUTE = 9 * 60 + 45;
+
+type TriggerConfirmation = NonNullable<
+  SpyZeroDteDeterministicTradePlanResponse["trigger"]["confirmation"]
+>;
+type TriggerWarningCode = TriggerConfirmation["warningCodes"][number];
+type CompletedExecutionCandle = NonNullable<
+  SpyZeroDteDeterministicMarketStateResponse["executionContext"]
+>["recentCompletedCandles"][number];
 
 function emptyConfirmation(
-  lifecycleState: NonNullable<
-    SpyZeroDteDeterministicTradePlanResponse["trigger"]["confirmation"]
-  >["lifecycleState"] = "NOT_APPLICABLE",
-): NonNullable<SpyZeroDteDeterministicTradePlanResponse["trigger"]["confirmation"]> {
+  lifecycleState: TriggerConfirmation["lifecycleState"] = "NOT_APPLICABLE",
+): TriggerConfirmation {
   return {
-    methodologyVersion: "TRIGGER_CONFIRMATION_V1",
+    methodologyVersion: "TRIGGER_CONFIRMATION_V2",
     mode: lifecycleState === "UNAVAILABLE" ? "UNAVAILABLE" : "LEGACY_FALLBACK",
     lifecycleState,
     rawCrossSatisfied: null,
+    currentRawCrossSatisfied: null,
     dynamicBufferPoints: null,
     bufferedTriggerLevel: null,
     latestCompletedClose: null,
     previousCompletedClose: null,
     completedCloseConfirmed: null,
+    confirmationCandleAt: null,
+    confirmationCandleClose: null,
+    confirmationExtensionPoints: null,
+    maximumObservedCloseExtensionPoints: null,
     currentPriceMaintained: null,
+    retestRequired: null,
     retestObserved: null,
+    retestHeld: null,
+    retestCandleAt: null,
+    retestCandleClose: null,
+    retestZoneLower: null,
+    retestZoneUpper: null,
+    retestTolerancePoints: null,
+    barsSinceConfirmation: null,
+    maximumRetestBars: null,
+    postRetestChaseDistancePoints: null,
     recrossCount: null,
     maximumAllowedRecrosses: MAXIMUM_ALLOWED_RECROSSES,
     medianRangePoints: null,
@@ -160,33 +188,157 @@ function countRecrosses(closes: readonly number[], level: number): number {
   return crosses;
 }
 
+function directionDistance(
+  direction: "CALLS" | "PUTS",
+  value: number,
+  reference: number,
+): number {
+  return direction === "CALLS" ? value - reference : reference - value;
+}
+
+function closeBeyond(
+  direction: "CALLS" | "PUTS",
+  close: number,
+  level: number,
+): boolean {
+  return direction === "CALLS" ? close > level : close < level;
+}
+
+function candleCrossedRaw(
+  direction: "CALLS" | "PUTS",
+  candle: CompletedExecutionCandle,
+  level: number,
+): boolean {
+  return direction === "CALLS" ? candle.high > level : candle.low < level;
+}
+
+function candleInvalidatedRaw(
+  direction: "CALLS" | "PUTS",
+  candle: CompletedExecutionCandle,
+  level: number,
+): boolean {
+  return direction === "CALLS" ? candle.close < level : candle.close > level;
+}
+
+function candleCompletionIso(candle: CompletedExecutionCandle): string {
+  return new Date(candle.timestamp + FIVE_MINUTES_MS).toISOString();
+}
+
+function volumeRatioAt(
+  candles: readonly CompletedExecutionCandle[],
+  index: number,
+): number | null {
+  const prior = candles.slice(Math.max(0, index - 5), index).map((item) => item.volume);
+  const priorMedian = median(prior);
+  if (priorMedian === null || priorMedian <= 0) return null;
+  return candles[index]!.volume / priorMedian;
+}
+
+function currentMarketConfirmationCandles(
+  marketState: SpyZeroDteDeterministicMarketStateResponse,
+): CompletedExecutionCandle[] {
+  const currentDate = marketState.currentMarketDate;
+  return [...(marketState.executionContext?.recentCompletedCandles ?? [])]
+    .filter((candle) => {
+      const completedAt = candle.timestamp + FIVE_MINUTES_MS;
+      return (
+        getObservedMarketDate(completedAt) === currentDate &&
+        getObservedMarketMinute(completedAt) >= OPENING_RANGE_COMPLETION_MINUTE
+      );
+    })
+    .sort((left, right) => left.timestamp - right.timestamp);
+}
+
+function findLatestConfirmationEpisode(
+  candles: readonly CompletedExecutionCandle[],
+  direction: "CALLS" | "PUTS",
+  rawTriggerLevel: number,
+  bufferedTriggerLevel: number,
+): number | null {
+  let latestStart: number | null = null;
+  let confirmationExistsInRawSideEpisode = false;
+
+  for (let index = 0; index < candles.length; index += 1) {
+    const candle = candles[index]!;
+
+    // A close through the raw trigger ends the prior episode. A pullback that
+    // remains on the valid side of the raw trigger is still the same episode
+    // and may become the qualifying retest; it must not be mistaken for a new
+    // breakout confirmation merely because it dipped under the buffer.
+    if (candleInvalidatedRaw(direction, candle, rawTriggerLevel)) {
+      confirmationExistsInRawSideEpisode = false;
+      continue;
+    }
+
+    if (
+      !confirmationExistsInRawSideEpisode &&
+      closeBeyond(direction, candle.close, bufferedTriggerLevel)
+    ) {
+      latestStart = index;
+      confirmationExistsInRawSideEpisode = true;
+    }
+  }
+
+  return latestStart;
+}
+
+function retestZone(
+  direction: "CALLS" | "PUTS",
+  rawTriggerLevel: number,
+  bufferedTriggerLevel: number,
+  tolerancePoints: number,
+): { lower: number; upper: number } {
+  return direction === "CALLS"
+    ? {
+        lower: rawTriggerLevel,
+        upper: bufferedTriggerLevel + tolerancePoints,
+      }
+    : {
+        lower: bufferedTriggerLevel - tolerancePoints,
+        upper: rawTriggerLevel,
+      };
+}
+
+function candleOverlapsZone(
+  candle: CompletedExecutionCandle,
+  lower: number,
+  upper: number,
+): boolean {
+  return candle.low <= upper && candle.high >= lower;
+}
+
+/**
+ * TRIGGER_CONFIRMATION_V2 is intentionally derived from completed five-minute
+ * candles so live analysis and historical replay execute the same state
+ * machine. An extended confirmation is not invalidated merely because it ran;
+ * it enters WAITING_FOR_RETEST until a bounded retest holds or the setup loses
+ * the raw level / expires.
+ */
 export function buildTradeTriggerConfirmation(
   marketState: SpyZeroDteDeterministicMarketStateResponse,
   direction: "CALLS" | "PUTS",
   trigger: TriggerCalculation,
-): NonNullable<SpyZeroDteDeterministicTradePlanResponse["trigger"]["confirmation"]> {
+): TriggerConfirmation {
   const currentPrice = marketState.price;
   if (!finitePositive(currentPrice)) return emptyConfirmation("UNAVAILABLE");
 
   const execution = marketState.executionContext;
-  const candles = execution?.recentCompletedCandles ?? [];
-  const rawCrossSatisfied = trigger.satisfied;
-
-  // Fail closed when completed-candle execution context is unavailable.
-  // A raw quote cross alone must never activate a 0DTE trade.
+  const currentRawCrossSatisfied = trigger.satisfied;
   if (!execution) {
     return {
       ...emptyConfirmation("UNAVAILABLE"),
       mode: "UNAVAILABLE",
-      rawCrossSatisfied,
+      rawCrossSatisfied: currentRawCrossSatisfied,
+      currentRawCrossSatisfied,
       bufferedTriggerLevel: trigger.level,
-      currentPriceMaintained: rawCrossSatisfied,
+      currentPriceMaintained: currentRawCrossSatisfied,
       chaseDistancePoints: Math.abs(currentPrice - trigger.level),
       confirmationPassed: false,
       warningCodes: ["EXECUTION_CONTEXT_UNAVAILABLE"],
     };
   }
 
+  const candles = currentMarketConfirmationCandles(marketState);
   const medianRangePoints = execution.medianRangePoints;
   const dynamicBufferPoints = Math.max(
     0.03,
@@ -196,88 +348,214 @@ export function buildTradeTriggerConfirmation(
     direction === "CALLS"
       ? trigger.level + dynamicBufferPoints
       : trigger.level - dynamicBufferPoints;
-  const latest = candles[candles.length - 1] ?? null;
-  const previous = candles[candles.length - 2] ?? null;
-  const latestCompletedClose = latest?.close ?? null;
-  const previousCompletedClose = previous?.close ?? null;
-  const completedCloseConfirmed = latest
-    ? direction === "CALLS"
-      ? latest.close > bufferedTriggerLevel
-      : latest.close < bufferedTriggerLevel
-    : false;
-  const currentPriceMaintained =
-    direction === "CALLS"
-      ? currentPrice > bufferedTriggerLevel
-      : currentPrice < bufferedTriggerLevel;
-  const retestObserved = latest
-    ? direction === "CALLS"
-      ? latest.low <= bufferedTriggerLevel && latest.close > bufferedTriggerLevel
-      : latest.high >= bufferedTriggerLevel && latest.close < bufferedTriggerLevel
-    : false;
-  const recrossCount = countRecrosses(
-    candles.slice(-6).map((item) => item.close),
-    trigger.level,
-  );
-  const priorVolumes = candles.slice(-6, -1).map((item) => item.volume);
-  const medianPriorVolume = median(priorVolumes);
-  const latestVolumeRatio =
-    latest && medianPriorVolume !== null && medianPriorVolume > 0
-      ? latest.volume / medianPriorVolume
-      : null;
-  const volumeConfirmed = latestVolumeRatio === null || latestVolumeRatio >= MINIMUM_VOLUME_RATIO;
-  const chaseDistancePoints = Math.abs(currentPrice - trigger.level);
   const maximumChaseDistancePoints = Math.max(
     0.15,
     Math.min(0.75, (medianRangePoints ?? 0.4) * 0.75),
   );
-  const chasePassed = chaseDistancePoints <= maximumChaseDistancePoints;
+  const retestTolerancePoints = Math.max(
+    0.03,
+    Math.min(0.2, (medianRangePoints ?? 0.4) * 0.25),
+  );
+  const zone = retestZone(
+    direction,
+    trigger.level,
+    bufferedTriggerLevel,
+    retestTolerancePoints,
+  );
+  const latest = candles[candles.length - 1] ?? null;
+  const previous = candles[candles.length - 2] ?? null;
+  const latestCompletedClose = latest?.close ?? null;
+  const previousCompletedClose = previous?.close ?? null;
+  const currentPriceMaintained = closeBeyond(
+    direction,
+    currentPrice,
+    bufferedTriggerLevel,
+  );
+  const episodeStartIndex = findLatestConfirmationEpisode(
+    candles,
+    direction,
+    trigger.level,
+    bufferedTriggerLevel,
+  );
+  const confirmationCandle =
+    episodeStartIndex === null ? null : candles[episodeStartIndex] ?? null;
+  const completedCloseConfirmed = confirmationCandle !== null;
+  const historicalRawCrossObserved = candles.some((candle) =>
+    candleCrossedRaw(direction, candle, trigger.level),
+  );
+  const rawCrossSatisfied =
+    currentRawCrossSatisfied || historicalRawCrossObserved || completedCloseConfirmed;
+  const confirmationExtensionPoints = confirmationCandle
+    ? Math.max(
+        0,
+        directionDistance(direction, confirmationCandle.close, trigger.level),
+      )
+    : null;
+  const episodeCandles =
+    episodeStartIndex === null ? [] : candles.slice(episodeStartIndex);
+  const maximumObservedCloseExtensionPoints =
+    episodeCandles.length === 0
+      ? null
+      : Math.max(
+          ...episodeCandles.map((candle) =>
+            Math.max(0, directionDistance(direction, candle.close, trigger.level)),
+          ),
+        );
+  const confirmationChasePassed =
+    confirmationExtensionPoints !== null &&
+    confirmationExtensionPoints <= maximumChaseDistancePoints;
+  const episodeCloseChasePassed =
+    maximumObservedCloseExtensionPoints !== null &&
+    maximumObservedCloseExtensionPoints <= maximumChaseDistancePoints;
+  const confirmationVolumeRatio =
+    episodeStartIndex === null ? null : volumeRatioAt(candles, episodeStartIndex);
+  const confirmationVolumePassed =
+    confirmationVolumeRatio === null ||
+    confirmationVolumeRatio >= MINIMUM_VOLUME_RATIO;
+  const barsSinceConfirmation =
+    episodeStartIndex === null ? null : candles.length - 1 - episodeStartIndex;
+  const postConfirmationCandles =
+    episodeStartIndex === null ? [] : candles.slice(episodeStartIndex + 1);
+  const boundedRetestCandles = postConfirmationCandles.slice(0, MAXIMUM_RETEST_BARS);
+  const retestObserved = boundedRetestCandles.some((candle) =>
+    candleOverlapsZone(candle, zone.lower, zone.upper),
+  );
+  const heldRetestCandles = boundedRetestCandles.filter((candle) => {
+    const retestCloseDistancePoints = directionDistance(
+      direction,
+      candle.close,
+      trigger.level,
+    );
+    return (
+      candleOverlapsZone(candle, zone.lower, zone.upper) &&
+      closeBeyond(direction, candle.close, bufferedTriggerLevel) &&
+      retestCloseDistancePoints <= maximumChaseDistancePoints
+    );
+  });
+  const retestCandle = heldRetestCandles.at(-1) ?? null;
+  const latestVolumeRatio = confirmationVolumeRatio;
+  const volumeConfirmed = confirmationVolumePassed;
+  const retestRequired =
+    completedCloseConfirmed &&
+    (!confirmationChasePassed ||
+      !episodeCloseChasePassed ||
+      Math.abs(currentPrice - trigger.level) > maximumChaseDistancePoints);
+  const postRetestChaseDistancePoints = retestCandle
+    ? Math.abs(currentPrice - retestCandle.close)
+    : null;
+  const postRetestChasePassed =
+    postRetestChaseDistancePoints !== null &&
+    postRetestChaseDistancePoints <= maximumChaseDistancePoints;
+  const retestHeld =
+    retestRequired &&
+    retestCandle !== null &&
+    currentPriceMaintained &&
+    postRetestChasePassed;
+  const invalidatingCandle = postConfirmationCandles.find((candle) =>
+    candleInvalidatedRaw(direction, candle, trigger.level),
+  ) ?? null;
+  const retestWindowExpired =
+    completedCloseConfirmed &&
+    retestRequired &&
+    !retestHeld &&
+    (barsSinceConfirmation ?? 0) >= MAXIMUM_RETEST_BARS;
+  // Recross policy is scoped to the active confirmation episode and the
+  // buffered trigger. A prior failed breakout must not permanently poison a
+  // later clean reclaim, while repeated post-confirmation buffer crossings
+  // still identify chop inside the active setup.
+  const recrossCount = countRecrosses(
+    episodeCandles.map((item) => item.close),
+    bufferedTriggerLevel,
+  );
   const recrossPassed = recrossCount <= MAXIMUM_ALLOWED_RECROSSES;
+  const chaseDistancePoints = Math.abs(currentPrice - trigger.level);
+  const currentChasePassed = chaseDistancePoints <= maximumChaseDistancePoints;
+  const immediateEntryPassed =
+    completedCloseConfirmed &&
+    confirmationChasePassed &&
+    currentChasePassed &&
+    currentPriceMaintained;
+  const chasePassed = immediateEntryPassed || retestHeld;
   const confirmationPassed =
-    rawCrossSatisfied &&
     completedCloseConfirmed &&
     currentPriceMaintained &&
     recrossPassed &&
     volumeConfirmed &&
-    chasePassed;
+    invalidatingCandle === null &&
+    (immediateEntryPassed || retestHeld);
 
-  const warningCodes: Array<
-    | "EXECUTION_CONTEXT_UNAVAILABLE"
-    | "TRIGGER_CROSS_NOT_DETECTED"
-    | "COMPLETED_CLOSE_NOT_CONFIRMED"
-    | "CURRENT_PRICE_NOT_MAINTAINED"
-    | "EXCESSIVE_LEVEL_RECROSSES"
-    | "BREAKOUT_VOLUME_INSUFFICIENT"
-    | "MAXIMUM_CHASE_DISTANCE_EXCEEDED"
-  > = [];
+  const warningCodes: TriggerWarningCode[] = [];
   if (!rawCrossSatisfied) warningCodes.push("TRIGGER_CROSS_NOT_DETECTED");
-  if (rawCrossSatisfied && !completedCloseConfirmed) warningCodes.push("COMPLETED_CLOSE_NOT_CONFIRMED");
-  if (rawCrossSatisfied && !currentPriceMaintained) warningCodes.push("CURRENT_PRICE_NOT_MAINTAINED");
+  if (rawCrossSatisfied && !completedCloseConfirmed) {
+    warningCodes.push("COMPLETED_CLOSE_NOT_CONFIRMED");
+  }
+  if (completedCloseConfirmed && !currentPriceMaintained) {
+    warningCodes.push("CURRENT_PRICE_NOT_MAINTAINED");
+  }
   if (!recrossPassed) warningCodes.push("EXCESSIVE_LEVEL_RECROSSES");
   if (!volumeConfirmed) warningCodes.push("BREAKOUT_VOLUME_INSUFFICIENT");
-  if (!chasePassed) warningCodes.push("MAXIMUM_CHASE_DISTANCE_EXCEEDED");
+  if (
+    completedCloseConfirmed &&
+    (!confirmationChasePassed ||
+      !episodeCloseChasePassed ||
+      !currentChasePassed)
+  ) {
+    warningCodes.push("MAXIMUM_CHASE_DISTANCE_EXCEEDED");
+  }
+  if (retestRequired && !retestHeld && invalidatingCandle === null && !retestWindowExpired) {
+    warningCodes.push("RETEST_REQUIRED");
+    warningCodes.push(retestObserved ? "RETEST_NOT_HELD" : "RETEST_NOT_YET_OBSERVED");
+  }
+  if (retestCandle !== null && !postRetestChasePassed) {
+    warningCodes.push("POST_RETEST_CHASE_DISTANCE_EXCEEDED");
+  }
+  if (invalidatingCandle !== null) warningCodes.push("RETEST_LEVEL_LOST");
+  if (retestWindowExpired) warningCodes.push("RETEST_WINDOW_EXPIRED");
 
-  const lifecycleState = !rawCrossSatisfied
-    ? ("ARMED" as const)
-    : !chasePassed || !recrossPassed
-      ? ("INVALIDATED" as const)
-      : !confirmationPassed
-        ? ("DETECTED" as const)
-        : retestObserved
-          ? ("RETESTED" as const)
-          : ("READY" as const);
+  const lifecycleState: TriggerConfirmation["lifecycleState"] =
+    invalidatingCandle !== null || !recrossPassed || retestWindowExpired
+      ? "INVALIDATED"
+      : confirmationPassed
+        ? retestHeld
+          ? "RETESTED"
+          : "READY"
+        : completedCloseConfirmed && retestRequired
+          ? "WAITING_FOR_RETEST"
+          : completedCloseConfirmed
+            ? "CONFIRMED"
+            : rawCrossSatisfied
+              ? "DETECTED"
+              : "ARMED";
 
   return {
-    methodologyVersion: "TRIGGER_CONFIRMATION_V1",
+    methodologyVersion: "TRIGGER_CONFIRMATION_V2",
     mode: "COMPLETED_5M_CANDLE",
     lifecycleState,
     rawCrossSatisfied,
+    currentRawCrossSatisfied,
     dynamicBufferPoints,
     bufferedTriggerLevel,
     latestCompletedClose,
     previousCompletedClose,
     completedCloseConfirmed,
+    confirmationCandleAt: confirmationCandle
+      ? candleCompletionIso(confirmationCandle)
+      : null,
+    confirmationCandleClose: confirmationCandle?.close ?? null,
+    confirmationExtensionPoints,
+    maximumObservedCloseExtensionPoints,
     currentPriceMaintained,
+    retestRequired,
     retestObserved,
+    retestHeld,
+    retestCandleAt: retestCandle ? candleCompletionIso(retestCandle) : null,
+    retestCandleClose: retestCandle?.close ?? null,
+    retestZoneLower: zone.lower,
+    retestZoneUpper: zone.upper,
+    retestTolerancePoints,
+    barsSinceConfirmation,
+    maximumRetestBars: MAXIMUM_RETEST_BARS,
+    postRetestChaseDistancePoints,
     recrossCount,
     maximumAllowedRecrosses: MAXIMUM_ALLOWED_RECROSSES,
     medianRangePoints,
@@ -1064,34 +1342,47 @@ export function buildSpyZeroDteDeterministicTradePlan(
     });
 
     const confirmationPassed = activeConfirmation.confirmationPassed === true;
+    const waitingForRetest = activeConfirmation.lifecycleState === "WAITING_FOR_RETEST";
+    const retestFailed = activeConfirmation.warningCodes.includes("RETEST_LEVEL_LOST");
+    const retestExpired = activeConfirmation.warningCodes.includes("RETEST_WINDOW_EXPIRED");
     const confirmationWarning = confirmationPassed
       ? null
-      : activeConfirmation.warningCodes.includes("EXCESSIVE_LEVEL_RECROSSES")
-        ? "TRIGGER_CHOP_DETECTED"
-        : activeConfirmation.warningCodes.includes("MAXIMUM_CHASE_DISTANCE_EXCEEDED")
-          ? "TRIGGER_CHASE_EXCEEDED"
-          : activeConfirmation.warningCodes.includes("BREAKOUT_VOLUME_INSUFFICIENT")
-            ? "TRIGGER_VOLUME_INSUFFICIENT"
-            : activeConfirmation.rawCrossSatisfied
-              ? "TRIGGER_CONFIRMATION_PENDING"
-              : null;
+      : retestFailed
+        ? "TRIGGER_RETEST_FAILED"
+        : retestExpired
+          ? "TRIGGER_RETEST_EXPIRED"
+          : waitingForRetest
+            ? "TRIGGER_RETEST_REQUIRED"
+            : activeConfirmation.warningCodes.includes("EXCESSIVE_LEVEL_RECROSSES")
+              ? "TRIGGER_CHOP_DETECTED"
+              : activeConfirmation.warningCodes.includes("BREAKOUT_VOLUME_INSUFFICIENT")
+                ? "TRIGGER_VOLUME_INSUFFICIENT"
+                : activeConfirmation.rawCrossSatisfied
+                  ? "TRIGGER_CONFIRMATION_PENDING"
+                  : null;
     const confirmationReason = confirmationPassed
       ? candidateDirection === "CALLS"
         ? "CALLS_TRIGGER_SATISFIED"
         : "PUTS_TRIGGER_SATISFIED"
-      : activeConfirmation.warningCodes.includes("EXCESSIVE_LEVEL_RECROSSES")
-        ? "TRIGGER_CHOP_DETECTED"
-        : activeConfirmation.warningCodes.includes("MAXIMUM_CHASE_DISTANCE_EXCEEDED")
-          ? "TRIGGER_CHASE_EXCEEDED"
-          : activeConfirmation.warningCodes.includes("BREAKOUT_VOLUME_INSUFFICIENT")
-            ? "TRIGGER_VOLUME_INSUFFICIENT"
-            : activeConfirmation.rawCrossSatisfied
-              ? candidateDirection === "CALLS"
-                ? "CALLS_TRIGGER_CONFIRMATION_PENDING"
-                : "PUTS_TRIGGER_CONFIRMATION_PENDING"
-              : candidateDirection === "CALLS"
-                ? "CALLS_TRIGGER_NOT_SATISFIED"
-                : "PUTS_TRIGGER_NOT_SATISFIED";
+      : retestFailed
+        ? "TRIGGER_RETEST_FAILED"
+        : retestExpired
+          ? "TRIGGER_RETEST_EXPIRED"
+          : waitingForRetest
+            ? candidateDirection === "CALLS"
+              ? "CALLS_TRIGGER_RETEST_PENDING"
+              : "PUTS_TRIGGER_RETEST_PENDING"
+            : activeConfirmation.warningCodes.includes("EXCESSIVE_LEVEL_RECROSSES")
+              ? "TRIGGER_CHOP_DETECTED"
+              : activeConfirmation.warningCodes.includes("BREAKOUT_VOLUME_INSUFFICIENT")
+                ? "TRIGGER_VOLUME_INSUFFICIENT"
+                : activeConfirmation.rawCrossSatisfied
+                  ? candidateDirection === "CALLS"
+                    ? "CALLS_TRIGGER_CONFIRMATION_PENDING"
+                    : "PUTS_TRIGGER_CONFIRMATION_PENDING"
+                  : candidateDirection === "CALLS"
+                    ? "CALLS_TRIGGER_NOT_SATISFIED"
+                    : "PUTS_TRIGGER_NOT_SATISFIED";
 
     setGate(gates, {
       gateId: "TRIGGER_SATISFIED",
@@ -1123,13 +1414,17 @@ export function buildSpyZeroDteDeterministicTradePlan(
         ? candidateDirection === "CALLS"
           ? "ELIGIBLE_CALLS_SETUP"
           : "ELIGIBLE_PUTS_SETUP"
-        : rawCross
+        : waitingForRetest
           ? candidateDirection === "CALLS"
-            ? "WAITING_FOR_CALLS_CONFIRMATION"
-            : "WAITING_FOR_PUTS_CONFIRMATION"
-          : candidateDirection === "CALLS"
-            ? "WAITING_FOR_CALLS_TRIGGER"
-            : "WAITING_FOR_PUTS_TRIGGER",
+            ? "WAITING_FOR_CALLS_RETEST"
+            : "WAITING_FOR_PUTS_RETEST"
+          : rawCross
+            ? candidateDirection === "CALLS"
+              ? "WAITING_FOR_CALLS_CONFIRMATION"
+              : "WAITING_FOR_PUTS_CONFIRMATION"
+            : candidateDirection === "CALLS"
+              ? "WAITING_FOR_CALLS_TRIGGER"
+              : "WAITING_FOR_PUTS_TRIGGER",
       warningCode: confirmationWarning,
       trigger: {
         level: triggerCalculation.level,

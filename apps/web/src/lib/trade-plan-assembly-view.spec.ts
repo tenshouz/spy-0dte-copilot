@@ -107,6 +107,27 @@ test("Trade Plan page explains GEX and DEX as context-only rather than a directi
   assert.equal(page.includes("The wall is context only, not an entry, target, stop, or dealer-position observation."), true);
 });
 
+test("Trade Plan page separates raw trigger, chase, and retest qualification", () => {
+  const page = readFileSync(
+    resolve(process.cwd(), "apps/web/src/app/trade-plan/page.tsx"),
+    "utf8",
+  );
+  for (const required of [
+    "Raw Trigger Crossed",
+    "Current Quote Beyond Raw Trigger",
+    "Actionable Entry Confirmed",
+    "Maximum Chase Distance",
+    "Confirmation Candle",
+    "Retest Zone",
+    "Retest Required",
+    "Retest Held",
+    "Trigger confirmed, but the entry was too extended.",
+  ]) {
+    assert.equal(page.includes(required), true, `${required} must appear`);
+  }
+  assert.equal(page.includes('label="Trigger Satisfied"'), false);
+});
+
 test("Trade Plan page contains no order controls or mock Report fields", () => {
   const page = readFileSync(
     resolve(process.cwd(), "apps/web/src/app/trade-plan/page.tsx"),

@@ -26,6 +26,9 @@ import {
 } from "./session-data.logic";
 import { deriveSpyZeroDteExposureStructure } from "./spy-exposure-structure.logic";
 
+/** One regular SPY session contains 78 completed five-minute candles. */
+export const MAXIMUM_RTH_EXECUTION_CANDLES = 78 as const;
+
 export interface SpyMarketContextInputs {
   quote: SpyQuote;
   candles: SpyCandleResponse;
@@ -97,7 +100,7 @@ export function summarizeSpyCandles(candles: SpyCandleResponse, nowMs = Date.now
       getObservedMarketDate(item.timestamp) === currentMarketDate &&
       classifyMarketSession(item.timestamp) === "RTH"
     )
-    .slice(-12);
+    .slice(-MAXIMUM_RTH_EXECUTION_CANDLES);
 
   return {
     marketDate,

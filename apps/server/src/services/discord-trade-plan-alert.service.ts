@@ -5,7 +5,10 @@ import {
 import {
   buildDiscordTradePlanAlertDeliveryResponse,
   buildDiscordTradePlanAlertPayload,
+  claimDiscordTradePlanTransitionFingerprint,
+  isDiscordTradePlanTransitionDeliverable,
   mapDiscordTradePlanAlertProviderFailure,
+  releaseDiscordTradePlanTransitionFingerprint,
 } from "./discord-trade-plan-alert.logic";
 import {
   getDiscordWebhookConfig,
@@ -32,6 +35,7 @@ export interface DiscordTradePlanAlertDeliveryDependencies {
   timeoutMs: number;
   cooldownMs: number;
   getMarketDate: (nowMs: number) => string;
+  isPersistentBackendTradePlanDeliveryActive: () => Promise<boolean>;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -54,6 +58,17 @@ const defaultDependencies: DiscordTradePlanAlertDeliveryDependencies = {
   timeoutMs: DEFAULT_TIMEOUT_MS,
   cooldownMs: TRADE_PLAN_ALERT_REAPPEARANCE_COOLDOWN_MS,
   getMarketDate: getObservedMarketDate,
+  isPersistentBackendTradePlanDeliveryActive: async () => {
+    const { getBackendAutomationSettings } = await import(
+      "./backend-automation.service"
+    );
+    const result = await getBackendAutomationSettings();
+    return (
+      result.engineState === "AVAILABLE" &&
+      result.settings?.enabled === true &&
+      result.settings.tradePlanAlertsEnabled === true
+    );
+  },
 };
 
 export async function sendDiscordTradePlanAlertWithDependencies(
@@ -73,6 +88,16 @@ export async function sendDiscordTradePlanAlertWithDependencies(
   if (config.status === "invalid") {
     return buildDiscordTradePlanAlertDeliveryResponse({
       reasonCode: "WEBHOOK_CONFIG_INVALID",
+      attemptedAtMs,
+    });
+  }
+
+  // Persistent backend automation owns Discord delivery whenever it is active.
+  // This server-side gate prevents another browser tab or the foreground
+  // polling route from competing with the database-leased delivery path.
+  if (await dependencies.isPersistentBackendTradePlanDeliveryActive()) {
+    return buildDiscordTradePlanAlertDeliveryResponse({
+      reasonCode: "NO_EMITTED_TRANSITION",
       attemptedAtMs,
     });
   }
@@ -146,6 +171,33 @@ export async function sendDiscordTradePlanAlertWithDependencies(
     });
   }
 
+  if (!isDiscordTradePlanTransitionDeliverable(transition)) {
+    dependencies.stateStore.write(evaluation.nextState);
+    return buildDiscordTradePlanAlertDeliveryResponse({
+      reasonCode: "NO_EMITTED_TRANSITION",
+      attemptedAtMs,
+      transition,
+      transitionStateCommitted: true,
+    });
+  }
+
+  const transitionFingerprint = transition.event?.transitionFingerprint;
+  if (
+    transitionFingerprint === undefined ||
+    !claimDiscordTradePlanTransitionFingerprint(
+      transitionFingerprint,
+      attemptedAtMs,
+    )
+  ) {
+    dependencies.stateStore.write(evaluation.nextState);
+    return buildDiscordTradePlanAlertDeliveryResponse({
+      reasonCode: "NO_EMITTED_TRANSITION",
+      attemptedAtMs,
+      transition,
+      transitionStateCommitted: true,
+    });
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), dependencies.timeoutMs);
 
@@ -169,6 +221,7 @@ export async function sendDiscordTradePlanAlertWithDependencies(
       });
     }
 
+    releaseDiscordTradePlanTransitionFingerprint(transitionFingerprint);
     return buildDiscordTradePlanAlertDeliveryResponse({
       reasonCode: mapDiscordTradePlanAlertProviderFailure(response.status),
       attemptedAtMs,

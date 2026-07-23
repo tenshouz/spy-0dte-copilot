@@ -52,6 +52,14 @@ test("important scheduler reasons have fixed copy", () => {
   assert.match(backendAutomationReasonCopy("BACKEND_AUTOMATION_ACTIVE"), /database lease/i);
   assert.match(backendAutomationReasonCopy("PERSISTED_DUPLICATE_SUPPRESSED"), /PostgreSQL/i);
   assert.match(backendAutomationReasonCopy("DATABASE_UNAVAILABLE"), /temporarily unavailable/i);
+  assert.match(
+    backendAutomationReasonCopy("NON_ACTIONABLE_TRANSITION_SUPPRESSED"),
+    /intentionally not sent to Discord/i,
+  );
+  assert.match(
+    backendAutomationReasonCopy("PROCESS_DUPLICATE_SUPPRESSED"),
+    /already claimed/i,
+  );
 });
 
 test("automation panel uses dedicated settings status and history hooks", () => {

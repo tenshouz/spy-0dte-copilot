@@ -213,9 +213,12 @@ export function TradePlanAlertMonitor() {
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Monitoring is opt-in. Events are session-only and are not
-                persisted. Discord delivery may be requested explicitly or by
-                the separate opt-in foreground automatic-delivery session. Both
-                use the same backend process-memory duplicate-suppression state.
+                persisted. Routine WAITING_FOR_TRIGGER and
+                SETUP_NOT_QUALIFIED recalculations remain dashboard-only.
+                Discord is reserved for READY plans, qualified structures with
+                no eligible contract, and withdrawal of a previously READY
+                plan. All delivery paths share semantic fingerprint
+                suppression inside the backend process.
               </p>
             </div>
 
@@ -369,11 +372,14 @@ export function TradePlanAlertMonitor() {
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 This is an explicit opt-in browser session, not a background
-                scheduler. Each evaluation uses the shared Discord
-                process-memory duplicate state and performs at most two attempts
-                with one fixed three-second backoff for unambiguous retry cases.
-                Timeout or network ambiguity stops for explicit review instead
-                of risking a duplicate message.
+                scheduler. Persistent backend automation remains the preferred
+                delivery path. When persistent Trade Plan delivery is active,
+                the server also rejects foreground delivery requests. Semantic
+                event fingerprints prevent any remaining sender path in the same
+                process from posting the same event. Routine waiting-state
+                updates are never sent. Timeout or network ambiguity is retained
+                as claimed to avoid a
+                duplicate message.
               </p>
             </div>
 

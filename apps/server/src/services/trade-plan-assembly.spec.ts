@@ -64,11 +64,17 @@ test("confirmed Puts assemble symmetrically", () => {
 test("entry condition exposes all execution-confirmation diagnostics", () => {
   const { assembly } = assembled("CALLS");
   assert.equal(assembly.entryCondition.setupType, "OPENING_RANGE_BREAKOUT");
-  assert.equal(assembly.entryCondition.triggerLifecycleState, "RETESTED");
+  assert.equal(assembly.entryCondition.triggerLifecycleState, "READY");
   assert.equal(assembly.entryCondition.dynamicBufferPoints, 0.15);
   assert.equal(assembly.entryCondition.bufferedTriggerLevel, 758.15);
   assert.equal(assembly.entryCondition.latestCompletedClose, 758.25);
-  assert.equal(assembly.entryCondition.recrossCount, 1);
+  assert.equal(assembly.entryCondition.rawCrossSatisfied, true);
+  assert.equal(assembly.entryCondition.currentRawCrossSatisfied, true);
+  assert.equal(assembly.entryCondition.confirmationCandleClose, 758.25);
+  assert.equal(assembly.entryCondition.maximumObservedCloseExtensionPoints, 0.25);
+  assert.equal(assembly.entryCondition.maximumChaseDistancePoints, 0.75);
+  assert.equal(assembly.entryCondition.retestRequired, false);
+  assert.equal(assembly.entryCondition.recrossCount, 0);
   assert.ok((assembly.entryCondition.latestVolumeRatio ?? 0) > 1);
 });
 

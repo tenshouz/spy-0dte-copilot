@@ -41,6 +41,7 @@ import {
 } from "./backend-automation.service";
 import { evaluateSpyZeroDteScheduledReportSchedule } from "./scheduled-report-schedule.logic";
 import { createEmptyTradePlanAlertTransitionMemoryState } from "./trade-plan-alert-transition.logic";
+import { resetDiscordTradePlanTransitionFingerprintClaimsForTests } from "./discord-trade-plan-alert.logic";
 
 const NOW = new Date("2026-07-20T13:25:00.000Z");
 const USER_ID = "user-1";
@@ -114,6 +115,33 @@ function candidateReady(
       transitionDetectionMethod: "NONE",
       deliveryMethod: "NONE",
       deduplicationMethod: "STABLE_CANDIDATE_KEY_ONLY",
+    },
+  });
+}
+
+function candidateWaiting(): SpyZeroDteTradePlanAlertCandidateResponse {
+  const ready = candidateReady(
+    "SPY|2026-07-20|CALLS|VWAP_RECLAIM_BREAKOUT|WAITING_FOR_TRIGGER|ARMED",
+  );
+  return SpyZeroDteTradePlanAlertCandidateResponseSchema.parse({
+    ...ready,
+    primaryReasonCode: "WAITING_FOR_TRIGGER_CANDIDATE",
+    sourceAssembly: {
+      ...ready.sourceAssembly,
+      planState: "WAITING_FOR_TRIGGER",
+      primaryReasonCode: "TRADE_PLAN_WAITING_FOR_TRIGGER",
+    },
+    candidate: {
+      ...ready.candidate,
+      category: "WAITING_FOR_TRIGGER",
+      severity: "INFO",
+      title: "CALLS setup waiting for its trigger",
+      message: "The deterministic CALLS setup remains conditional.",
+      planningReferenceType: "TRIGGER_LEVEL",
+      planningReferencePrice: 640,
+      selectedContractSymbol: null,
+      selectedContractAsk: null,
+      selectedContractQuoteAt: null,
     },
   });
 }
@@ -440,6 +468,11 @@ test("valid persisted transition state is retained", () => {
     activeSinceMs: NOW.getTime(),
     lastClearedCandidate: null,
     lastClearedAtMs: null,
+    consecutiveMissingCandidatePolls: 0,
+    emittedTransitionFingerprints: [],
+    activeEpisodeId: "SPY|2026-07-20|EPISODE_1",
+    lastClearedEpisodeId: null,
+    nextEpisodeSequence: 1,
   };
   assert.deepEqual(parsePersistentTradePlanTransitionState(state), state);
 });
@@ -587,6 +620,35 @@ test("suppressed candidate performs no provider request", async () => {
   assert.equal(fetches, 0);
   assert.equal(result.tradePlanAlerts.outcome, "NO_DELIVERY");
   assert.equal(repository.logs.length, 0);
+});
+
+test("routine waiting transition is captured but not delivered", async () => {
+  const repository = new FakeRepository();
+  repository.settings.scheduledReportsEnabled = false;
+  let fetches = 0;
+  const result = await runBackendAutomationTickWithDependencies({
+    dependencies: dependencies(repository, {
+      getCandidate: async () => candidateWaiting(),
+      fetch: async () => {
+        fetches += 1;
+        return new Response(null, { status: 204 });
+      },
+    }),
+    owner: OWNER,
+    force: true,
+  });
+  assert.equal(fetches, 0);
+  assert.equal(result.tradePlanAlerts.outcome, "NO_DELIVERY");
+  assert.equal(
+    result.tradePlanAlerts.reasonCode,
+    "NON_ACTIONABLE_TRANSITION_SUPPRESSED",
+  );
+  assert.equal(
+    parsePersistentTradePlanTransitionState(
+      repository.runtime.tradePlanTransitionState,
+    ).activeCandidate?.category,
+    "WAITING_FOR_TRIGGER",
+  );
 });
 
 test("delivered trade transition commits key state and audit", async () => {
@@ -846,6 +908,7 @@ async function main(): Promise<void> {
   let passed = 0;
   for (const [name, fn] of tests) {
     try {
+      resetDiscordTradePlanTransitionFingerprintClaimsForTests();
       await fn();
       passed += 1;
       console.log(`✓ ${name}`);

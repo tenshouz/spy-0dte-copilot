@@ -514,6 +514,37 @@ test("focused candle summary preserves latest and previous candles", () => {
   assert.equal(summary.previousCandle?.close, 753.5);
 });
 
+test("execution summary retains the full 78-candle RTH session for lifecycle reconstruction", () => {
+  const inputs = baseInputs();
+  const sessionOpen = Date.parse("2026-07-16T13:30:00.000Z");
+  inputs.candles.candles = Array.from({ length: 78 }, (_, index) => {
+    const close = 752 + index * 0.02;
+    return {
+      timestamp: sessionOpen + index * 5 * 60_000,
+      open: close - 0.01,
+      high: close + 0.08,
+      low: close - 0.08,
+      close,
+      volume: 100 + index,
+    };
+  });
+  inputs.candles.latestCandleAt = new Date(
+    inputs.candles.candles.at(-1)!.timestamp,
+  ).toISOString();
+
+  const summary = summarizeSpyCandles(
+    inputs.candles,
+    Date.parse("2026-07-16T20:00:00.000Z"),
+  );
+
+  assert.equal(summary.recentCompletedRthCandles?.length, 78);
+  assert.equal(summary.recentCompletedRthCandles?.at(0)?.timestamp, sessionOpen);
+  assert.equal(
+    summary.recentCompletedRthCandles?.at(-1)?.timestamp,
+    sessionOpen + 77 * 5 * 60_000,
+  );
+});
+
 test("context does not duplicate full candle, option, GEX, or DEX arrays", () => {
   const result = buildSpyZeroDteMarketContext(baseInputs(), NOW) as unknown as Record<string, unknown>;
   const options = result.options as Record<string, unknown>;

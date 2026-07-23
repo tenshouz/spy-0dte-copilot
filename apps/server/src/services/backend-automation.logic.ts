@@ -484,12 +484,45 @@ export function parsePersistentTradePlanTransitionState(
     Number.isFinite(raw.lastClearedAtMs)
       ? raw.lastClearedAtMs
       : null;
+  const consecutiveMissingCandidatePolls =
+    typeof raw.consecutiveMissingCandidatePolls === "number" &&
+    Number.isInteger(raw.consecutiveMissingCandidatePolls) &&
+    raw.consecutiveMissingCandidatePolls >= 0
+      ? raw.consecutiveMissingCandidatePolls
+      : 0;
+  const emittedTransitionFingerprints = Array.isArray(
+    raw.emittedTransitionFingerprints,
+  )
+    ? raw.emittedTransitionFingerprints.filter(
+        (item): item is string => typeof item === "string" && item.length > 0,
+      ).slice(-100)
+    : [];
+  const activeEpisodeId =
+    typeof raw.activeEpisodeId === "string" && raw.activeEpisodeId.length > 0
+      ? raw.activeEpisodeId
+      : null;
+  const lastClearedEpisodeId =
+    typeof raw.lastClearedEpisodeId === "string" &&
+    raw.lastClearedEpisodeId.length > 0
+      ? raw.lastClearedEpisodeId
+      : null;
+  const nextEpisodeSequence =
+    typeof raw.nextEpisodeSequence === "number" &&
+    Number.isInteger(raw.nextEpisodeSequence) &&
+    raw.nextEpisodeSequence >= 0
+      ? raw.nextEpisodeSequence
+      : 0;
   return {
     marketDate,
     activeCandidate,
     activeSinceMs: activeCandidate ? activeSinceMs : null,
     lastClearedCandidate,
     lastClearedAtMs: lastClearedCandidate ? lastClearedAtMs : null,
+    consecutiveMissingCandidatePolls,
+    emittedTransitionFingerprints,
+    activeEpisodeId: activeCandidate ? activeEpisodeId : null,
+    lastClearedEpisodeId: lastClearedCandidate ? lastClearedEpisodeId : null,
+    nextEpisodeSequence,
   };
 }
 

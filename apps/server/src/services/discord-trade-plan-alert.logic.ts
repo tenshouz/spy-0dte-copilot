@@ -8,6 +8,64 @@ import {
 export const DISCORD_TRADE_PLAN_ALERT_DELIVERY_METHODOLOGY_VERSION =
   "DISCORD_TRADE_PLAN_ALERT_DELIVERY_V1" as const;
 
+
+const PROCESS_DELIVERY_FINGERPRINT_LIMIT = 500;
+const processDeliveryFingerprints = new Map<string, number>();
+
+export function claimDiscordTradePlanTransitionFingerprint(
+  fingerprint: string,
+  claimedAtMs: number,
+): boolean {
+  if (processDeliveryFingerprints.has(fingerprint)) return false;
+
+  processDeliveryFingerprints.set(fingerprint, claimedAtMs);
+  if (processDeliveryFingerprints.size > PROCESS_DELIVERY_FINGERPRINT_LIMIT) {
+    const oldest = [...processDeliveryFingerprints.entries()]
+      .sort((left, right) => left[1] - right[1])
+      .slice(
+        0,
+        processDeliveryFingerprints.size - PROCESS_DELIVERY_FINGERPRINT_LIMIT,
+      );
+    for (const [key] of oldest) processDeliveryFingerprints.delete(key);
+  }
+  return true;
+}
+
+export function releaseDiscordTradePlanTransitionFingerprint(
+  fingerprint: string,
+): void {
+  processDeliveryFingerprints.delete(fingerprint);
+}
+
+export function resetDiscordTradePlanTransitionFingerprintClaimsForTests(): void {
+  processDeliveryFingerprints.clear();
+}
+
+export function isDiscordTradePlanTransitionDeliverable(
+  transition: SpyZeroDteTradePlanAlertTransitionResponse,
+): boolean {
+  if (transition.transitionState !== "EMIT" || transition.event === null) {
+    return false;
+  }
+
+  const previousCategory = transition.event.previousCandidate?.category ?? null;
+  const currentCategory = transition.event.currentCandidate?.category ?? null;
+
+  // Discord is reserved for actionable or execution-relevant changes. Routine
+  // WAITING_FOR_TRIGGER and SETUP_NOT_QUALIFIED recalculations remain visible
+  // in the dashboard and are captured for replay, but are not pushed outbound.
+  if (
+    currentCategory === "PLAN_READY" ||
+    currentCategory === "NO_QUALIFIED_CONTRACT"
+  ) {
+    return true;
+  }
+
+  // A previously READY plan becoming non-ready is an important invalidation or
+  // withdrawal event and should be surfaced once.
+  return previousCategory === "PLAN_READY";
+}
+
 export interface DiscordProviderAttemptResult {
   reasonCode:
     | "ALERT_DELIVERED"

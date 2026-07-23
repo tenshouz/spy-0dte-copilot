@@ -178,16 +178,38 @@ export default function TradePlanPage() {
             ) : plan.entryCondition.state === "UNAVAILABLE" ? (
               <EmptyState message="The entry condition is currently unavailable." tone="error" />
             ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-3">
+                {plan.entryCondition.triggerLifecycleState === "WAITING_FOR_RETEST" ? (
+                  <div className="rounded-md border border-wait/40 bg-wait/10 p-3 text-sm text-foreground">
+                    <p className="font-semibold">Trigger confirmed, but the entry was too extended.</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      Do not chase. The engine is waiting for SPY to revisit the displayed retest zone, hold the correct side of the buffered trigger, and requalify risk, reward, and contract liquidity.
+                    </p>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <MetricCard label="Condition" value={plan.entryCondition.state} tone={plan.entryCondition.state === "WAITING" ? "wait" : "bull"} />
                 <MetricCard label="Setup Type" value={plan.entryCondition.setupType?.replaceAll("_", " ") ?? "—"} />
                 <MetricCard label="Trigger Lifecycle" value={plan.entryCondition.triggerLifecycleState?.replaceAll("_", " ") ?? "—"} tone={plan.entryCondition.confirmationPassed ? "bull" : "wait"} />
-                <MetricCard label="Confirmation Passed" value={plan.entryCondition.confirmationPassed === null || plan.entryCondition.confirmationPassed === undefined ? "—" : plan.entryCondition.confirmationPassed ? "Yes" : "No"} />
+                <MetricCard label="Actionable Entry Confirmed" value={plan.entryCondition.confirmationPassed === null || plan.entryCondition.confirmationPassed === undefined ? "—" : plan.entryCondition.confirmationPassed ? "Yes" : "No"} />
+                <MetricCard label="Raw Trigger Crossed" value={plan.entryCondition.rawCrossSatisfied === null || plan.entryCondition.rawCrossSatisfied === undefined ? "—" : plan.entryCondition.rawCrossSatisfied ? "Yes" : "No"} />
+                <MetricCard label="Current Quote Beyond Raw Trigger" value={plan.entryCondition.currentRawCrossSatisfied === null || plan.entryCondition.currentRawCrossSatisfied === undefined ? "—" : plan.entryCondition.currentRawCrossSatisfied ? "Yes" : "No"} />
                 <MetricCard label="Buffered Trigger" value={formatNullablePrice(plan.entryCondition.bufferedTriggerLevel ?? null)} sublabel={`Buffer ${formatNullableNumber(plan.entryCondition.dynamicBufferPoints ?? null, 4)} SPY points`} />
                 <MetricCard label="Latest Completed Close" value={formatNullablePrice(plan.entryCondition.latestCompletedClose ?? null)} />
+                <MetricCard label="Confirmation Candle" value={formatNullableTimestamp(plan.entryCondition.confirmationCandleAt ?? null)} sublabel={`Close ${formatNullablePrice(plan.entryCondition.confirmationCandleClose ?? null)}`} />
+                <MetricCard label="Confirmation Extension" value={formatNullableNumber(plan.entryCondition.confirmationExtensionPoints ?? null, 4)} sublabel="SPY points beyond raw trigger" />
+                <MetricCard label="Maximum Observed Close Extension" value={formatNullableNumber(plan.entryCondition.maximumObservedCloseExtensionPoints ?? null, 4)} sublabel="Largest completed-close extension in this episode" />
+                <MetricCard label="Maximum Chase Distance" value={formatNullableNumber(plan.entryCondition.maximumChaseDistancePoints ?? null, 4)} sublabel="SPY points" />
+                <MetricCard label="Current Extension" value={formatNullableNumber(plan.entryCondition.chaseDistancePoints ?? null, 4)} sublabel="SPY points from raw trigger" />
+                <MetricCard label="Retest Required" value={plan.entryCondition.retestRequired === null || plan.entryCondition.retestRequired === undefined ? "—" : plan.entryCondition.retestRequired ? "Yes" : "No"} />
+                <MetricCard label="Retest Zone" value={plan.entryCondition.retestZoneLower && plan.entryCondition.retestZoneUpper ? `${formatNullablePrice(plan.entryCondition.retestZoneLower)} – ${formatNullablePrice(plan.entryCondition.retestZoneUpper)}` : "—"} sublabel="Touch zone, then close beyond buffered trigger" />
+                <MetricCard label="Retest Observed" value={plan.entryCondition.retestObserved === null || plan.entryCondition.retestObserved === undefined ? "—" : plan.entryCondition.retestObserved ? "Yes" : "No"} />
+                <MetricCard label="Retest Held" value={plan.entryCondition.retestHeld === null || plan.entryCondition.retestHeld === undefined ? "—" : plan.entryCondition.retestHeld ? "Yes" : "No"} />
+                <MetricCard label="Retest Candle" value={formatNullableTimestamp(plan.entryCondition.retestCandleAt ?? null)} sublabel={`Close ${formatNullablePrice(plan.entryCondition.retestCandleClose ?? null)}`} />
+                <MetricCard label="Retest Window" value={plan.entryCondition.barsSinceConfirmation === null || plan.entryCondition.barsSinceConfirmation === undefined ? "—" : `${plan.entryCondition.barsSinceConfirmation}/${plan.entryCondition.maximumRetestBars ?? "—"} bars`} sublabel="Five-minute completed bars" />
+                <MetricCard label="Post-Retest Chase" value={formatNullableNumber(plan.entryCondition.postRetestChaseDistancePoints ?? null, 4)} sublabel="SPY points from retest close" />
                 <MetricCard label="Recross Count" value={formatNullableNumber(plan.entryCondition.recrossCount ?? null, 0)} />
-                <MetricCard label="Breakout Volume Ratio" value={formatNullableNumber(plan.entryCondition.latestVolumeRatio ?? null, 2)} />
-                <MetricCard label="Chase Distance" value={formatNullableNumber(plan.entryCondition.chaseDistancePoints ?? null, 4)} sublabel="SPY points beyond raw trigger" />
+                <MetricCard label="Qualification Volume Ratio" value={formatNullableNumber(plan.entryCondition.latestVolumeRatio ?? null, 2)} />
                 <MetricCard
                   label={plan.entryCondition.state === "WAITING" ? "Trigger Level" : "Current Planning Reference"}
                   value={formatNullablePrice(plan.entryCondition.planningReferencePrice)}
@@ -201,7 +223,7 @@ export default function TradePlanPage() {
                   sublabel="SPY points"
                 />
                 <MetricCard
-                  label="Trigger Satisfied"
+                  label="Entry Qualification Passed"
                   value={
                     plan.entryCondition.triggerSatisfied === null
                       ? "—"
@@ -209,6 +231,7 @@ export default function TradePlanPage() {
                         ? "Yes"
                         : "No"
                   }
+                  sublabel="Raw cross and entry qualification are shown separately"
                 />
                 <MetricCard label="Source VWAP" value={formatNullablePrice(plan.entryCondition.sourceValues.vwap)} />
                 <MetricCard
@@ -219,6 +242,7 @@ export default function TradePlanPage() {
                   label="Reference Type"
                   value={plan.entryCondition.planningReferenceType.replaceAll("_", " ")}
                 />
+                </div>
               </div>
             )}
           </Panel>

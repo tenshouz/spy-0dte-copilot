@@ -42,7 +42,10 @@ import {
 } from "./backend-automation.logic";
 import {
   buildDiscordTradePlanAlertPayload,
+  claimDiscordTradePlanTransitionFingerprint,
+  isDiscordTradePlanTransitionDeliverable,
   mapDiscordTradePlanAlertProviderFailure,
+  releaseDiscordTradePlanTransitionFingerprint,
 } from "./discord-trade-plan-alert.logic";
 import { sendDiscordScheduledReport } from "./discord-scheduled-report.service";
 import {
@@ -726,6 +729,23 @@ async function evaluateTradePlanTask(args: {
 
   const event = transition.event;
   if (event === null) throw new Error("emitted transition missing event");
+
+  if (!isDiscordTradePlanTransitionDeliverable(transition)) {
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: "NO_DELIVERY",
+      reasonCode: "NON_ACTIONABLE_TRANSITION_SUPPRESSED",
+      transitionState: evaluation.nextState,
+    });
+    return taskStatus(
+      args.evaluatedAt,
+      "NO_DELIVERY",
+      "NON_ACTIONABLE_TRANSITION_SUPPRESSED",
+    );
+  }
+
   const deliveryKey = event.transitionFingerprint;
   const existingCommitment =
     await args.dependencies.repository.hasDeliveryKey(
@@ -755,6 +775,27 @@ async function evaluateTradePlanTask(args: {
     );
   }
 
+  if (
+    !claimDiscordTradePlanTransitionFingerprint(
+      deliveryKey,
+      args.evaluatedAt.getTime(),
+    )
+  ) {
+    await args.dependencies.repository.updateTradePlanStatus({
+      userId: args.userId,
+      owner: args.owner,
+      evaluatedAt: args.evaluatedAt,
+      outcome: "SUPPRESSED",
+      reasonCode: "PROCESS_DUPLICATE_SUPPRESSED",
+      transitionState: evaluation.nextState,
+    });
+    return taskStatus(
+      args.evaluatedAt,
+      "SUPPRESSED",
+      "PROCESS_DUPLICATE_SUPPRESSED",
+    );
+  }
+
   const provider = await deliverTradePlanTransition({
     transition,
     config,
@@ -776,6 +817,8 @@ async function evaluateTradePlanTask(args: {
       commitment: "AMBIGUOUS",
       committedAt: args.evaluatedAt,
     });
+  } else {
+    releaseDiscordTradePlanTransitionFingerprint(deliveryKey);
   }
   await args.dependencies.repository.insertDeliveryLog(args.userId, {
     category: "TRADE_PLAN_ALERT",

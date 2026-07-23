@@ -315,6 +315,68 @@ await test("WAITING_FOR_TRIGGER creates an informational candidate without a con
   assert.equal(result.candidate?.triggerLevel, 641);
 });
 
+await test("WAITING candidate key ignores floating trigger confidence and target updates", () => {
+  const firstAssembly = assemblyForState("WAITING_FOR_TRIGGER");
+  const first = buildSpyZeroDteTradePlanAlertCandidate(firstAssembly, ALERT_AT_MS);
+  const second = buildSpyZeroDteTradePlanAlertCandidate(
+    {
+      ...firstAssembly,
+      planConfidence: firstAssembly.planConfidence
+        ? {
+            ...firstAssembly.planConfidence,
+            adjustedConfidenceScore: 77,
+            executionQualityAlignmentScore: 77,
+          }
+        : undefined,
+      entryCondition: {
+        ...firstAssembly.entryCondition,
+        planningReferencePrice: 641.04,
+        triggerLevel: 641.04,
+        currentPrice: 642.25,
+      },
+      primaryObjective: {
+        ...firstAssembly.primaryObjective,
+        level: 642.25,
+      },
+    },
+    ALERT_AT_MS + 15_000,
+  );
+  assert.equal(
+    first.candidate?.deduplicationKey,
+    second.candidate?.deduplicationKey,
+  );
+});
+
+await test("WAITING candidate key changes only for a meaningful lifecycle change", () => {
+  const armedAssembly = assemblyForState("WAITING_FOR_TRIGGER");
+  const armed = buildSpyZeroDteTradePlanAlertCandidate(
+    {
+      ...armedAssembly,
+      entryCondition: {
+        ...armedAssembly.entryCondition,
+        setupType: "VWAP_RECLAIM_BREAKOUT",
+        triggerLifecycleState: "ARMED",
+      },
+    },
+    ALERT_AT_MS,
+  );
+  const detected = buildSpyZeroDteTradePlanAlertCandidate(
+    {
+      ...armedAssembly,
+      entryCondition: {
+        ...armedAssembly.entryCondition,
+        setupType: "VWAP_RECLAIM_BREAKOUT",
+        triggerLifecycleState: "DETECTED",
+      },
+    },
+    ALERT_AT_MS + 15_000,
+  );
+  assert.notEqual(
+    armed.candidate?.deduplicationKey,
+    detected.candidate?.deduplicationKey,
+  );
+});
+
 await test("NO_QUALIFIED_CONTRACT creates a warning candidate", () => {
   const result = buildSpyZeroDteTradePlanAlertCandidate(
     assemblyForState("NO_QUALIFIED_CONTRACT"),
@@ -387,7 +449,7 @@ await test("candidate key is stable across calculation timestamps", () => {
   assert.equal(first.candidate?.deduplicationKey, second.candidate?.deduplicationKey);
 });
 
-await test("candidate key changes when the selected contract changes", () => {
+await test("candidate key ignores selected-contract quote or symbol refreshes within the same READY episode", () => {
   const first = buildSpyZeroDteTradePlanAlertCandidate(baseAssembly(), ALERT_AT_MS);
   const source = baseAssembly({
     selectedContract: {
@@ -397,10 +459,10 @@ await test("candidate key changes when the selected contract changes", () => {
     },
   });
   const second = buildSpyZeroDteTradePlanAlertCandidate(source, ALERT_AT_MS);
-  assert.notEqual(first.candidate?.deduplicationKey, second.candidate?.deduplicationKey);
+  assert.equal(first.candidate?.deduplicationKey, second.candidate?.deduplicationKey);
 });
 
-await test("candidate key changes when exposure confirmation state materially changes", () => {
+await test("candidate key ignores exposure-confidence refreshes within the same semantic episode", () => {
   const supportive = buildSpyZeroDteTradePlanAlertCandidate(
     baseAssembly(),
     ALERT_AT_MS,
@@ -422,7 +484,7 @@ await test("candidate key changes when exposure confirmation state materially ch
     conflictingAssembly,
     ALERT_AT_MS + 1_000,
   );
-  assert.notEqual(
+  assert.equal(
     supportive.candidate?.deduplicationKey,
     conflicting.candidate?.deduplicationKey,
   );

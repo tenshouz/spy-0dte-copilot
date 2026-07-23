@@ -1,5 +1,5 @@
 /**
- * Focused deterministic tests for TRADE_PLAN_V3 execution confirmation.
+ * Focused deterministic tests for TRADE_PLAN_V3 trigger lifecycle and retest recovery.
  * Run: npx --no-install tsx apps/server/src/services/trade-plan.spec.ts
  */
 import assert from "node:assert/strict";
@@ -67,8 +67,9 @@ test("TRADE_PLAN_V3 produces a schema-valid confirmed Calls setup", () => {
   assert.equal(result.methodologyVersion, "TRADE_PLAN_V3");
   assert.equal(result.setupState, "ELIGIBLE");
   assert.equal(result.setupDirection, "CALLS");
+  assert.equal(result.trigger.confirmation?.methodologyVersion, "TRIGGER_CONFIRMATION_V2");
   assert.equal(result.trigger.confirmation?.confirmationPassed, true);
-  assert.equal(result.trigger.confirmation?.lifecycleState, "RETESTED");
+  assert.equal(result.trigger.confirmation?.lifecycleState, "READY");
   assert.equal(result.exposureConfidenceAdjustmentPoints, 0);
   assert.equal(result.planConfidenceScore, result.structuralConfidenceScore);
   assert.deepEqual(SpyZeroDteDeterministicTradePlanResponseSchema.parse(result), result);
@@ -112,7 +113,7 @@ test("missing execution context fails closed", () => {
 
 test("more than two recent recrosses invalidates the trigger", () => {
   const candidate = state("CALLS");
-  const closes = [757.8, 758.2, 757.9, 758.25, 757.95, 758.25];
+  const closes = [757.8, 757.9, 758.2, 758.1, 758.25, 758.05];
   candidate.executionContext!.recentCompletedCandles = candidate.executionContext!.recentCompletedCandles.map(
     (item, index) => ({
       ...item,
@@ -153,8 +154,323 @@ test("maximum chase distance prevents late activation", () => {
   }
   const result = build(candidate);
   assert.equal(result.trigger.confirmation?.chasePassed, false);
+  assert.equal(result.trigger.confirmation?.lifecycleState, "WAITING_FOR_RETEST");
+  assert.equal(result.primaryReasonCode, "WAITING_FOR_CALLS_RETEST");
   assert.ok(result.trigger.confirmation?.warningCodes.includes("MAXIMUM_CHASE_DISTANCE_EXCEEDED"));
+  assert.ok(result.trigger.confirmation?.warningCodes.includes("RETEST_REQUIRED"));
   assert.equal(result.setupState, "WAITING_FOR_TRIGGER");
+});
+
+
+
+test("an extended confirmation waits for a bounded retest instead of permanent invalidation", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.9,
+    high: 759.1,
+    low: 758.7,
+    close: 758.85,
+    volume: 1200,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 758.9,
+    high: 759.2,
+    low: 758.65,
+    close: 759.05,
+    volume: 1300,
+  };
+  candidate.price = 759.05;
+  for (const feature of [
+    candidate.features.priceVsVwap,
+    candidate.features.priceVsPriorDayRange,
+    candidate.features.priceVsPremarketRange,
+    candidate.features.priceVsOpeningRange,
+    candidate.features.priceVsExpectedMoveRange,
+  ]) {
+    feature.inputs.price = 759.05;
+  }
+  const result = build(candidate);
+  assert.equal(result.trigger.confirmation?.completedCloseConfirmed, true);
+  assert.equal(result.trigger.confirmation?.lifecycleState, "WAITING_FOR_RETEST");
+  assert.equal(result.trigger.confirmation?.retestRequired, true);
+  assert.ok(
+    (result.trigger.confirmation?.maximumObservedCloseExtensionPoints ?? 0) >
+      (result.trigger.confirmation?.maximumChaseDistancePoints ?? Number.POSITIVE_INFINITY),
+  );
+  assert.equal(result.trigger.confirmation?.retestObserved, false);
+  assert.equal(result.trigger.confirmation?.confirmationPassed, false);
+  assert.equal(result.setupState, "WAITING_FOR_TRIGGER");
+});
+
+test("a wide continuation candle cannot masquerade as a held retest", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.3,
+    high: 759.3,
+    low: 758.1,
+    close: 759.1,
+    volume: 1300,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 759.05,
+    high: 759.2,
+    low: 758.75,
+    close: 758.9,
+    volume: 1250,
+  };
+  candidate.price = 758.9;
+  const trigger = calculateCallsTrigger(758.9, 757.8, 758)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "CALLS", trigger);
+  assert.equal(confirmation.retestObserved, true);
+  assert.equal(confirmation.retestHeld, false);
+  assert.equal(confirmation.lifecycleState, "WAITING_FOR_RETEST");
+  assert.equal(confirmation.confirmationPassed, false);
+});
+
+test("a raw-level loss followed by a clean reclaim starts a new eligible episode", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.4,
+    high: 758.5,
+    low: 757.6,
+    close: 757.8,
+    volume: 1400,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 758.05,
+    high: 758.45,
+    low: 757.95,
+    close: 758.3,
+    volume: 1300,
+  };
+  candidate.price = 758.32;
+  const trigger = calculateCallsTrigger(758.32, 757.8, 758)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "CALLS", trigger);
+  assert.equal(confirmation.confirmationCandleClose, 758.3);
+  assert.equal(confirmation.recrossCount, 0);
+  assert.equal(confirmation.lifecycleState, "READY");
+  assert.equal(confirmation.confirmationPassed, true);
+});
+
+test("a held retest requalifies the extended setup", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.55,
+    high: 758.7,
+    low: 758.12,
+    close: 758.3,
+    volume: 1150,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 758.28,
+    high: 758.55,
+    low: 758.2,
+    close: 758.4,
+    volume: 1250,
+  };
+  candidate.price = 758.42;
+  for (const feature of [
+    candidate.features.priceVsVwap,
+    candidate.features.priceVsPriorDayRange,
+    candidate.features.priceVsPremarketRange,
+    candidate.features.priceVsOpeningRange,
+    candidate.features.priceVsExpectedMoveRange,
+  ]) {
+    feature.inputs.price = 758.42;
+  }
+  const result = build(candidate);
+  assert.equal(result.trigger.confirmation?.lifecycleState, "RETESTED");
+  assert.equal(result.trigger.confirmation?.retestObserved, true);
+  assert.equal(result.trigger.confirmation?.retestHeld, true);
+  assert.equal(result.trigger.confirmation?.confirmationPassed, true);
+  assert.equal(result.setupState, "ELIGIBLE");
+});
+
+
+
+test("a buffered-level pullback remains part of the original breakout episode", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.55,
+    high: 758.65,
+    low: 758.05,
+    close: 758.08,
+    volume: 1150,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 758.1,
+    high: 758.5,
+    low: 758.06,
+    close: 758.35,
+    volume: 1250,
+  };
+  candidate.price = 758.37;
+  const trigger = calculateCallsTrigger(758.37, 757.8, 758)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "CALLS", trigger);
+  assert.equal(confirmation.confirmationCandleClose, 759);
+  assert.equal(confirmation.lifecycleState, "RETESTED");
+  assert.equal(confirmation.retestCandleClose, 758.35);
+  assert.equal(confirmation.retestHeld, true);
+  assert.equal(confirmation.confirmationPassed, true);
+});
+
+test("Puts use the symmetric extended-confirmation and held-retest lifecycle", () => {
+  const candidate = state("PUTS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 748.8,
+    high: 748.82,
+    low: 747.75,
+    close: 748,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 748.45,
+    high: 748.95,
+    low: 748.35,
+    close: 748.75,
+    volume: 1150,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 748.73,
+    high: 748.8,
+    low: 748.55,
+    close: 748.7,
+    volume: 1250,
+  };
+  candidate.price = 748.68;
+  const trigger = calculatePutsTrigger(748.68, 749.2, 749)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "PUTS", trigger);
+  assert.equal(confirmation.lifecycleState, "RETESTED");
+  assert.equal(confirmation.retestRequired, true);
+  assert.equal(confirmation.retestHeld, true);
+  assert.equal(confirmation.confirmationPassed, true);
+});
+
+test("the retest window expires after six completed post-confirmation bars", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candidate.executionContext!.recentCompletedCandles = [
+    ...candles.slice(0, 4),
+    ...Array.from({ length: 6 }, (_, index) => ({
+      timestamp: Date.parse(`2026-07-17T${String(13 + Math.floor((50 + index * 5) / 60)).padStart(2, "0")}:${String((50 + index * 5) % 60).padStart(2, "0")}:00.000Z`),
+      open: 758.92,
+      high: 759.2,
+      low: 758.7,
+      close: 758.95,
+      volume: 1200 + index * 10,
+    })),
+  ];
+  candidate.executionContext!.completedCandleCount =
+    candidate.executionContext!.recentCompletedCandles.length;
+  candidate.price = 758.95;
+  const trigger = calculateCallsTrigger(758.95, 757.8, 758)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "CALLS", trigger);
+  assert.equal(confirmation.barsSinceConfirmation, 6);
+  assert.equal(confirmation.lifecycleState, "INVALIDATED");
+  assert.ok(confirmation.warningCodes.includes("RETEST_WINDOW_EXPIRED"));
+  assert.equal(confirmation.confirmationPassed, false);
+});
+
+test("a retest close through the raw trigger invalidates the active episode", () => {
+  const candidate = state("CALLS");
+  const candles = candidate.executionContext!.recentCompletedCandles;
+  candles[3] = {
+    ...candles[3]!,
+    open: 758.2,
+    high: 759.25,
+    low: 758.18,
+    close: 759,
+    volume: 1500,
+  };
+  candles[4] = {
+    ...candles[4]!,
+    open: 758.4,
+    high: 758.5,
+    low: 757.6,
+    close: 757.8,
+    volume: 1400,
+  };
+  candles[5] = {
+    ...candles[5]!,
+    open: 757.85,
+    high: 757.95,
+    low: 757.65,
+    close: 757.8,
+    volume: 1200,
+  };
+  candidate.price = 757.8;
+  const trigger = calculateCallsTrigger(759, 757.8, 758)!;
+  const confirmation = buildTradeTriggerConfirmation(candidate, "CALLS", trigger);
+  assert.equal(confirmation.lifecycleState, "INVALIDATED");
+  assert.ok(confirmation.warningCodes.includes("RETEST_LEVEL_LOST"));
+  assert.equal(confirmation.confirmationPassed, false);
 });
 
 test("raw-source timestamp skew blocks the trade", () => {

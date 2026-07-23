@@ -1759,7 +1759,7 @@ export const MarketContextCandleSummarySchema = z.object({
   latestCandle: SpyCandleSchema.nullable(),
   previousCandle: SpyCandleSchema.nullable(),
   latestCandleAt: z.string().datetime().nullable(),
-  recentCompletedRthCandles: z.array(SpyCandleSchema).max(12).optional(),
+  recentCompletedRthCandles: z.array(SpyCandleSchema).max(78).optional(),
   fetchedAt: z.string().datetime(),
   dataAgeMs: z.number().nonnegative(),
   warningCode: CandleWarningCodeSchema.nullable(),
@@ -2327,8 +2327,8 @@ export type MarketStateFeatureWarning = z.infer<typeof MarketStateFeatureWarning
 export const MarketStateExecutionContextSchema = z.object({
   methodologyVersion: z.literal("EXECUTION_CONTEXT_V1"),
   timeframe: z.literal("5m"),
-  recentCompletedCandles: z.array(SpyCandleSchema).max(12),
-  completedCandleCount: z.number().int().nonnegative().max(12),
+  recentCompletedCandles: z.array(SpyCandleSchema).max(78),
+  completedCandleCount: z.number().int().nonnegative().max(78),
   latestCompletedCandleAt: z.string().datetime().nullable(),
   medianRangePoints: z.number().finite().nonnegative().nullable(),
   medianVolume: z.number().finite().nonnegative().nullable(),
@@ -2855,6 +2855,7 @@ export const TradeTriggerLifecycleStateSchema = z.enum([
   "ARMED",
   "DETECTED",
   "CONFIRMED",
+  "WAITING_FOR_RETEST",
   "RETESTED",
   "READY",
   "INVALIDATED",
@@ -2871,17 +2872,34 @@ export const TradeTriggerConfirmationModeSchema = z.enum([
 ]);
 
 export const TradeTriggerConfirmationSchema = z.object({
-  methodologyVersion: z.literal("TRIGGER_CONFIRMATION_V1"),
+  methodologyVersion: z.enum(["TRIGGER_CONFIRMATION_V1", "TRIGGER_CONFIRMATION_V2"]),
   mode: TradeTriggerConfirmationModeSchema,
   lifecycleState: TradeTriggerLifecycleStateSchema,
+  /** True once a raw cross has been observed in the active recent-candle episode. */
   rawCrossSatisfied: z.boolean().nullable(),
+  /** Current quote-only relation to the raw trigger. */
+  currentRawCrossSatisfied: z.boolean().nullable().optional(),
   dynamicBufferPoints: z.number().finite().nonnegative().nullable(),
   bufferedTriggerLevel: z.number().finite().positive().nullable(),
   latestCompletedClose: z.number().finite().positive().nullable(),
   previousCompletedClose: z.number().finite().positive().nullable(),
   completedCloseConfirmed: z.boolean().nullable(),
+  confirmationCandleAt: z.string().datetime().nullable().optional(),
+  confirmationCandleClose: z.number().finite().positive().nullable().optional(),
+  confirmationExtensionPoints: z.number().finite().nonnegative().nullable().optional(),
+  maximumObservedCloseExtensionPoints: z.number().finite().nonnegative().nullable().optional(),
   currentPriceMaintained: z.boolean().nullable(),
+  retestRequired: z.boolean().nullable().optional(),
   retestObserved: z.boolean().nullable(),
+  retestHeld: z.boolean().nullable().optional(),
+  retestCandleAt: z.string().datetime().nullable().optional(),
+  retestCandleClose: z.number().finite().positive().nullable().optional(),
+  retestZoneLower: z.number().finite().positive().nullable().optional(),
+  retestZoneUpper: z.number().finite().positive().nullable().optional(),
+  retestTolerancePoints: z.number().finite().nonnegative().nullable().optional(),
+  barsSinceConfirmation: z.number().int().nonnegative().nullable().optional(),
+  maximumRetestBars: z.number().int().positive().nullable().optional(),
+  postRetestChaseDistancePoints: z.number().finite().nonnegative().nullable().optional(),
   recrossCount: z.number().int().nonnegative().nullable(),
   maximumAllowedRecrosses: z.literal(2),
   medianRangePoints: z.number().finite().nonnegative().nullable(),
@@ -2901,8 +2919,75 @@ export const TradeTriggerConfirmationSchema = z.object({
       "EXCESSIVE_LEVEL_RECROSSES",
       "BREAKOUT_VOLUME_INSUFFICIENT",
       "MAXIMUM_CHASE_DISTANCE_EXCEEDED",
+      "RETEST_REQUIRED",
+      "RETEST_NOT_YET_OBSERVED",
+      "RETEST_NOT_HELD",
+      "POST_RETEST_CHASE_DISTANCE_EXCEEDED",
+      "RETEST_LEVEL_LOST",
+      "RETEST_WINDOW_EXPIRED",
     ]),
   ),
+}).superRefine((value, ctx) => {
+  if (value.methodologyVersion !== "TRIGGER_CONFIRMATION_V2") return;
+  if (
+    value.lifecycleState === "WAITING_FOR_RETEST" &&
+    (
+      value.rawCrossSatisfied !== true ||
+      value.completedCloseConfirmed !== true ||
+      value.retestRequired !== true ||
+      value.retestHeld === true ||
+      value.confirmationPassed !== false
+    )
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "WAITING_FOR_RETEST requires a confirmed extended trigger and no actionable entry",
+    });
+  }
+  if (
+    value.lifecycleState === "RETESTED" &&
+    (
+      value.completedCloseConfirmed !== true ||
+      value.retestRequired !== true ||
+      value.retestHeld !== true ||
+      value.confirmationPassed !== true
+    )
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "RETESTED requires a held retest and passed entry confirmation",
+    });
+  }
+  if (
+    value.lifecycleState === "READY" &&
+    (value.confirmationPassed !== true || value.retestHeld === true)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "READY trigger lifecycle requires immediate passed entry confirmation",
+    });
+  }
+  if (
+    value.lifecycleState === "INVALIDATED" &&
+    value.confirmationPassed === true
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "INVALIDATED trigger lifecycle cannot pass entry confirmation",
+    });
+  }
+  if (
+    value.retestZoneLower !== null &&
+    value.retestZoneLower !== undefined &&
+    value.retestZoneUpper !== null &&
+    value.retestZoneUpper !== undefined &&
+    value.retestZoneLower > value.retestZoneUpper
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Retest zone lower bound cannot exceed its upper bound",
+    });
+  }
 });
 export type TradeTriggerConfirmation = z.infer<
   typeof TradeTriggerConfirmationSchema
@@ -2991,6 +3076,8 @@ export const TradePlanPrimaryReasonCodeSchema = z.enum([
   "WAITING_FOR_PUTS_TRIGGER",
   "WAITING_FOR_CALLS_CONFIRMATION",
   "WAITING_FOR_PUTS_CONFIRMATION",
+  "WAITING_FOR_CALLS_RETEST",
+  "WAITING_FOR_PUTS_RETEST",
   "SESSION_NOT_RTH",
   "OPENING_RANGE_NOT_STARTED",
   "OPENING_RANGE_FORMING",
@@ -3054,6 +3141,10 @@ export const TradePlanGateReasonCodeSchema = z.enum([
   "PUTS_TRIGGER_NOT_SATISFIED",
   "CALLS_TRIGGER_CONFIRMATION_PENDING",
   "PUTS_TRIGGER_CONFIRMATION_PENDING",
+  "CALLS_TRIGGER_RETEST_PENDING",
+  "PUTS_TRIGGER_RETEST_PENDING",
+  "TRIGGER_RETEST_FAILED",
+  "TRIGGER_RETEST_EXPIRED",
   "TRIGGER_CHOP_DETECTED",
   "TRIGGER_CHASE_EXCEEDED",
   "TRIGGER_VOLUME_INSUFFICIENT",
@@ -3072,6 +3163,9 @@ export const TradePlanOverallWarningCodeSchema = z.enum([
   "REQUIRED_INPUT_STALE",
   "INSUFFICIENT_PLAN_DATA",
   "TRIGGER_CONFIRMATION_PENDING",
+  "TRIGGER_RETEST_REQUIRED",
+  "TRIGGER_RETEST_FAILED",
+  "TRIGGER_RETEST_EXPIRED",
   "TRIGGER_CHOP_DETECTED",
   "TRIGGER_CHASE_EXCEEDED",
   "TRIGGER_VOLUME_INSUFFICIENT",
@@ -4443,6 +4537,23 @@ export const TradePlanAssemblyEntryConditionSchema = z.object({
   recrossCount: z.number().int().nonnegative().nullable().optional(),
   latestVolumeRatio: z.number().finite().nonnegative().nullable().optional(),
   chaseDistancePoints: z.number().finite().nonnegative().nullable().optional(),
+  maximumChaseDistancePoints: z.number().finite().positive().nullable().optional(),
+  rawCrossSatisfied: z.boolean().nullable().optional(),
+  currentRawCrossSatisfied: z.boolean().nullable().optional(),
+  confirmationCandleAt: z.string().datetime().nullable().optional(),
+  confirmationCandleClose: z.number().finite().positive().nullable().optional(),
+  confirmationExtensionPoints: z.number().finite().nonnegative().nullable().optional(),
+  maximumObservedCloseExtensionPoints: z.number().finite().nonnegative().nullable().optional(),
+  retestRequired: z.boolean().nullable().optional(),
+  retestObserved: z.boolean().nullable().optional(),
+  retestHeld: z.boolean().nullable().optional(),
+  retestCandleAt: z.string().datetime().nullable().optional(),
+  retestCandleClose: z.number().finite().positive().nullable().optional(),
+  retestZoneLower: z.number().finite().positive().nullable().optional(),
+  retestZoneUpper: z.number().finite().positive().nullable().optional(),
+  barsSinceConfirmation: z.number().int().nonnegative().nullable().optional(),
+  maximumRetestBars: z.number().int().positive().nullable().optional(),
+  postRetestChaseDistancePoints: z.number().finite().nonnegative().nullable().optional(),
   disclosureCode: z.literal("PLANNING_REFERENCE_ONLY"),
 });
 export type TradePlanAssemblyEntryCondition = z.infer<
@@ -6988,13 +7099,35 @@ export const DiscordTradePlanAlertDeliveryResponseSchema = z
     }
 
     if (value.primaryReasonCode === "NO_EMITTED_TRANSITION") {
-      if (
-        value.providerRequestAttempted ||
-        value.transition?.transitionState !== "SUPPRESSED" ||
-        value.transition.event !== null ||
-        value.state.retryEligible
-      ) {
-        issue("NO_EMITTED_TRANSITION requires a suppressed transition and no provider request");
+      if (value.providerRequestAttempted || value.state.retryEligible) {
+        issue(
+          "NO_EMITTED_TRANSITION requires no provider request and no retry",
+        );
+      }
+
+      if (value.transition === null) {
+        if (value.state.transitionStateCommitted) {
+          issue(
+            "NO_EMITTED_TRANSITION without transition evaluation cannot commit transition state",
+          );
+        }
+      } else if (value.transition.transitionState === "SUPPRESSED") {
+        if (value.transition.event !== null) {
+          issue("A suppressed transition cannot expose an event");
+        }
+      } else if (value.transition.transitionState === "EMIT") {
+        if (
+          value.transition.event === null ||
+          !value.state.transitionStateCommitted
+        ) {
+          issue(
+            "A filtered or duplicate emitted transition must expose its event and commit transition state",
+          );
+        }
+      } else {
+        issue(
+          "NO_EMITTED_TRANSITION accepts only no evaluation, a suppressed transition, or a committed filtered emitted transition",
+        );
       }
     }
 
