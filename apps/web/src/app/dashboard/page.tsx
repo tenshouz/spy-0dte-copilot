@@ -39,7 +39,7 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-[1600px]">
       <PageHeader
         title="Dashboard"
-        description="Current deterministic SPY 0DTE structure, evidence, and conditional planning references."
+        description="Current deterministic SPY 0DTE source structure, evidence, levels, and conditional Trade Plan references. Trading Workspace applies the V1.9 policy and lifecycle gates."
       />
 
       <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-4">

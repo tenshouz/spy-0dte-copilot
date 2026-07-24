@@ -1,5 +1,6 @@
 import "./bootstrap-env";
 import cors from "cors";
+import { SPY_COPILOT_RELEASE_VERSION } from "@spy-copilot/shared";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { getSchwabConfig, hasDatabaseUrl } from "./config/env";
 import {
@@ -68,8 +69,13 @@ import { tradePlanRouter } from "./routes/trade-plan.routes";
 import { tradeRiskRouter } from "./routes/trade-risk.routes";
 import { schwabAssistedTradeSizingRouter } from "./routes/trade-sizing-schwab.routes";
 import { tradeSizingRouter } from "./routes/trade-sizing.routes";
+import {
+  setTradingWorkspaceHeaders,
+  tradingWorkspaceRouter,
+} from "./routes/trading-workspace.routes";
 import { vwapRouter } from "./routes/vwap.routes";
 import { startBackendAutomationScheduler } from "./services/backend-automation.service";
+import { startTradingWorkspaceScheduler } from "./services/trading-workspace-automation.service";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -90,7 +96,7 @@ app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "spy-0dte-copilot-api",
-    releaseVersion: "1.5.0",
+    releaseVersion: SPY_COPILOT_RELEASE_VERSION,
     uptimeSeconds: Math.max(0, Math.floor(process.uptime())),
   });
 });
@@ -113,6 +119,7 @@ app.use("/api/trade-contract", tradeContractRouter);
 app.use("/api/trade-risk", tradeRiskRouter);
 app.use("/api/trade-sizing", schwabAssistedTradeSizingRouter);
 app.use("/api/trade-sizing", tradeSizingRouter);
+app.use("/api/trading-workspace", tradingWorkspaceRouter);
 app.use("/api/opening-range", openingRangeRouter);
 app.use("/api/options-chain", optionsChainRouter);
 app.use("/api/quote", quoteRouter);
@@ -247,6 +254,15 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
     return;
   }
   if (
+    req.originalUrl.startsWith("/api/trading-workspace/") &&
+    error instanceof SyntaxError &&
+    status === 400
+  ) {
+    setTradingWorkspaceHeaders(res);
+    res.status(400).json({ error: "INVALID_TRADING_WORKSPACE_JSON" });
+    return;
+  }
+  if (
     req.originalUrl.startsWith("/api/trade-sizing/") &&
     error instanceof SyntaxError &&
     status === 400
@@ -276,6 +292,7 @@ app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
 });
 
 const backendAutomationScheduler = startBackendAutomationScheduler();
+const tradingWorkspaceScheduler = startTradingWorkspaceScheduler();
 
 const server = app.listen(PORT, () => {
   // eslint-disable-next-line no-console
@@ -308,6 +325,7 @@ async function shutdown(signal: string, exitCode: number): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`[server] graceful shutdown requested (${signal})`);
   backendAutomationScheduler.stop();
+  tradingWorkspaceScheduler.stop();
 
   const forceTimer = setTimeout(() => {
     // eslint-disable-next-line no-console

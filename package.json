@@ -1,8 +1,8 @@
 {
   "name": "spy-0dte-copilot",
   "private": true,
-  "version": "1.5.4",
-  "description": "Local SPY 0DTE deterministic decision-support platform \u2014 V1.5.4 Trigger Lifecycle & Retest Recovery",
+  "version": "1.9.0",
+  "description": "Local SPY 0DTE deterministic decision-support platform \u2014 V1.9.0 Complete Trading Framework",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -19,7 +19,10 @@
     "test:server": "node scripts/run-specs.mjs apps/server/src/services",
     "test:web": "node scripts/run-specs.mjs apps/web/src/lib",
     "test": "npm run test:server && npm run test:web",
-    "verify:v1": "node scripts/verify-v1.mjs"
+    "verify:v1": "node scripts/verify-v1.mjs",
+    "db:validate": "npm run prisma:validate --workspace=apps/server",
+    "db:generate": "npm run prisma:generate --workspace=apps/server",
+    "db:deploy": "npm run prisma:deploy --workspace=apps/server"
   },
   "engines": {
     "node": ">=20"

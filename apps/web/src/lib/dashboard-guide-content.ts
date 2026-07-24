@@ -24,9 +24,15 @@ export interface GuideGlossaryDefinition {
   searchTerms: readonly string[];
 }
 
+export interface GuidePolicyFact {
+  title: string;
+  detail: string;
+}
+
 export const GUIDE_SECTION_LINKS = [
   { id: "start-here", label: "Start here" },
   { id: "daily-workflow", label: "Daily workflow" },
+  { id: "trading-policy", label: "Trading policy" },
   { id: "pages", label: "Every page" },
   { id: "trade-plan", label: "Trade Plan flow" },
   { id: "statuses", label: "Statuses and colors" },
@@ -40,32 +46,75 @@ export const GUIDE_DAILY_WORKFLOW = [
   {
     title: "Start the required services",
     detail:
-      "Start PostgreSQL, the backend, and the frontend. The backend must remain online for live data and automatic Discord alerts.",
+      "Start PostgreSQL, the backend, and the frontend. The backend must remain online for live data, READY reconciliation, position monitoring, and Discord delivery.",
   },
   {
     title: "Check System Readiness",
     detail:
-      "Open System Readiness first. READY is ideal. DEGRADED can still be usable, but read the failed or warning checks before trusting the output.",
+      "Open System Readiness first. Confirm release V1.9.0, the 13 configuration/runtime checks, and the Trading Workspace monitor. Run the complete probe when you need live end-to-end confirmation.",
   },
   {
-    title: "Confirm the connections",
+    title: "Confirm connections and automation",
     detail:
-      "In Settings, confirm Schwab is connected, Discord is connected, and persistent backend automation is active when you want automatic alerts.",
+      "In Settings, confirm Schwab and Discord status. Enable persistent backend automation only when you want actionable notifications and the readiness checks are acceptable.",
   },
   {
-    title: "Use Dashboard for the big picture",
+    title: "Use Dashboard for market context",
     detail:
-      "Watch price, VWAP, important levels, opening ranges, exposure structure, bias, and the current Trade Plan state in one place.",
+      "Watch price, VWAP, session structure, important levels, expected move, exposure context, bias, and the current deterministic Trade Plan state.",
   },
   {
-    title: "Open Trade Plan for the decision details",
+    title: "Use Trade Plan for the source thesis",
     detail:
-      "A READY plan contains the direction, trigger, invalidation, objective, reward-to-risk, selected contract, and adjusted confidence.",
+      "Review the structural direction, trigger, invalidation, objective, strict effective-ATM contract result, execution quality, and confidence inputs.",
   },
   {
-    title: "Record what happened",
+    title: "Use Trading Workspace for policy and lifecycle",
     detail:
-      "Use the Trade Journal to save or automatically capture snapshots, then enter the outcome later so analytics remain based on your real results.",
+      "Confirm the $1,000 paper-equivalent policy, daily risk ledger, event/time restrictions, setup episode, 60-second READY alert, and manual entry/exit actions. No broker order is created.",
+  },
+  {
+    title: "Record and review results",
+    detail:
+      "Use the Journal, Workspace position history, Replay, and Backtest pages to separate engine evidence, modeled execution, and the prices or outcomes you manually recorded.",
+  },
+] as const;
+
+export const GUIDE_TRADING_POLICY_FACTS: readonly GuidePolicyFact[] = [
+  {
+    title: "Account and hard risk limits",
+    detail:
+      "$1,000 paper-equivalent account; maximum $150 contract premium; maximum $50 planned structural loss per trade; maximum $150 daily loss including realized losses plus open planned risk.",
+  },
+  {
+    title: "Trade frequency and attempts",
+    detail:
+      "Maximum 3 trades per market date, stop after 2 consecutive losses, one concurrent one-contract position, and at most 2 attempts per setup/direction/level episode.",
+  },
+  {
+    title: "Entry and exit clock",
+    detail:
+      "No new entry at or after 3:00 p.m. ET; normal mandatory manual exit at 3:55 p.m.; absolute deadline before 4:00 p.m. ET.",
+  },
+  {
+    title: "Targets and time review",
+    detail:
+      "Target 2 is the primary one-contract exit. Target 1 is management information, Target 3 is research-only, and 15 minutes/3 completed candles creates a review rather than an automatic exit.",
+  },
+  {
+    title: "Contract and reward-to-risk",
+    detail:
+      "The nearest effective ATM strike must qualify or the result is NO QUALIFIED CONTRACT—no farther-strike substitution. Minimum underlying and option-premium R:R is 1.5:1; 2.0:1 or better is preferred.",
+  },
+  {
+    title: "Execution and confirmation",
+    detail:
+      "Modeled entries use the ask and modeled exits use the bid. Every paper-equivalent entry and exit requires manual confirmation; the dashboard never submits a broker order.",
+  },
+  {
+    title: "Events, conflicts, and shadow setups",
+    detail:
+      "CPI, Employment Situation/NFP, and FOMC are full-day blocks; other major events use configured windows. Duplicate signals consolidate, unresolved Calls/Puts conflicts fail closed, and new setup families remain shadow-only until explicitly promoted.",
   },
 ] as const;
 
@@ -136,37 +185,80 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
     searchTerms: ["gamma", "delta", "walls", "cliffs", "dealer", "exposure", "confirmation"],
   },
   {
+    href: "/workspace",
+    title: "Trading Workspace",
+    shortTitle: "Workspace",
+    purpose:
+      "Applies TRADING_POLICY_V1 to the current opportunity and manages the manually confirmed paper-equivalent lifecycle.",
+    useWhen:
+      "Use it after reviewing the source Trade Plan and before recording any paper-equivalent entry or exit.",
+    features: [
+      "$1,000 policy limits and current daily risk ledger",
+      "Four live setup bridges plus ten shadow-only setup families",
+      "Duplicate consolidation and fail-closed directional conflicts",
+      "Full-day and windowed event restrictions plus 3:00/3:55/4:00 ET controls",
+      "Sixty-second READY alert, manual entry/exit confirmation, and audited overrides",
+      "Ask-entry/bid-exit modeling, Target 1/2/3 marks, time review, and pure-engine versus user-executed research",
+    ],
+    remember:
+      "The Workspace records decisions and paper-equivalent positions only. It cannot create, modify, or close a Schwab order.",
+    searchTerms: [
+      "policy",
+      "risk ledger",
+      "position",
+      "ready alert",
+      "attempt",
+      "event block",
+      "shadow mode",
+      "manual entry",
+      "target 2",
+    ],
+  },
+  {
     href: "/trade-plan",
     title: "Trade Plan",
     shortTitle: "Trade Plan",
-    purpose: "Turns the deterministic market structure into a conditional Calls or Puts plan when every required gate passes.",
-    useWhen: "Use it before taking any independently entered trade.",
+    purpose:
+      "Builds the deterministic structural Calls or Puts thesis and contract result that feeds the V1.9 Trading Workspace.",
+    useWhen: "Use it to inspect the source structure before any manual paper-equivalent decision.",
     features: [
-      "Plan state, direction, and entry trigger",
-      "Structural invalidation and primary objective",
-      "Minimum 2:1 underlying reward-to-risk qualification",
-      "Selected same-day option contract when the plan is READY",
-      "Structural confidence plus the GEX/DEX soft-confirmation adjustment",
-      "Explicit read-only sizing reference after you enter your own risk limits",
+      "Plan state, direction, entry trigger, and source reason codes",
+      "Structural invalidation, objectives, and minimum 1.5:1 underlying R:R with 2.0:1 preferred",
+      "Strict effective-ATM same-day contract selection with no farther-strike fallback",
+      "Execution-quality confirmation and option-premium economics",
+      "Structural confidence plus research-only GEX/DEX soft confirmation",
+      "Read-only sizing reference; V1.9 hard policy eligibility is shown in Trading Workspace",
     ],
     remember:
-      "READY means the dashboard found a qualifying plan for review. It does not place an order, guarantee a fill, or guarantee a profitable trade.",
-    searchTerms: ["ready", "entry", "trigger", "stop", "target", "risk reward", "contract", "sizing"],
+      "A source Trade Plan can be structurally READY while the Workspace still blocks entry for daily risk, attempts, event restrictions, time limits, conflicts, or an expired READY alert.",
+    searchTerms: [
+      "ready",
+      "entry",
+      "trigger",
+      "stop",
+      "target",
+      "risk reward",
+      "contract",
+      "strict atm",
+      "sizing",
+    ],
   },
   {
     href: "/alerts",
     title: "Alerts",
     shortTitle: "Alerts",
-    purpose: "Shows Trade Plan alert candidates, transitions, and Discord delivery history.",
-    useWhen: "Use it to understand why an alert did or did not send.",
+    purpose:
+      "Shows the legacy source Trade Plan alert candidate/transition monitor and general Discord delivery history.",
+    useWhen:
+      "Use it to troubleshoot source-plan transitions or general delivery. Use Trading Workspace for V1.9 READY and position-management lifecycle state.",
     features: [
-      "Current alert candidate and transition state",
-      "Persistent deduplication so the same plan is not repeatedly sent",
-      "Discord delivery and retry history",
+      "Current source Trade Plan alert candidate and transition state",
+      "Persistent deduplication so the same source plan is not repeatedly sent",
+      "General Discord delivery and retry history",
       "Foreground monitor status when persistent backend automation is not being used",
     ],
     remember:
-      "Automatic delivery is controlled in Settings. A browser page does not need to stay open when persistent backend automation is active.",
+      "V1.9 Workspace READY and position-management events are separate from this legacy source-plan monitor. Persistent backend settings control both delivery paths; neither path creates an order.",
     searchTerms: ["discord", "webhook", "notification", "dedupe", "delivery", "candidate", "transition"],
   },
   {
@@ -225,17 +317,28 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
     href: "/system",
     title: "System Readiness",
     shortTitle: "System",
-    purpose: "Checks whether the local V1 system is operational and safe to use.",
-    useWhen: "Use it before the session and whenever data or alerts behave unexpectedly.",
+    purpose: "Reports whether the current V1.9.0 local system is operational and safe to use.",
+    useWhen: "Use it before the session and whenever data, the Workspace, or alerts behave unexpectedly.",
     features: [
-      "Database, Schwab, Discord, automation, security, replay, and documentation checks",
-      "READY, DEGRADED, or BLOCKED overall state",
-      "Simple remediation guidance for every warning or failure",
-      "Explicit live-data probe with no Discord, Journal, sizing, or order side effects",
+      "Release V1.9.0 and 13 configuration, security, persistence, policy, registry, and runtime checks",
+      "Trading-framework migration/table verification",
+      "Trading Workspace monitor heartbeat state",
+      "READY, DEGRADED, or BLOCKED overall state with remediation",
+      "Explicit five-component live probe covering quote, candles, options, Assembly, and Trading Workspace",
     ],
     remember:
-      "A DEGRADED result is not automatically unusable. Read which check is degraded and decide whether it affects the feature you need.",
-    searchTerms: ["health", "ready", "blocked", "probe", "database", "security", "connection"],
+      "Static readiness and the explicit live probe answer different questions. Run the probe to confirm current provider and Workspace output without reconciling a READY alert or mutating a position.",
+    searchTerms: [
+      "health",
+      "ready",
+      "blocked",
+      "probe",
+      "database",
+      "migration",
+      "policy",
+      "registry",
+      "workspace heartbeat",
+    ],
   },
   {
     href: "/settings",
@@ -276,44 +379,54 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
 
 export const GUIDE_TRADE_PLAN_STEPS = [
   {
-    title: "1. The session must be eligible",
+    title: "1. The session and scheduled-event policy must allow evaluation",
     detail:
-      "The system needs the correct market date, regular-hours context, and a completed 15-minute opening range before a normal intraday plan can qualify.",
+      "The system uses the current New York market date, the provider-aligned 7:00–9:30 AM ET premarket window, and the current session context. CPI, Employment Situation/NFP, and FOMC are fully blocked; configured other-major-event windows also block entry.",
   },
   {
-    title: "2. Required data must be trustworthy",
+    title: "2. Required source data must be trustworthy",
     detail:
-      "Quote, VWAP, session candles, opening range, and other required inputs must be current and sufficiently complete. A real required-input problem can stop the plan.",
+      "Quote, VWAP, session candles, opening range, options, and other required inputs must be current and sufficiently complete. GEX/DEX remain research-only and cannot override policy, create a trade by themselves, or rescue stale, mock, partial, or unavailable required inputs; those inputs fail closed where the methodology requires it.",
   },
   {
-    title: "3. A structural direction must exist",
+    title: "3. A live setup family and structural direction must exist",
     detail:
-      "Price is compared with VWAP, the previous-day range, the provider-aligned 7:00–9:30 AM premarket range, and the 15-minute opening range. The evidence must support Calls or Puts without opposing evidence that invalidates the thesis.",
+      "The four validated live bridges can create opportunities. The ten newer setup families are visible for research in shadow mode and cannot create READY alerts or positions.",
   },
   {
-    title: "4. Price must satisfy the entry trigger",
+    title: "4. Duplicates consolidate and unresolved direction conflicts fail closed",
     detail:
-      "Calls require price above the bullish trigger structure. Puts require price below the bearish trigger structure. Before this happens, the plan can remain WAITING FOR TRIGGER.",
+      "Signals describing the same setup episode are consolidated. If valid Calls and Puts candidates remain unresolved, the result is NO TRADE rather than choosing a side.",
   },
   {
-    title: "5. The structural trade must offer enough reward",
+    title: "5. Price must satisfy the deterministic entry trigger",
     detail:
-      "The engine chooses a structural invalidation and objective. The underlying reward-to-risk must be at least 2:1 or the setup is NOT QUALIFIED.",
+      "Before the required confirmation, the source plan can remain WAITING FOR TRIGGER. Routine recalculations do not create a new setup episode or reset its attempt count.",
   },
   {
-    title: "6. A usable same-day contract must exist",
+    title: "6. Structural and option economics must pass",
     detail:
-      "The selected option must have the correct direction and expiration, a valid bid and ask, an acceptable spread, and a fresh quote. Otherwise the state is NO QUALIFIED CONTRACT.",
+      "Both underlying and option-premium reward-to-risk must be at least 1.5:1. A 2.0:1 or better relationship is preferred, but it is not the minimum gate.",
   },
   {
-    title: "7. GEX/DEX adjusts confidence only",
+    title: "7. The strict effective-ATM contract must qualify",
     detail:
-      "Exposure can be SUPPORTIVE, CONFLICTING, MIXED, or NEUTRAL. It can raise or lower confidence, but it cannot create the direction or override the eligibility gates.",
+      "Only the nearest effective ATM strike is eligible. If that strike fails premium, spread, freshness, liquidity, or scenario checks—or is missing on the required side—the result is NO QUALIFIED CONTRACT. A farther strike is never substituted automatically.",
   },
   {
-    title: "8. READY means review—not automatic execution",
+    title: "8. The V1.9 risk ledger, time, event, and attempt gates must pass",
     detail:
-      "READY displays the direction, trigger, invalidation, objective, reward-to-risk, contract, and confidence. You still recheck live values and independently decide whether to trade.",
+      "The Workspace enforces $50 planned risk, $150 daily loss including open risk, 3 trades, 2 consecutive losses, one open position, two attempts per episode, and the 3:00 p.m. ET entry cutoff.",
+  },
+  {
+    title: "9. A new READY alert remains actionable for 60 seconds",
+    detail:
+      "READY alerts expire after 60 seconds and can be revoked when the source opportunity changes. Expired or revoked alerts cannot be manually confirmed.",
+  },
+  {
+    title: "10. Manual confirmation records the paper-equivalent lifecycle",
+    detail:
+      "You enter the actual paper price to record one contract. Target 2 is the primary exit, Target 1 is management, Target 3 is research-only, and the dashboard never sends a broker order.",
   },
 ] as const;
 
@@ -396,13 +509,14 @@ export const GUIDE_SOURCE_STATES: readonly GuideStatusDefinition[] = [
 ] as const;
 
 export const GUIDE_ALERT_CHECKLIST = [
-  "The backend terminal is running.",
-  "Schwab is connected and the required market products are available.",
-  "The Discord webhook is connected.",
-  "Persistent backend automation is enabled in Settings.",
-  "Trade Plan Alerts is enabled.",
-  "The scheduler runtime is Active and the heartbeat is recent.",
-  "A new alert-eligible plan transition exists; duplicate plans are intentionally suppressed.",
+  "The backend terminal and PostgreSQL are running.",
+  "System Readiness shows the V1.9 trading tables and Workspace monitor are available.",
+  "Schwab is connected and the required source products are usable.",
+  "Discord is configured when you want notifications.",
+  "Persistent backend automation and Trade Plan Alerts are enabled in Settings.",
+  "A new live setup episode survives consolidation, conflict, policy, event, time, risk, and strict-ATM checks.",
+  "The READY alert is still active inside its 60-second window.",
+  "Discord receives actionable-only READY and position-management events; expiration, revocation, and Target 3 research records remain in the audit trail without notification noise.",
 ] as const;
 
 export const GUIDE_SHARING_CHECKLIST = [
@@ -441,7 +555,7 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   },
   {
     term: "SPY",
-    meaning: "The ETF tracked by this dashboard. The V1 release is SPY-only.",
+    meaning: "The ETF tracked by this dashboard. The current release is SPY-only.",
     searchTerms: ["symbol", "etf"],
   },
   {
@@ -516,8 +630,8 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   },
   {
     term: "Reward-to-risk",
-    meaning: "Potential underlying reward divided by structural underlying risk. The Trade Plan currently requires at least 2:1.",
-    searchTerms: ["rr", "2:1"],
+    meaning: "Potential reward divided by planned risk. V1.9 requires at least 1.5:1 for both the underlying structure and option-premium scenario; 2.0:1 or better is preferred.",
+    searchTerms: ["rr", "1.5:1", "2:1", "preferred"],
   },
   {
     term: "Midpoint",
@@ -533,5 +647,53 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
     term: "Captured replay",
     meaning: "A replay made from Journal snapshots that were actually saved, rather than reconstructed raw historical market data.",
     searchTerms: ["historical", "backtest"],
+  },
+  {
+    term: "TRADING_POLICY_V1",
+    meaning:
+      "The versioned authority for account size, premium and loss limits, trade/attempt limits, entry and exit times, contract preference, reward-to-risk, alert lifetime, and manual-confirmation rules.",
+    searchTerms: ["policy", "risk limits", "1000", "150", "50"],
+  },
+  {
+    term: "Risk ledger",
+    meaning:
+      "The market-date accounting of realized losses, open planned risk, trades, consecutive losses, open positions, and attempts used to decide whether a new entry remains allowed.",
+    searchTerms: ["daily loss", "committed risk", "trade count"],
+  },
+  {
+    term: "Setup episode",
+    meaning:
+      "A stable setup/direction/level occurrence. Routine recalculation or a restart does not create a new episode; a meaningful invalidation and reset is required before re-entry can receive a new identity.",
+    searchTerms: ["attempt", "re-entry", "identity"],
+  },
+  {
+    term: "Shadow mode",
+    meaning:
+      "Research-only setup detection. A shadow setup can be measured and displayed but cannot create a live opportunity, READY alert, position, or actionable Discord event.",
+    searchTerms: ["setup registry", "research", "promotion"],
+  },
+  {
+    term: "Effective ATM",
+    meaning:
+      "The returned strike nearest the current SPY price, with the lower strike used on an exact distance tie. V1.9 never substitutes a farther strike when the effective-ATM contract fails.",
+    searchTerms: ["strict atm", "strike", "no fallback"],
+  },
+  {
+    term: "READY alert",
+    meaning:
+      "A persistent 60-second manual-confirmation window created only after the current live opportunity and all policy gates pass. It can expire or be revoked and does not create an order.",
+    searchTerms: ["ttl", "60 seconds", "confirm entry"],
+  },
+  {
+    term: "Target 1 / Target 2 / Target 3",
+    meaning:
+      "Target 1 is a management level, Target 2 is the locked primary exit for the one-contract live policy, and Target 3 is a research extension objective only.",
+    searchTerms: ["primary exit", "management", "research target"],
+  },
+  {
+    term: "Time-stop review",
+    meaning:
+      "A review after 3 completed five-minute candles or 15 minutes. It does not automatically close the paper-equivalent position or submit an order.",
+    searchTerms: ["15 minutes", "3 candles", "exit review"],
   },
 ] as const;

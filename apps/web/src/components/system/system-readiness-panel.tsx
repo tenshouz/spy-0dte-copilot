@@ -1,5 +1,6 @@
 "use client";
 
+import { SPY_COPILOT_RELEASE_LABEL } from "@spy-copilot/shared";
 import { CheckCircle2, CircleAlert, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ export function SystemReadinessPanel() {
   return (
     <div className="space-y-4">
       <Panel
-        title="V1 System Readiness"
+        title={`System Readiness — ${SPY_COPILOT_RELEASE_LABEL}`}
         isLoading={readiness.isLoading}
         isError={readiness.isError}
         action={
@@ -98,7 +99,7 @@ export function SystemReadinessPanel() {
           <div className="flex items-start gap-2 rounded-md border border-accent/20 bg-accent/5 p-3 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
             <p>
-              This explicit probe may call Schwab through the existing rate-limited, cache-aware services. It does not send Discord messages, write journal records, access private account data, calculate sizing, or create orders.
+              This explicit five-component probe may call Schwab through the existing rate-limited, cache-aware services and evaluates the Trading Workspace without READY reconciliation. It does not send Discord messages, write Journal records, confirm or close a position, record an override, access private account data, or create orders.
             </p>
           </div>
 
@@ -134,7 +135,7 @@ export function SystemReadinessPanel() {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              No provider probe has been run in this browser session. Configuration readiness above does not make external market-data requests.
+              No complete probe has been run in this browser session. The readiness checks above avoid live provider calls; run the probe to validate quote, candles, options, Assembly, and Trading Workspace together.
             </p>
           )}
         </div>

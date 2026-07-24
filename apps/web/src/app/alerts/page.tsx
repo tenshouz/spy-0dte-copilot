@@ -8,7 +8,7 @@ export default function AlertsPage() {
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Alerts"
-        description="Deterministic Trade Plan monitoring with persistent backend Discord automation plus explicit foreground-session controls. Delivery audit data may be persisted, but webhook secrets, private account data, sizing data, and order execution are excluded."
+        description="Source Trade Plan transition monitoring. This page distinguishes persistent backend Discord automation from explicit foreground-session controls. Discord webhook secrets remain server-side, and all controls for broker order execution are excluded. V1.9 READY alerts and position-management lifecycle remain authoritative in Trading Workspace."
       />
 
       <TradePlanAlertMonitor />

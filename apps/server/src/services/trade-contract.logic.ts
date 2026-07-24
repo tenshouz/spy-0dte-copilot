@@ -1,4 +1,5 @@
 import {
+  selectAtmStrike,
   SpyZeroDteContractSelectionResponseSchema,
   type ContractCandidateRejectionReasonCode,
   type ContractCandidateSourceStatus,
@@ -78,7 +79,9 @@ const METHODOLOGY = {
   maximumContractQuoteAgeMilliseconds: MAXIMUM_CONTRACT_QUOTE_AGE_MS,
   quoteFreshnessPolicy: "NORMALIZED_QUOTE_AT_EPOCH_MILLISECONDS" as const,
   sourceAssemblySkewPolicy: "RISK_CALCULATED_AT_VS_CHAIN_FETCHED_AT" as const,
-  rankingMethod: "TARGET_DELTA_THEN_OPTION_RR_AND_LIQUIDITY" as const,
+  rankingMethod: "STRICT_EFFECTIVE_ATM_THEN_OPTION_RR_AND_LIQUIDITY" as const,
+  atmStrikeSelectionPolicy: "NEAREST_RETURNED_STRIKE_LOWER_STRIKE_ON_EXACT_TIE" as const,
+  fartherStrikeFallbackPolicy: "PROHIBITED" as const,
   itmExactDistanceTiePreference: true,
   openInterestHardMinimum: MINIMUM_OPEN_INTEREST,
   volumeHardMinimum: MINIMUM_VOLUME,
@@ -406,6 +409,7 @@ function buildCandidate(
   direction: "CALL" | "PUT",
   currentMarketDate: string,
   chainUnderlyingPrice: number | null,
+  effectiveAtmStrike: number | null,
   compatibilityState: ContractSourceCompatibilityState,
   evaluationTimeMs: number,
   risk: SpyZeroDteObjectiveRiskResponse,
@@ -437,6 +441,14 @@ function buildCandidate(
 
   if (!finite(contract.strikePrice)) pushReason(reasons, "STRIKE_NOT_FINITE");
   else if (contract.strikePrice <= 0) pushReason(reasons, "STRIKE_NOT_POSITIVE");
+
+  if (
+    !finitePositive(effectiveAtmStrike) ||
+    !finite(contract.strikePrice) ||
+    contract.strikePrice !== effectiveAtmStrike
+  ) {
+    pushReason(reasons, "NOT_EFFECTIVE_ATM_STRIKE");
+  }
 
   if (!finite(contract.bid)) pushReason(reasons, "BID_NOT_FINITE");
   else if (contract.bid <= 0) pushReason(reasons, "BID_NOT_POSITIVE");
@@ -904,12 +916,17 @@ export function buildSpyZeroDteContractSelection(
   }
 
   const selectedSide = direction === "CALL" ? chain.calls : chain.puts;
+  const effectiveAtmStrike = selectAtmStrike(
+    [...chain.calls, ...chain.puts].map((contract) => contract.strikePrice),
+    chain.underlyingPrice,
+  );
   const rawCandidates = selectedSide.map((contract) =>
     buildCandidate(
       contract,
       direction as "CALL" | "PUT",
       risk.currentMarketDate,
       chain.underlyingPrice,
+      effectiveAtmStrike,
       compatibility.state,
       calculatedAtMs,
       risk,
@@ -1033,15 +1050,21 @@ export function buildSpyZeroDteContractSelection(
     });
   }
 
-  const anyUnknownFreshness = candidates.some(
+  const effectiveAtmCandidates = candidates.filter(
+    (candidate) =>
+      effectiveAtmStrike !== null && candidate.strikePrice === effectiveAtmStrike,
+  );
+  const anyUnknownFreshness = effectiveAtmCandidates.some(
     (candidate) =>
       candidate.quoteFreshnessState === "UNKNOWN" ||
       candidate.quoteFreshnessState === "UNAVAILABLE",
   );
-  const anyStaleFreshness = candidates.some(
+  const anyStaleFreshness = effectiveAtmCandidates.some(
     (candidate) => candidate.quoteFreshnessState === "STALE",
   );
-  const anyPartial = candidates.some((candidate) => candidate.sourceStatus === "PARTIAL");
+  const anyPartial = effectiveAtmCandidates.some(
+    (candidate) => candidate.sourceStatus === "PARTIAL",
+  );
   const engineState = anyUnknownFreshness || anyStaleFreshness || anyPartial ? "PARTIAL" : "AVAILABLE";
   const warningCode: ContractSelectionOverallWarningCode | null = anyUnknownFreshness
     ? "CONTRACT_QUOTE_TIMESTAMP_UNAVAILABLE"

@@ -22,6 +22,14 @@ model User {
   decisionCycles DeterministicDecisionCycle[]
   pointInTimeOptionsChains PointInTimeOptionsChainSnapshot[]
   pointInTimeBacktestRuns PointInTimeBacktestRun[]
+  tradingDayLedgers TradingDayLedger[]
+  tradingPositions TradingPosition[]
+  tradingAttempts TradingAttempt[]
+  tradingReadyAlerts TradingReadyAlert[]
+  tradingRestrictedEvents TradingRestrictedEvent[]
+  tradingWorkspaceRuntime TradingWorkspaceRuntime?
+  tradingWorkspaceEvents TradingWorkspaceEvent[]
+  tradingManualOverrides TradingManualOverride[]
   createdAt    DateTime     @default(now())
 }
 
@@ -290,4 +298,204 @@ model PointInTimeBacktestRun {
   result               Json
 
   @@index([userId, createdAt])
+}
+
+model TradingDayLedger {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  policyVersion            String
+  realizedPnlDollars       Float    @default(0)
+  realizedLossDollars      Float    @default(0)
+  openPlannedRiskDollars   Float    @default(0)
+  tradeCount               Int      @default(0)
+  consecutiveLosses        Int      @default(0)
+  updatedAt                DateTime @updatedAt
+  createdAt                DateTime @default(now())
+
+  @@unique([userId, marketDate])
+  @@index([userId, marketDate])
+}
+
+model TradingPosition {
+  id                       String   @id
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  policyVersion            String
+  setupId                  String
+  setupEpisodeId           String
+  opportunityId            String
+  readyAlertId             String?  @unique
+  readyAlert               TradingReadyAlert? @relation(fields: [readyAlertId], references: [id], onDelete: SetNull)
+  direction                String
+  status                   String
+  quantity                 Int      @default(1)
+  contractSymbol           String
+  strikePrice              Float
+  expirationDate           String
+  plannedEntryAsk          Float
+  modeledEntryPrice        Float
+  actualEntryPrice         Float
+  entryUnderlyingPrice     Float
+  structuralStopLevel      Float
+  target1Level             Float
+  target2Level             Float
+  target3Level             Float?
+  plannedRiskDollars       Float
+  sourceSnapshot           Json
+  openedAt                 DateTime
+  timeStopReviewAt         DateTime
+  target1TouchedAt         DateTime?
+  target2TouchedAt         DateTime?
+  target3TouchedAt         DateTime?
+  stopTouchedAt            DateTime?
+  timeStopAlertedAt        DateTime?
+  mandatoryExitAlertedAt   DateTime?
+  closedAt                 DateTime?
+  actualExitPrice          Float?
+  exitReason               String?
+  realizedPnlDollars       Float?
+  overrideReason           String?
+  entryNote                String?
+  exitNote                 String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  marks                     TradingPositionMark[]
+  attempt                   TradingAttempt?
+
+  @@index([userId, marketDate, status])
+  @@index([userId, openedAt])
+  @@index([userId, setupEpisodeId])
+}
+
+model TradingAttempt {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  setupId                  String
+  setupEpisodeId           String
+  direction                String
+  levelType                String
+  levelBucket              String
+  attemptNumber            Int
+  positionId               String?  @unique
+  position                 TradingPosition? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  outcome                  String   @default("OPEN")
+  createdAt                DateTime @default(now())
+  closedAt                 DateTime?
+
+  @@unique([userId, setupEpisodeId, attemptNumber])
+  @@index([userId, marketDate, createdAt])
+  @@index([userId, setupEpisodeId])
+}
+
+model TradingReadyAlert {
+  id                       String   @id
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  opportunityId            String
+  setupEpisodeId           String
+  status                   String
+  issuedAt                 DateTime
+  expiresAt                DateTime
+  confirmedAt              DateTime?
+  revokedAt                DateTime?
+  closedReasonCode         String?
+  snapshot                 Json
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  position                  TradingPosition?
+
+  @@index([userId, marketDate, status])
+  @@index([userId, opportunityId, issuedAt])
+  @@index([userId, expiresAt])
+}
+
+model TradingRestrictedEvent {
+  id                       String   @id
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  eventType                String
+  title                    String
+  blockMode                String
+  windowStartAt            DateTime?
+  windowEndAt              DateTime?
+  enabled                  Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([userId, marketDate, enabled])
+}
+
+model TradingWorkspaceRuntime {
+  id                       String   @id
+  userId                   String   @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaseOwner               String?
+  leaseExpiresAt           DateTime?
+  lastHeartbeatAt          DateTime?
+  lastEvaluationAt         DateTime?
+  lastOutcome              String?
+  lastErrorCode            String?
+  updatedAt                DateTime @updatedAt
+}
+
+model TradingWorkspaceEvent {
+  id                       String   @id
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  eventType                String
+  severity                 String
+  dedupeKey                String
+  relatedReadyAlertId      String?
+  relatedPositionId        String?
+  payload                  Json
+  discordDeliveryState     String   @default("PENDING")
+  discordDeliveredAt       DateTime?
+  providerStatusCode       Int?
+  createdAt                DateTime @default(now())
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+  @@index([userId, discordDeliveryState, createdAt])
+}
+
+model TradingPositionMark {
+  id                       String   @id @default(cuid())
+  positionId               String
+  position                 TradingPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  markType                 String
+  observedAt               DateTime
+  underlyingPrice          Float?
+  contractBid              Float?
+  contractAsk              Float?
+  modeledExitPrice         Float?
+  modeledNetPnlDollars     Float?
+  sourceState              String
+  sourceSnapshot           Json?
+  createdAt                DateTime @default(now())
+
+  @@unique([positionId, markType])
+  @@index([positionId, observedAt])
+}
+
+model TradingManualOverride {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketDate               String
+  action                   String
+  reason                   String
+  relatedOpportunityId     String?
+  relatedPositionId        String?
+  sourceEngineState        Json
+  createdAt                DateTime @default(now())
+
+  @@index([userId, marketDate, createdAt])
 }

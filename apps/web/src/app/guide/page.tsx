@@ -6,7 +6,7 @@ export default function GuidePage() {
     <div className="mx-auto max-w-[1500px]">
       <PageHeader
         title="Dashboard Guide"
-        description="A plain-English walkthrough of every page, status, Trade Plan step, alert, and safety boundary in the SPY 0DTE Copilot."
+        description="A plain-English walkthrough of V1.9.0, including every page, the locked trading policy, Workspace lifecycle, statuses, alerts, research, and safety boundaries."
       />
       <DashboardGuide />
     </div>

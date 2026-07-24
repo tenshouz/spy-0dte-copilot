@@ -9,6 +9,7 @@ import type {
   SpyZeroDteTradePlanAssemblyResponse,
   SystemDataProbeResponse,
   SystemReadinessResponse,
+  TradingWorkspaceResponse,
 } from "@spy-copilot/shared";
 import { getSchwabConfig, hasDatabaseUrl, type SchwabConfig } from "../config/env";
 import { isDatabaseReachable } from "../lib/db-status";
@@ -22,6 +23,11 @@ import { getSpyQuote } from "./schwab-market-data.service";
 import { getSpyZeroDteOptionsChain } from "./schwab-options-chain.service";
 import { getConnectionStatus } from "./schwab-auth.service";
 import { getSpyZeroDteTradePlanAssembly } from "./trade-plan-assembly.service";
+import { getTradingWorkspace } from "./trading-workspace.service";
+import {
+  getTradingFrameworkReadinessStatus,
+  type TradingFrameworkReadinessStatus,
+} from "./trading-workspace.repository";
 import {
   buildSystemDataProbeResponse,
   buildSystemReadinessResponse,
@@ -39,6 +45,7 @@ export interface SystemReadinessDependencies {
   uptimeSeconds: () => number;
   nodeVersion: () => string;
   environment: () => string | undefined;
+  tradingFrameworkStatus: () => Promise<TradingFrameworkReadinessStatus>;
 }
 
 const defaultReadinessDependencies: SystemReadinessDependencies = {
@@ -53,6 +60,7 @@ const defaultReadinessDependencies: SystemReadinessDependencies = {
   uptimeSeconds: process.uptime,
   nodeVersion: () => process.version,
   environment: () => process.env.NODE_ENV,
+  tradingFrameworkStatus: getTradingFrameworkReadinessStatus,
 };
 
 function normalizedEnvironment(
@@ -76,6 +84,13 @@ export async function getSystemReadinessWithDependencies(
   let schwabConnection: SchwabConnectionStatus;
   let automationSettings: BackendAutomationSettingsResponse | null = null;
   let automationStatus: BackendAutomationStatusResponse | null = null;
+  let tradingFrameworkStatus: TradingFrameworkReadinessStatus = {
+    persistenceState: "UNAVAILABLE",
+    persistenceReasonCode: "TRADING_FRAMEWORK_PERSISTENCE_UNAVAILABLE",
+    missingTables: [],
+    workspaceRuntimeState: "UNAVAILABLE",
+    lastHeartbeatAt: null,
+  };
 
   if (databaseReachable) {
     try {
@@ -87,14 +102,22 @@ export async function getSystemReadinessWithDependencies(
         detail: null,
       };
     }
-    try {
-      [automationSettings, automationStatus] = await Promise.all([
+    const [automationSettingsResult, automationStatusResult, frameworkResult] =
+      await Promise.allSettled([
         dependencies.automationSettings(),
         dependencies.automationStatus(),
+        dependencies.tradingFrameworkStatus(),
       ]);
-    } catch {
-      automationSettings = null;
-      automationStatus = null;
+    automationSettings =
+      automationSettingsResult.status === "fulfilled"
+        ? automationSettingsResult.value
+        : null;
+    automationStatus =
+      automationStatusResult.status === "fulfilled"
+        ? automationStatusResult.value
+        : null;
+    if (frameworkResult.status === "fulfilled") {
+      tradingFrameworkStatus = frameworkResult.value;
     }
   } else {
     schwabConnection = {
@@ -116,6 +139,7 @@ export async function getSystemReadinessWithDependencies(
     discordStatus: dependencies.discordStatus(),
     automationSettings,
     automationStatus,
+    tradingFrameworkStatus,
   });
 }
 
@@ -128,6 +152,7 @@ export interface SystemDataProbeDependencies {
   getCandles: () => Promise<SpyCandleResponse>;
   getOptionsChain: () => Promise<SpyZeroDteOptionsChainResponse>;
   getAssembly: () => Promise<SpyZeroDteTradePlanAssemblyResponse>;
+  getWorkspace: () => Promise<TradingWorkspaceResponse>;
   now: () => Date;
 }
 
@@ -136,6 +161,7 @@ const defaultProbeDependencies: SystemDataProbeDependencies = {
   getCandles: getSpyCandles,
   getOptionsChain: getSpyZeroDteOptionsChain,
   getAssembly: getSpyZeroDteTradePlanAssembly,
+  getWorkspace: () => getTradingWorkspace({ reconcile: false }),
   now: () => new Date(),
 };
 
@@ -148,12 +174,14 @@ export async function runSystemDataProbeWithDependencies(
   const candles = await dependencies.getCandles();
   const optionsChain = await dependencies.getOptionsChain();
   const assembly = await dependencies.getAssembly();
+  const workspace = await dependencies.getWorkspace();
   return buildSystemDataProbeResponse({
     calculatedAt: dependencies.now(),
     quote,
     candles,
     optionsChain,
     assembly,
+    workspace,
   });
 }
 

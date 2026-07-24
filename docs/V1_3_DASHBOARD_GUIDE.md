@@ -1,40 +1,35 @@
-# V1.3.0 Dashboard Guide and First-Time User Onboarding
+# Dashboard Guide — Introduced in V1.3.0, aligned through V1.9.0
 
 ## Purpose
 
-V1.3.0 adds a complete in-application **Dashboard Guide** at `/guide`. The page is written for someone who has never seen the project and does not assume knowledge of options terminology, the deterministic methodology, or the local development setup.
+The in-application Dashboard Guide at `/guide` was introduced in V1.3.0 and is maintained as current product documentation. It must describe the installed release rather than freeze the original V1.3 behavior.
 
-## Included explanations
+## Current V1.9.0 coverage
 
-The Guide contains:
+The Guide now includes:
 
-- a one-sentence explanation of what the product does and does not do;
-- a six-step daily workflow;
-- plain-English descriptions of Dashboard, Market Data, Options Chain, GEX/DEX, Trade Plan, Alerts, Trade Journal, Historical Replay, System Readiness, Settings, and the Guide itself;
-- the complete Trade Plan progression from session eligibility through `READY`;
-- simple definitions of all Trade Plan states and source-quality states;
-- an explanation of dashboard colors that distinguishes bearish evidence from application errors;
-- the persistent Discord-alert checklist and expected scheduler behavior;
-- the difference between Journal snapshots, user-entered outcomes, analytics, and captured-snapshot replay;
-- a public-sharing and secret-safety checklist;
-- a searchable glossary for the core market, options, exposure, risk, alert, and replay terms.
+- the V1.9.0 release label and current local decision-support boundary;
+- the complete daily workflow from System Readiness through Trading Workspace and result review;
+- plain-English descriptions of every user-facing page, including Trading Workspace and Point-in-Time Backtesting;
+- the locked `TRADING_POLICY_V1` account, premium, planned-loss, daily-loss, trade-count, loss-streak, attempt, position, timing, event, R:R, strict-ATM, alert, and manual-confirmation controls;
+- the 14-family setup registry, including the live-versus-shadow boundary;
+- duplicate consolidation and fail-closed Calls/Puts conflicts;
+- the distinction between the source Trade Plan and Workspace policy eligibility;
+- the 60-second READY lifecycle, actionable-only Discord behavior, and position-management priorities;
+- Target 1 management, Target 2 primary exit, Target 3 research-only, and the 15-minute review;
+- Journal, Workspace performance, replay, and backtest separation;
+- current source states, sharing guidance, and searchable glossary.
 
-## Search behavior
+## Current methodology boundaries
 
-The Guide search is entirely local to the browser. It filters the page cards and glossary using fixed static content. It makes no backend request, collects no search analytics, and exposes no configuration or user data.
-
-## Methodology boundaries
-
-The Guide documents the current release behavior without changing any calculation:
-
-- provider-aligned premarket remains 07:00–09:30 ET;
-- the minimum underlying reward-to-risk remains 2:1;
-- GEX/DEX remains soft confirmation only;
-- automatic Discord delivery remains backend-scheduler controlled;
-- Journal outcomes remain explicit user input;
-- replay remains captured-snapshot replay rather than raw-market reconstruction;
-- no order creation or execution capability is added.
+- Provider-aligned premarket remains 07:00–09:30 ET.
+- Minimum underlying and option-premium R:R is 1.5:1; 2.0:1 or better is preferred.
+- The nearest effective-ATM strike must qualify; a farther strike is never substituted automatically.
+- GEX/DEX remains context/research and cannot override policy eligibility.
+- New setup families default to shadow mode.
+- READY alerts expire after 60 seconds.
+- Manual confirmation is required; no order creation or execution capability is added.
 
 ## Public deployment warning
 
-The Guide explicitly states that the current application is local and single-user. The presence of onboarding documentation does not make the backend safe for direct public exposure. A public product still requires authentication, authorization, tenant isolation, hosted secret management, HTTPS, monitoring, rate limiting appropriate for untrusted users, and deployment-specific operational controls.
+The application remains local and single-user. A public product requires authentication, authorization, tenant isolation, hosted secret management, HTTPS, monitoring, and deployment-specific abuse controls.

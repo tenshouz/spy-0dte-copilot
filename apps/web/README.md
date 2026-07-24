@@ -1,12 +1,19 @@
-# SPY 0DTE Copilot Web — V1.5.0
+# SPY 0DTE Copilot Web — V1.9.0
 
-Next.js frontend for the local SPY 0DTE deterministic decision-support platform.
+Next.js frontend for the local SPY 0DTE deterministic decision-support and paper-equivalent lifecycle platform.
 
-## Point-in-Time Backtesting
+The frontend validates backend responses with shared Zod schemas and does not calculate authoritative trading logic locally.
 
-The `/backtest` page creates and reviews saved `POINT_IN_TIME_BACKTEST_V1` runs. It displays the frozen recomputed plan separately from the subsequent outcome, including target/stop ordering, MFE, MAE, R multiple, option estimates, Gamma context, and source-audit issues.
+## Current feature surfaces
 
-The page does not calculate trading logic locally. It validates backend responses using shared Zod schemas and exposes no order controls.
+- Dashboard and Market Data for live structure and source quality.
+- Trade Plan for the deterministic source thesis and strict effective-ATM contract result.
+- Trading Workspace for `TRADING_POLICY_V1`, risk ledger, setup registry, READY lifecycle, event restrictions, and manual paper-equivalent entry/exit recording.
+- System Readiness for V1.9.0 framework checks and the explicit quote/candles/options/Assembly/Workspace probe.
+- Guide for current policy, workflow, page descriptions, alert behavior, and glossary.
+- Journal, Replay, and Backtest for captured evidence and research.
+
+The web application exposes no broker-order controls.
 
 ## Run
 

@@ -1,5 +1,5 @@
 /**
- * Final V1 system-readiness, explicit data-probe, and HTTP-hardening tests.
+ * V1.9.0 system-readiness, explicit data-probe, and HTTP-hardening tests.
  * Run: npx --no-install tsx apps/server/src/services/system-readiness.spec.ts
  */
 import assert from "node:assert/strict";
@@ -14,6 +14,7 @@ import type {
   SpyQuote,
   SpyZeroDteOptionsChainResponse,
   SpyZeroDteTradePlanAssemblyResponse,
+  TradingWorkspaceResponse,
 } from "@spy-copilot/shared";
 import {
   SystemDataProbeResponseSchema,
@@ -92,6 +93,13 @@ function readyInputs(): SystemReadinessInputs {
       engineState: "AVAILABLE",
       runtimeState: "STOPPED",
     } as BackendAutomationStatusResponse,
+    tradingFrameworkStatus: {
+      persistenceState: "READY",
+      persistenceReasonCode: "TRADING_FRAMEWORK_TABLES_READY",
+      missingTables: [],
+      workspaceRuntimeState: "ACTIVE",
+      lastHeartbeatAt: "2026-07-20T15:59:45.000Z",
+    },
   };
 }
 
@@ -141,12 +149,31 @@ function assembly(args: {
   } as unknown as SpyZeroDteTradePlanAssemblyResponse;
 }
 
-test("fully ready configuration produces READY with nine passing checks", () => {
+function workspace(args: {
+  engineState: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+  opportunityState?: "READY" | "NO_SETUP" | "NO_TRADE";
+}): TradingWorkspaceResponse {
+  return {
+    engineState: args.engineState,
+    primaryReasonCode:
+      args.engineState === "AVAILABLE"
+        ? "OPPORTUNITY_READY"
+        : args.engineState === "PARTIAL"
+          ? "PERSISTENT_TRADING_STORAGE_UNAVAILABLE"
+          : "SOURCE_ASSEMBLY_UNAVAILABLE",
+    opportunity: { state: args.opportunityState ?? "READY" },
+    policy: { version: "TRADING_POLICY_V1" },
+    setupRegistry: { entries: Array.from({ length: 14 }, () => ({})) },
+    automation: { runtimeState: "ACTIVE" },
+  } as unknown as TradingWorkspaceResponse;
+}
+
+test("fully ready configuration produces READY with thirteen passing checks", () => {
   const response = buildSystemReadinessResponse(readyInputs());
   SystemReadinessResponseSchema.parse(response);
   assert.equal(response.engineState, "READY");
-  assert.equal(response.summary.totalChecks, 9);
-  assert.equal(response.summary.passCount, 9);
+  assert.equal(response.summary.totalChecks, 13);
+  assert.equal(response.summary.passCount, 13);
   assert.equal(response.summary.requiredFailureCount, 0);
 });
 
@@ -184,9 +211,56 @@ test("missing database blocks V1 readiness", () => {
   };
   inputs.automationSettings = null;
   inputs.automationStatus = null;
+  inputs.tradingFrameworkStatus = {
+    persistenceState: "UNAVAILABLE",
+    persistenceReasonCode: "TRADING_FRAMEWORK_PERSISTENCE_UNAVAILABLE",
+    missingTables: [],
+    workspaceRuntimeState: "UNAVAILABLE",
+    lastHeartbeatAt: null,
+  };
   const response = buildSystemReadinessResponse(inputs);
   assert.equal(response.engineState, "BLOCKED");
   assert.ok(response.summary.requiredFailureCount >= 1);
+});
+
+test("missing V1.9 trading tables block readiness with explicit migration remediation", () => {
+  const inputs = readyInputs();
+  inputs.tradingFrameworkStatus = {
+    persistenceState: "MIGRATION_REQUIRED",
+    persistenceReasonCode: "TRADING_FRAMEWORK_MIGRATION_REQUIRED",
+    missingTables: ["TradingReadyAlert", "TradingPosition"],
+    workspaceRuntimeState: "UNAVAILABLE",
+    lastHeartbeatAt: null,
+  };
+  const response = buildSystemReadinessResponse(inputs);
+  assert.equal(response.engineState, "BLOCKED");
+  const item = response.checks.find(
+    (check) => check.id === "TRADING_FRAMEWORK_PERSISTENCE",
+  );
+  assert.equal(item?.state, "FAIL");
+  assert.match(item?.detail ?? "", /TradingReadyAlert/);
+  assert.match(item?.remediation ?? "", /npm run db:deploy/);
+});
+
+test("stopped Trading Workspace monitor degrades without hiding policy readiness", () => {
+  const inputs = readyInputs();
+  inputs.tradingFrameworkStatus = {
+    ...inputs.tradingFrameworkStatus,
+    workspaceRuntimeState: "STOPPED",
+    lastHeartbeatAt: null,
+  };
+  const response = buildSystemReadinessResponse(inputs);
+  assert.equal(response.engineState, "DEGRADED");
+  assert.equal(response.summary.requiredFailureCount, 0);
+  assert.equal(
+    response.checks.find((check) => check.id === "TRADING_POLICY")?.state,
+    "PASS",
+  );
+  assert.equal(
+    response.checks.find((check) => check.id === "TRADING_WORKSPACE_RUNTIME")
+      ?.reasonCode,
+    "TRADING_WORKSPACE_MONITOR_STOPPED",
+  );
 });
 
 test("invalid Schwab configuration blocks readiness without returning secret values", () => {
@@ -235,10 +309,11 @@ test("live data probe passes with live quote candles options and assembly", () =
     candles: candles("LIVE"),
     optionsChain: options({ metricState: "LIVE" }),
     assembly: assembly({ engineState: "AVAILABLE" }),
+    workspace: workspace({ engineState: "AVAILABLE" }),
   });
   SystemDataProbeResponseSchema.parse(response);
   assert.equal(response.probeState, "PASS");
-  assert.equal(response.summary.passCount, 4);
+  assert.equal(response.summary.passCount, 5);
 });
 
 test("stale real market data produces DEGRADED probe", () => {
@@ -248,9 +323,10 @@ test("stale real market data produces DEGRADED probe", () => {
     candles: candles("STALE"),
     optionsChain: options({ metricState: "STALE" }),
     assembly: assembly({ engineState: "PARTIAL" }),
+    workspace: workspace({ engineState: "PARTIAL", opportunityState: "NO_TRADE" }),
   });
   assert.equal(response.probeState, "DEGRADED");
-  assert.equal(response.summary.degradedCount, 4);
+  assert.equal(response.summary.degradedCount, 5);
 });
 
 test("mock provider fallback fails the explicit probe", () => {
@@ -260,9 +336,10 @@ test("mock provider fallback fails the explicit probe", () => {
     candles: candles("MOCK"),
     optionsChain: options({ metricState: "MOCK" }),
     assembly: assembly({ engineState: "UNAVAILABLE", planState: "UNAVAILABLE" }),
+    workspace: workspace({ engineState: "UNAVAILABLE", opportunityState: "NO_TRADE" }),
   });
   assert.equal(response.probeState, "FAIL");
-  assert.equal(response.summary.failCount, 4);
+  assert.equal(response.summary.failCount, 5);
 });
 
 test("no current-date expiration is honestly not applicable", () => {
@@ -278,9 +355,27 @@ test("no current-date expiration is honestly not applicable", () => {
       engineState: "AVAILABLE",
       planState: "NOT_APPLICABLE",
     }),
+    workspace: workspace({ engineState: "AVAILABLE", opportunityState: "NO_SETUP" }),
   });
   assert.equal(response.probeState, "PASS");
   assert.equal(response.summary.notApplicableCount, 2);
+});
+
+test("unavailable Trading Workspace fails an otherwise live explicit probe", () => {
+  const response = buildSystemDataProbeResponse({
+    calculatedAt: new Date(),
+    quote: quote("LIVE"),
+    candles: candles("LIVE"),
+    optionsChain: options({ metricState: "LIVE" }),
+    assembly: assembly({ engineState: "AVAILABLE" }),
+    workspace: workspace({ engineState: "UNAVAILABLE", opportunityState: "NO_TRADE" }),
+  });
+  assert.equal(response.probeState, "FAIL");
+  assert.equal(
+    response.components.find((component) => component.id === "TRADING_WORKSPACE")
+      ?.state,
+    "FAIL",
+  );
 });
 
 test("probe disclosures prevent side-effect ambiguity", () => {
@@ -290,10 +385,13 @@ test("probe disclosures prevent side-effect ambiguity", () => {
     candles: candles("LIVE"),
     optionsChain: options({ metricState: "LIVE" }),
     assembly: assembly({ engineState: "AVAILABLE" }),
+    workspace: workspace({ engineState: "AVAILABLE" }),
   });
   assert.equal(response.disclosures.explicitUserInitiatedProbe, true);
   assert.equal(response.disclosures.noDiscordDelivery, true);
   assert.equal(response.disclosures.noJournalMutation, true);
+  assert.equal(response.disclosures.noReadyAlertReconciliation, true);
+  assert.equal(response.disclosures.noPositionLifecycleMutation, true);
   assert.equal(response.disclosures.noOrderExecution, true);
 });
 
@@ -421,6 +519,7 @@ test("readiness route returns validated response and rejects query parameters", 
     candles: candles("LIVE"),
     optionsChain: options({ metricState: "LIVE" }),
     assembly: assembly({ engineState: "AVAILABLE" }),
+    workspace: workspace({ engineState: "AVAILABLE" }),
   });
   const app = express();
   app.use(express.json());
@@ -458,6 +557,7 @@ test("explicit probe enforces request schema and allowed origin", async () => {
     candles: candles("LIVE"),
     optionsChain: options({ metricState: "LIVE" }),
     assembly: assembly({ engineState: "AVAILABLE" }),
+    workspace: workspace({ engineState: "AVAILABLE" }),
   });
   const app = express();
   app.use(express.json());

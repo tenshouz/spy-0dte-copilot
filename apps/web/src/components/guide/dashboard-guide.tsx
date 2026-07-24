@@ -1,5 +1,6 @@
 "use client";
 
+import { SPY_COPILOT_RELEASE_LABEL } from "@spy-copilot/shared";
 import {
   AlertTriangle,
   ArrowRight,
@@ -38,6 +39,7 @@ import {
   GUIDE_SHARING_CHECKLIST,
   GUIDE_SOURCE_STATES,
   GUIDE_TRADE_PLAN_STEPS,
+  GUIDE_TRADING_POLICY_FACTS,
   type GuidePageDefinition,
   type GuideStatusDefinition,
 } from "@/lib/dashboard-guide-content";
@@ -54,6 +56,7 @@ const PAGE_ICON: Record<string, typeof LayoutDashboard> = {
   "/options": Database,
   "/gamma": Waypoints,
   "/trade-plan": Target,
+  "/workspace": Gauge,
   "/alerts": BellRing,
   "/journal": BookOpenCheck,
   "/replay": FileClock,
@@ -104,20 +107,21 @@ export function DashboardGuide() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <BadgeLike tone="accent">Start here</BadgeLike>
-                <BadgeLike tone="default">Release 1.5.0</BadgeLike>
+                <BadgeLike tone="default">Release {SPY_COPILOT_RELEASE_LABEL}</BadgeLike>
               </div>
               <h2 className="font-mono text-lg font-semibold">
-                The dashboard reads the market, explains the structure, and waits for a complete plan.
+                The dashboard reads the market, applies the locked policy, and waits for manual confirmation.
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                It is a read-only decision-support tool for SPY options that expire today. It can show a
-                Calls or Puts plan, send a Discord notification, and save snapshots—but it never places,
-                changes, or closes a brokerage order.
+                It is a local SPY 0DTE decision-support and paper-equivalent lifecycle tool. It can build a
+                Calls or Puts thesis, apply risk and event gates, create a 60-second READY alert, record your
+                manual entry or exit, and send actionable Discord notifications—but it never places, changes,
+                or closes a brokerage order.
               </p>
             </div>
             <div className="grid min-w-[220px] gap-2 text-xs">
               <SimpleFact icon={Eye} title="Reads" detail="SPY market data" />
-              <SimpleFact icon={Gauge} title="Calculates" detail="Fixed deterministic rules" />
+              <SimpleFact icon={Gauge} title="Applies" detail="TRADING_POLICY_V1" />
               <SimpleFact icon={LockKeyhole} title="Never does" detail="Execute an order" />
             </div>
           </div>
@@ -125,7 +129,7 @@ export function DashboardGuide() {
           <div className="grid border-t border-accent/20 sm:grid-cols-3">
             <QuickLink href="/system" label="1. Check the system" />
             <QuickLink href="/dashboard" label="2. Read the market" />
-            <QuickLink href="/trade-plan" label="3. Review the plan" />
+            <QuickLink href="/workspace" label="3. Check policy and lifecycle" />
           </div>
         </section>
 
@@ -140,7 +144,7 @@ export function DashboardGuide() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Try: partial, GEX, Discord, trigger, replay…"
+              placeholder="Try: policy, strict ATM, shadow, READY alert, replay…"
               className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
@@ -168,6 +172,27 @@ export function DashboardGuide() {
         </GuideSection>
 
         <GuideSection
+          id="trading-policy"
+          icon={ShieldCheck}
+          title="The locked V1.9 trading policy"
+          description="These are hard operating controls, not optional suggestions or confidence adjustments."
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            {GUIDE_TRADING_POLICY_FACTS.map((fact) => (
+              <div
+                key={fact.title}
+                className="rounded-md border border-panel-border bg-background/30 p-3"
+              >
+                <h3 className="text-sm font-semibold">{fact.title}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {fact.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+        </GuideSection>
+
+        <GuideSection
           id="pages"
           icon={LayoutDashboard}
           title="What every page does"
@@ -187,8 +212,8 @@ export function DashboardGuide() {
         <GuideSection
           id="trade-plan"
           icon={Target}
-          title="How a Trade Plan becomes READY"
-          description="The dashboard moves through these gates in order. GEX/DEX only changes confidence after the structural direction exists."
+          title="How a setup becomes a READY Workspace opportunity"
+          description="The source Trade Plan and V1.9 Workspace gates are evaluated in order. GEX/DEX remains research-only context and cannot override policy."
         >
           <div className="space-y-2">
             {GUIDE_TRADE_PLAN_STEPS.map((step, index) => (
@@ -207,8 +232,8 @@ export function DashboardGuide() {
             ))}
           </div>
           <div className="mt-3 rounded-md border border-wait/30 bg-wait-muted p-3 text-xs leading-relaxed text-wait">
-            <strong>Important:</strong> READY is not a command to buy. It means the dashboard has a complete
-            plan for you to review against the current live values.
+            <strong>Important:</strong> READY is a temporary manual-confirmation state, not a command to buy.
+            It expires after 60 seconds, can be revoked, and never submits a broker order.
           </div>
         </GuideSection>
 
@@ -244,8 +269,8 @@ export function DashboardGuide() {
         <GuideSection
           id="alerts"
           icon={BellRing}
-          title="How automatic Discord alerts work"
-          description="A new alert-eligible Trade Plan transition is evaluated by the persistent backend scheduler."
+          title="How actionable Discord alerts work"
+          description="The persistent backend owns READY reconciliation and position-management delivery; non-actionable research and lifecycle records remain in the audit trail."
         >
           <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
             <div className="space-y-2">
@@ -256,13 +281,14 @@ export function DashboardGuide() {
             <div className="rounded-md border border-panel-border bg-background/30 p-4">
               <h3 className="font-mono text-sm font-semibold">What the notification means</h3>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                It tells you that a new plan is ready for review and includes a concise direction, contract,
-                exposure state, and confidence summary. Open Trade Plan for the full trigger, invalidation,
-                objective, quote quality, and source details.
+                A READY notification means a live setup episode passed the current policy and has a short
+                manual-confirmation window. Position notifications can identify Target 1 management, Target 2
+                primary exit, structural stop, 15-minute review, or the 3:55/4:00 ET deadlines. Open Trading
+                Workspace for the current authoritative lifecycle state.
               </p>
               <div className="mt-3 rounded-md border border-accent/30 bg-accent/10 p-3 text-xs text-accent">
-                With a 15-second cadence, delivery is normally attempted during the next scheduler evaluation—not
-                necessarily the exact millisecond the plan appears.
+                Delivery is evaluated by the persistent backend. Duplicate events are suppressed, only the
+                highest-priority actionable event is delivered per evaluation, and no notification creates an order.
               </div>
             </div>
           </div>
@@ -271,8 +297,8 @@ export function DashboardGuide() {
         <GuideSection
           id="journal-replay"
           icon={FileClock}
-          title="Journal, analytics, and replay"
-          description="These features answer three different questions."
+          title="Journal, Workspace performance, analytics, and replay"
+          description="These features keep source evidence, modeled execution, and your manually recorded results separate."
         >
           <div className="grid gap-3 md:grid-cols-3">
             <QuestionCard
@@ -280,8 +306,8 @@ export function DashboardGuide() {
               answer="The Journal snapshot stores the deterministic Assembly and its source data at that moment."
             />
             <QuestionCard
-              question="What actually happened to my trade?"
-              answer="You enter no trade, win, loss, breakeven, realized P&L, and notes. The system does not guess."
+              question="What actually happened to my paper-equivalent position?"
+              answer="You manually confirm entry and exit prices in Trading Workspace. Journal outcomes and notes remain explicit user records; the system does not guess."
             />
             <QuestionCard
               question="Did the historical decision use future information?"
@@ -294,7 +320,7 @@ export function DashboardGuide() {
           id="sharing"
           icon={ShieldCheck}
           title="How to share or publish it safely"
-          description="The current release is a local single-user tool. Sharing access is different from publishing a public service."
+          description="V1.9.0 is a local single-user tool. Sharing access is different from publishing a public service."
         >
           <div className="space-y-3">
             {GUIDE_SHARING_CHECKLIST.map((item, index) => (
@@ -346,8 +372,9 @@ export function DashboardGuide() {
           <Zap className="mx-auto h-5 w-5 text-accent" />
           <h2 className="mt-2 font-mono text-sm font-semibold">The safest rule for a first-time user</h2>
           <p className="mx-auto mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            Check System Readiness, read the written source states, wait for a complete READY plan, and revalidate
-            the live values. Never infer meaning from color alone and never assume the dashboard placed an order.
+            Check System Readiness, verify live source states, review the source Trade Plan, and use Trading
+            Workspace for policy and lifecycle. Never infer meaning from color alone, never confirm an expired
+            READY alert, and never assume the dashboard placed an order.
           </p>
         </section>
       </div>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SPY_COPILOT_RELEASE_VERSION } from "./release-metadata";
 
 /**
  * These schemas are the single source of truth for data shapes shared between
@@ -3991,6 +3992,7 @@ export const ContractCandidateRejectionReasonCodeSchema = z.enum([
   "MULTIPLIER_MISMATCH",
   "STRIKE_NOT_FINITE",
   "STRIKE_NOT_POSITIVE",
+  "NOT_EFFECTIVE_ATM_STRIKE",
   "BID_NOT_FINITE",
   "BID_NOT_POSITIVE",
   "ASK_NOT_FINITE",
@@ -4170,7 +4172,12 @@ export const ContractSelectionMethodologySchema = z.object({
   rankingMethod: z.enum([
     "ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS",
     "TARGET_DELTA_THEN_OPTION_RR_AND_LIQUIDITY",
+    "STRICT_EFFECTIVE_ATM_THEN_OPTION_RR_AND_LIQUIDITY",
   ]),
+  atmStrikeSelectionPolicy: z
+    .literal("NEAREST_RETURNED_STRIKE_LOWER_STRIKE_ON_EXACT_TIE")
+    .optional(),
+  fartherStrikeFallbackPolicy: z.literal("PROHIBITED").optional(),
   itmExactDistanceTiePreference: z.boolean(),
   openInterestHardMinimum: z.number().int().nonnegative().nullable(),
   volumeHardMinimum: z.number().int().nonnegative().nullable(),
@@ -10337,7 +10344,7 @@ export type HistoricalReplayHistoryResponse = z.infer<
   typeof HistoricalReplayHistoryResponseSchema
 >;
 
-/** Final local V1 operational-readiness and explicit live-data probe contracts. */
+/** Current local operational-readiness and explicit live-data probe contracts. */
 export const SystemReadinessMethodologyVersionSchema = z.literal(
   "SYSTEM_READINESS_V1",
 );
@@ -10373,6 +10380,10 @@ export const SystemReadinessCheckIdSchema = z.enum([
   "TRADING_SAFETY",
   "REPLAY_AND_AUDIT",
   "RELEASE_DOCUMENTATION",
+  "TRADING_POLICY",
+  "TRADING_FRAMEWORK_PERSISTENCE",
+  "SETUP_REGISTRY",
+  "TRADING_WORKSPACE_RUNTIME",
 ]);
 export type SystemReadinessCheckId = z.infer<
   typeof SystemReadinessCheckIdSchema
@@ -10411,7 +10422,7 @@ export const SystemReadinessResponseSchema = z
   .object({
     product: z.literal("SPY_ZERO_DTE_V1_SYSTEM_READINESS"),
     methodologyVersion: SystemReadinessMethodologyVersionSchema,
-    releaseVersion: z.literal("1.5.0"),
+    releaseVersion: z.literal(SPY_COPILOT_RELEASE_VERSION),
     calculatedAt: z.string().datetime(),
     engineState: SystemReadinessEngineStateSchema,
     summary: z
@@ -10435,7 +10446,7 @@ export const SystemReadinessResponseSchema = z
         uptimeSeconds: z.number().int().nonnegative(),
       })
       .strict(),
-    checks: z.array(SystemReadinessCheckSchema).length(9),
+    checks: z.array(SystemReadinessCheckSchema).length(13),
     disclosures: z
       .object({
         noSecretsReturned: z.literal(true),
@@ -10541,6 +10552,7 @@ export const SystemDataProbeComponentIdSchema = z.enum([
   "CANDLES",
   "OPTIONS_CHAIN",
   "TRADE_PLAN_ASSEMBLY",
+  "TRADING_WORKSPACE",
 ]);
 export type SystemDataProbeComponentId = z.infer<
   typeof SystemDataProbeComponentIdSchema
@@ -10573,14 +10585,14 @@ export const SystemDataProbeResponseSchema = z
     probeState: SystemDataProbeStateSchema,
     summary: z
       .object({
-        totalComponents: z.literal(4),
+        totalComponents: z.literal(5),
         passCount: z.number().int().nonnegative(),
         degradedCount: z.number().int().nonnegative(),
         failCount: z.number().int().nonnegative(),
         notApplicableCount: z.number().int().nonnegative(),
       })
       .strict(),
-    components: z.array(SystemDataProbeComponentSchema).length(4),
+    components: z.array(SystemDataProbeComponentSchema).length(5),
     disclosures: z
       .object({
         explicitUserInitiatedProbe: z.literal(true),
@@ -10591,6 +10603,8 @@ export const SystemDataProbeResponseSchema = z
         noPositionSizing: z.literal(true),
         noOrderCreation: z.literal(true),
         noOrderExecution: z.literal(true),
+        noReadyAlertReconciliation: z.literal(true),
+        noPositionLifecycleMutation: z.literal(true),
       })
       .strict(),
   })
@@ -10611,7 +10625,7 @@ export const SystemDataProbeResponseSchema = z
       value.summary.degradedCount !== degradedCount ||
       value.summary.failCount !== failCount ||
       value.summary.notApplicableCount !== notApplicableCount ||
-      passCount + degradedCount + failCount + notApplicableCount !== 4
+      passCount + degradedCount + failCount + notApplicableCount !== 5
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

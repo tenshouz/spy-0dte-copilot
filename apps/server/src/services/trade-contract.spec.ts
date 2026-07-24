@@ -74,6 +74,23 @@ function replaceCalls(
   };
 }
 
+function replacePuts(
+  chain: SpyZeroDteOptionsChainResponse,
+  puts: NormalizedOptionContract[],
+): SpyZeroDteOptionsChainResponse {
+  return {
+    ...chain,
+    puts,
+    putContractCount: puts.length,
+    providerContractCount: chain.calls.length + puts.length,
+    totalContracts: chain.calls.length + puts.length,
+    contractsWithBidAsk: chain.calls.length + puts.length,
+    contractsWithGreeks: chain.calls.length + puts.length,
+    contractsWithOpenInterest: chain.calls.length + puts.length,
+    contractsWithVolume: chain.calls.length + puts.length,
+  };
+}
+
 async function main(): Promise<void> {
 await test("CONTRACT_V2 exposes conservative execution thresholds", () => {
   assert.equal(MAXIMUM_SPREAD_RATIO, 0.1);
@@ -88,6 +105,16 @@ await test("CONTRACT_V2 exposes conservative execution thresholds", () => {
   assert.equal(MAXIMUM_ABSOLUTE_DELTA, 0.75);
   assert.equal(TARGET_ABSOLUTE_DELTA, 0.55);
   assert.equal(MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO, 1.25);
+  const result = build();
+  assert.equal(
+    result.methodology.rankingMethod,
+    "STRICT_EFFECTIVE_ATM_THEN_OPTION_RR_AND_LIQUIDITY",
+  );
+  assert.equal(
+    result.methodology.atmStrikeSelectionPolicy,
+    "NEAREST_RETURNED_STRIKE_LOWER_STRIKE_ON_EXACT_TIE",
+  );
+  assert.equal(result.methodology.fartherStrikeFallbackPolicy, "PROHIBITED");
 });
 
 await test("READY and PREVIEW qualified risk both preflight the chain", () => {
@@ -239,7 +266,7 @@ await test("open interest OR current volume can satisfy the activity policy", ()
   const chain = makeV140OptionsChain("CALLS");
   const calls = [
     makeV140Contract("OI_ONLY", "CALL", 758, { openInterest: 100, volume: 0, delta: 0.55 }),
-    makeV140Contract("VOLUME_ONLY", "CALL", 759, { openInterest: 0, volume: 20, delta: 0.56 }),
+    makeV140Contract("VOLUME_ONLY", "CALL", 758, { openInterest: 0, volume: 20, delta: 0.56 }),
   ];
   const result = build(undefined, replaceCalls(chain, calls));
   assert.equal(result.selectableCandidateCount, 2);
@@ -280,7 +307,7 @@ await test("option scenario must meet premium reward-to-risk after spread", () =
   );
 });
 
-await test("contract closest to target absolute delta ranks first", () => {
+await test("strict effective ATM outranks a farther target-delta contract", () => {
   const chain = makeV140OptionsChain("CALLS");
   const calls = [
     makeV140Contract("DELTA_45", "CALL", 758, { delta: 0.45 }),
@@ -288,8 +315,134 @@ await test("contract closest to target absolute delta ranks first", () => {
     makeV140Contract("DELTA_65", "CALL", 760, { delta: 0.65 }),
   ];
   const result = build(undefined, replaceCalls(chain, calls));
-  assert.equal(result.selectedContract.contractSymbol, "DELTA_55");
+  assert.equal(result.selectedContract.contractSymbol, "DELTA_45");
   assert.equal(result.selectedContract.selectionRank, 1);
+  assert.ok(
+    result.candidates
+      .filter((candidate) => candidate.strikePrice !== 758)
+      .every((candidate) =>
+        candidate.rejectionReasonCodes.includes("NOT_EFFECTIVE_ATM_STRIKE"),
+      ),
+  );
+});
+
+await test("ATM spread failure cannot fall through to a farther liquid strike", () => {
+  const chain = makeV140OptionsChain("CALLS");
+  const calls = [
+    makeV140Contract("ATM_WIDE", "CALL", 758, { bid: 1.8, ask: 2.2 }),
+    makeV140Contract("FARTHER_GOOD", "CALL", 759, { delta: 0.55 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "NO_QUALIFIED_CONTRACT");
+  assert.equal(result.selectableCandidateCount, 0);
+  assert.ok(
+    result.candidates.find((candidate) => candidate.contractSymbol === "ATM_WIDE")!
+      .rejectionReasonCodes.includes("SPREAD_EXCEEDS_MAXIMUM"),
+  );
+  assert.ok(
+    result.candidates.find((candidate) => candidate.contractSymbol === "FARTHER_GOOD")!
+      .rejectionReasonCodes.includes("NOT_EFFECTIVE_ATM_STRIKE"),
+  );
+});
+
+await test("ATM stale quote cannot fall through to a farther fresh strike", () => {
+  const chain = makeV140OptionsChain("CALLS");
+  const staleAt = new Date(V140_CONTRACT_EVAL_MS - 20_001).toISOString();
+  const calls = [
+    makeV140Contract("ATM_STALE", "CALL", 758, { quoteAt: staleAt }),
+    makeV140Contract("FARTHER_FRESH", "CALL", 759, { delta: 0.55 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "NO_QUALIFIED_CONTRACT");
+  assert.equal(result.engineState, "PARTIAL");
+  assert.equal(result.warningCode, "CONTRACT_QUOTE_STALE");
+});
+
+await test("ATM scenario failure cannot fall through to a farther qualified strike", () => {
+  const chain = makeV140OptionsChain("CALLS");
+  const calls = [
+    makeV140Contract("ATM_BAD_SCENARIO", "CALL", 758, { theta: -10 }),
+    makeV140Contract("FARTHER_GOOD_SCENARIO", "CALL", 759, { delta: 0.55 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "NO_QUALIFIED_CONTRACT");
+  assert.ok(
+    result.candidates.find((candidate) => candidate.contractSymbol === "ATM_BAD_SCENARIO")!
+      .rejectionReasonCodes.includes("OPTION_REWARD_RISK_BELOW_MINIMUM"),
+  );
+});
+
+await test("multiple contracts at the effective ATM strike retain deterministic quality ranking", () => {
+  const chain = makeV140OptionsChain("CALLS");
+  const calls = [
+    makeV140Contract("ATM_REJECTED", "CALL", 758, { bid: 1.8, ask: 2.2 }),
+    makeV140Contract("ATM_SELECTABLE", "CALL", 758, { delta: 0.55 }),
+    makeV140Contract("FARTHER_SELECTABLE_BEFORE_ATM_POLICY", "CALL", 759, { delta: 0.55 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "SELECTED");
+  assert.equal(result.selectedContract.contractSymbol, "ATM_SELECTABLE");
+  assert.equal(result.selectableCandidateCount, 1);
+});
+
+await test("equal-distance ATM ties choose the lower strike for Calls", () => {
+  const chain = makeV140OptionsChain("CALLS", { underlyingPrice: 758.5 });
+  const calls = [
+    makeV140Contract("LOWER_CALL", "CALL", 758, { delta: 0.55, ask: 2.1 }),
+    makeV140Contract("HIGHER_CALL", "CALL", 759, { delta: 0.55, ask: 2.1 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "SELECTED");
+  assert.equal(result.selectedContract.contractSymbol, "LOWER_CALL");
+});
+
+await test("equal-distance ATM ties choose the lower strike for Puts", () => {
+  const { risk } = makeV140BiasPlanRisk("PUTS");
+  const chain = makeV140OptionsChain("PUTS", { underlyingPrice: 748.5 });
+  const puts = [
+    makeV140Contract("LOWER_PUT", "PUT", 748, { delta: -0.55, ask: 2.1 }),
+    makeV140Contract("HIGHER_PUT", "PUT", 749, { delta: -0.55, ask: 2.1 }),
+  ];
+  const result = build(risk, replacePuts(chain, puts));
+  assert.equal(result.selectionState, "SELECTED");
+  assert.equal(result.selectedContract.contractSymbol, "LOWER_PUT");
+});
+
+await test("missing selected-side contract at the chain ATM does not permit substitution", () => {
+  const chain = makeV140OptionsChain("CALLS", {
+    underlyingPrice: 758.2,
+    puts: [makeV140Contract("CHAIN_ATM_PUT", "PUT", 758)],
+  });
+  const calls = [
+    makeV140Contract("CALL_759", "CALL", 759, { delta: 0.55 }),
+    makeV140Contract("CALL_760", "CALL", 760, { delta: 0.55 }),
+  ];
+  const result = build(undefined, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "NO_QUALIFIED_CONTRACT");
+  assert.equal(result.selectableCandidateCount, 0);
+  assert.ok(
+    result.candidates.every((candidate) =>
+      candidate.rejectionReasonCodes.includes("NOT_EFFECTIVE_ATM_STRIKE"),
+    ),
+  );
+});
+
+await test("PREVIEW strict-ATM preflight reports no qualified contract without fallback", () => {
+  const ready = makeV140BiasPlanRisk("CALLS").risk;
+  const preview = {
+    ...ready,
+    frameworkState: "PREVIEW",
+    isCurrentlyTradeEligible: false,
+  } as SpyZeroDteObjectiveRiskResponse;
+  const chain = makeV140OptionsChain("CALLS");
+  const calls = [
+    makeV140Contract("ATM_WIDE_PREVIEW", "CALL", 758, { bid: 1.8, ask: 2.2 }),
+    makeV140Contract("FARTHER_GOOD_PREVIEW", "CALL", 759, { delta: 0.55 }),
+  ];
+  const result = build(preview, replaceCalls(chain, calls));
+  assert.equal(result.selectionState, "DEFERRED");
+  assert.equal(result.preflightState, "NO_QUALIFIED_CONTRACT");
+  assert.equal(result.preflightContract?.contractSymbol, null);
 });
 
 await test("source assembly skew above thirty seconds fails closed", () => {

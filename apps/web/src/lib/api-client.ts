@@ -69,6 +69,13 @@ import {
   SystemDataProbeRequestSchema,
   SystemDataProbeResponseSchema,
   SystemReadinessResponseSchema,
+  TradingWorkspaceResponseSchema,
+  TradingWorkspaceActionResponseSchema,
+  ConfirmTradingEntryRequestSchema,
+  CloseTradingPositionRequestSchema,
+  RecordTradingOverrideRequestSchema,
+  UpsertTradingRestrictedEventRequestSchema,
+  TradingRestrictedEventSchema,
   type Alert,
   type BackendAutomationDeliveryHistoryResponse,
   type BackendAutomationRunOnceRequest,
@@ -139,6 +146,13 @@ import {
   type SystemDataProbeRequest,
   type SystemDataProbeResponse,
   type SystemReadinessResponse,
+  type TradingWorkspaceResponse,
+  type TradingWorkspaceActionResponse,
+  type ConfirmTradingEntryRequest,
+  type CloseTradingPositionRequest,
+  type RecordTradingOverrideRequest,
+  type UpsertTradingRestrictedEventRequest,
+  type TradingRestrictedEvent,
 } from "@spy-copilot/shared";
 import { z } from "zod";
 
@@ -193,6 +207,54 @@ async function postJson<TRequest, TResponse>(
     throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
   }
   return responseSchema.parse(await res.json());
+}
+
+async function postActionJson<TRequest>(
+  path: string,
+  body: TRequest,
+  requestSchema: z.ZodType<TRequest>,
+): Promise<TradingWorkspaceActionResponse> {
+  const validatedBody = requestSchema.parse(body);
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(validatedBody),
+  });
+  const data = await res.json();
+  if (!res.ok && res.status !== 409) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
+  return TradingWorkspaceActionResponseSchema.parse(data);
+}
+
+async function putJson<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  requestSchema: z.ZodType<TRequest>,
+  responseSchema: z.ZodType<TResponse, z.ZodTypeDef, unknown>,
+): Promise<TResponse> {
+  const validatedBody = requestSchema.parse(body);
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify(validatedBody),
+  });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
+  return responseSchema.parse(await res.json());
+}
+
+async function deleteNoContent(path: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "DELETE",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`API request to ${path} failed: ${res.status} ${res.statusText}`);
+  }
 }
 
 async function patchJson<TRequest, TResponse>(
@@ -489,6 +551,57 @@ export const apiClient = {
       "/api/trade-plan-alert/spy/transition",
       SpyZeroDteTradePlanAlertTransitionResponseSchema,
     ),
+  getTradingWorkspace: (): Promise<TradingWorkspaceResponse> =>
+    getPrivateNoStoreJson(
+      "/api/trading-workspace/spy",
+      TradingWorkspaceResponseSchema,
+    ),
+  confirmTradingEntry: (
+    request: ConfirmTradingEntryRequest,
+  ): Promise<TradingWorkspaceActionResponse> =>
+    postActionJson(
+      "/api/trading-workspace/spy/confirm-entry",
+      request,
+      ConfirmTradingEntryRequestSchema,
+    ),
+  closeTradingPosition: (
+    positionId: string,
+    request: CloseTradingPositionRequest,
+  ): Promise<TradingWorkspaceActionResponse> =>
+    postActionJson(
+      `/api/trading-workspace/spy/positions/${encodeURIComponent(positionId)}/close`,
+      request,
+      CloseTradingPositionRequestSchema,
+    ),
+  recordTradingOverride: (
+    request: RecordTradingOverrideRequest,
+  ): Promise<TradingWorkspaceActionResponse> =>
+    postActionJson(
+      "/api/trading-workspace/spy/override",
+      request,
+      RecordTradingOverrideRequestSchema,
+    ),
+  createTradingRestrictedEvent: (
+    request: UpsertTradingRestrictedEventRequest,
+  ): Promise<TradingRestrictedEvent> =>
+    postJson(
+      "/api/trading-workspace/events",
+      request,
+      UpsertTradingRestrictedEventRequestSchema,
+      TradingRestrictedEventSchema,
+    ),
+  updateTradingRestrictedEvent: (
+    eventId: string,
+    request: UpsertTradingRestrictedEventRequest,
+  ): Promise<TradingRestrictedEvent> =>
+    putJson(
+      `/api/trading-workspace/events/${encodeURIComponent(eventId)}`,
+      request,
+      UpsertTradingRestrictedEventRequestSchema,
+      TradingRestrictedEventSchema,
+    ),
+  deleteTradingRestrictedEvent: (eventId: string): Promise<void> =>
+    deleteNoContent(`/api/trading-workspace/events/${encodeURIComponent(eventId)}`),
   calculateSpyZeroDtePositionSizing: (
     request: SpyZeroDtePositionSizingRequest,
   ): Promise<SpyZeroDtePositionSizingResponse> =>

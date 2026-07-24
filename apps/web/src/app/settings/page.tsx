@@ -92,7 +92,7 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Settings"
-        description="Manage broker connectivity and explicit notification-channel configuration."
+        description="Manage Schwab connectivity, Discord configuration, and persistent backend automation used by source reports and V1.9 actionable Workspace delivery."
       />
 
       {callbackNotice && (

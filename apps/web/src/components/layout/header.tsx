@@ -70,9 +70,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Badge variant="wait" className="hidden sm:inline-flex">
-          Other Analytics: Mock
-        </Badge>
         <span className="font-mono text-xs tabular text-muted-foreground" suppressHydrationWarning>
           {now
             ? now.toLocaleTimeString("en-US", { hour12: false, timeZoneName: "short" })

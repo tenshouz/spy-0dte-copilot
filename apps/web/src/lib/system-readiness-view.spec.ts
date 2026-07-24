@@ -1,5 +1,5 @@
 /**
- * Deterministic presentation tests for final V1 system readiness.
+ * Deterministic presentation tests for V1.9.0 system readiness.
  * Run: npx --no-install tsx apps/web/src/lib/system-readiness-view.spec.ts
  */
 import assert from "node:assert/strict";
@@ -67,7 +67,7 @@ test("system page uses the complete readiness panel", () => {
     "utf8",
   );
   assert.match(source, /SystemReadinessPanel/);
-  assert.match(source, /Final V1 operational status/);
+  assert.match(source, /V1\.9\.0 configuration/);
 });
 
 test("readiness panel uses dedicated query and explicit probe mutation", () => {
@@ -81,6 +81,8 @@ test("readiness panel uses dedicated query and explicit probe mutation", () => {
   assert.match(source, /useSystemReadiness/);
   assert.match(source, /useRunSystemDataProbe/);
   assert.match(source, /Run complete probe/);
+  assert.match(source, /five-component probe/);
+  assert.match(source, /Trading Workspace/);
   assert.match(source, /does not send Discord messages/);
   assert.match(source, /no.*orders/i);
 });

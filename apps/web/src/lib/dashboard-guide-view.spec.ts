@@ -12,6 +12,7 @@ import {
   GUIDE_SECTION_LINKS,
   GUIDE_SOURCE_STATES,
   GUIDE_TRADE_PLAN_STEPS,
+  GUIDE_TRADING_POLICY_FACTS,
 } from "./dashboard-guide-content";
 import {
   filterGuideGlossary,
@@ -39,6 +40,7 @@ test("guide contains every user-facing page exactly once", () => {
     "/options",
     "/gamma",
     "/trade-plan",
+    "/workspace",
     "/alerts",
     "/journal",
     "/replay",
@@ -67,7 +69,7 @@ test("glossary search covers definitions and aliases", () => {
   const gex = GUIDE_GLOSSARY.find((item) => item.term === "GEX");
   assert.ok(gex);
   assert.equal(guideGlossaryMatchesSearch(gex, "gamma exposure"), true);
-  assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "2:1").some((item) => item.term === "Reward-to-risk"));
+  assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "1.5:1").some((item) => item.term === "Reward-to-risk"));
 });
 
 test("guide defines complete plan and source state dictionaries", () => {
@@ -89,10 +91,25 @@ test("guide defines complete plan and source state dictionaries", () => {
 test("trade plan guide preserves fixed safety boundaries", () => {
   const copy = GUIDE_TRADE_PLAN_STEPS.map((item) => `${item.title} ${item.detail}`).join(" ");
   assert.match(copy, /7:00–9:30 AM/);
-  assert.match(copy, /at least 2:1/);
-  assert.match(copy, /GEX\/DEX adjusts confidence only/);
-  assert.match(copy, /cannot create the direction/);
-  assert.match(copy, /review—not automatic execution/);
+  assert.match(copy, /at least 1\.5:1/);
+  assert.match(copy, /strict effective-ATM/);
+  assert.match(copy, /60 seconds/);
+  assert.match(copy, /GEX\/DEX remains research-only|GEX\/DEX/i);
+  assert.match(copy, /cannot override policy|fail closed/i);
+  assert.match(copy, /never sends a broker order|manual confirmation/i);
+});
+
+test("guide policy facts mirror the locked V1.9 controls", () => {
+  const copy = GUIDE_TRADING_POLICY_FACTS.map((item) => `${item.title} ${item.detail}`).join(" ");
+  assert.match(copy, /\$1,000/);
+  assert.match(copy, /\$150 contract premium/);
+  assert.match(copy, /\$50 planned structural loss/);
+  assert.match(copy, /3 trades/);
+  assert.match(copy, /2 consecutive losses/);
+  assert.match(copy, /3:00 p\.m\./);
+  assert.match(copy, /3:55 p\.m\./);
+  assert.match(copy, /Target 2/);
+  assert.match(copy, /no farther-strike substitution/i);
 });
 
 test("guide has all major onboarding sections", () => {
@@ -101,6 +118,7 @@ test("guide has all major onboarding sections", () => {
     [
       "start-here",
       "daily-workflow",
+      "trading-policy",
       "pages",
       "trade-plan",
       "statuses",
@@ -132,8 +150,8 @@ test("guide component includes search, navigation, sharing, and safety copy", ()
     "utf8",
   );
   assert.match(source, /Find a feature or term/);
-  assert.match(source, /How a Trade Plan becomes READY/);
-  assert.match(source, /How automatic Discord alerts work/);
+  assert.match(source, /How a setup becomes a READY Workspace opportunity/);
+  assert.match(source, /How actionable Discord alerts work/);
   assert.match(source, /How to share or publish it safely/);
   assert.match(source, /Do not publish the existing local backend as-is/);
   assert.match(source, /never places.*brokerage order/is);

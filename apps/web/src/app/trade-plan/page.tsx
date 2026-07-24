@@ -43,7 +43,7 @@ export default function TradePlanPage() {
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Trade Plan"
-        description="Deterministic SPY 0DTE structure with soft GEX/DEX confirmation, contract selection, and read-only sizing references. No order or guaranteed fill."
+        description="Deterministic source structure with research-only GEX/DEX context, strict effective-ATM contract qualification, and read-only sizing references. Trading Workspace applies the V1.9 policy; no order or guaranteed fill."
         action={
           plan && view ? (
             <Badge variant={badgeVariant(view.tone)}>{plan.planState.replaceAll("_", " ")}</Badge>

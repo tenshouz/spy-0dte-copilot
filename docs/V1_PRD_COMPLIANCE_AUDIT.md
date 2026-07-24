@@ -1,50 +1,44 @@
-# SPY 0DTE Copilot V1.3.0 PRD Compliance Audit
-
-> **V1.4.0 note:** This V1.3.0 audit is retained as historical baseline documentation. V1.4.0 supersedes its Trade Plan, exposure-confidence, risk, contract-selection, and decision-audit descriptions. See `V1_4_EXECUTION_QUALITY.md`.
-
+# SPY 0DTE Copilot V1.9.0 PRD Compliance Audit
 
 ## Release conclusion
 
-The local SPY-only V1.3.0 is functionally complete for deterministic decision support. The repository now contains the live data pipeline, deterministic analytics, alerting, persistence, replay, reliability controls, security controls, verification tooling, and operations documentation required for a safe local release.
+The local SPY-only V1.9.0 implements deterministic decision support, manually confirmed paper-equivalent lifecycle recording, persistent risk controls, research separation, operational readiness, and recovery tooling without broker execution.
 
 ## Implemented capabilities
 
-| Area | V1 implementation |
+| Area | V1.9.0 implementation |
 |---|---|
-| Market data | Backend-only Schwab OAuth, encrypted tokens, refresh recovery, normalized SPY quote, bounded five-minute candles, current-date options chain, source freshness labels, active/off-hours refresh policy, focus/reconnect refetch, bounded cache, backoff, timeout, and in-flight deduplication |
-| Session structure | Provider-aligned 07:00–09:30 ET premarket high/low, RTH VWAP, previous-session levels, gap, 5/15/30-minute opening ranges, Traditional daily/weekly pivots, NYSE holidays and early closes |
-| Options analytics | ATM implied move, returned-window GEX and DEX proxies, ranked wall proxies, cumulative Gamma-balance proxy, cliffs, and DEX anchor |
-| Deterministic reasoning | Market Context, Market State, bias, Trade Plan, objective risk, contract selection, and concise same-snapshot assembly; returned-window GEX/DEX structure modifies plan confidence only through a versioned soft-confirmation layer |
-| Risk support | Manual and read-only Schwab-assisted sizing; no order submission |
-| Reporting and alerts | Deterministic scheduled reports, candidate transitions, Discord test/manual/automatic delivery, persistent backend scheduler, lease protection, deduplication, and sanitized delivery audit |
-| User onboarding | Searchable in-app Dashboard Guide, daily workflow, page-by-page feature explanations, Trade Plan state flow, data-state dictionary, alert checklist, Journal/replay explanation, glossary, and safe-sharing boundary |
-| Journal | Explicit and opt-in automatic captured snapshots, user-entered outcomes, realized P&L annotations, and performance analytics |
-| Replay | Persisted captured-snapshot historical replay, chronological timeline, no-look-ahead timestamp audit, and separate post-hoc outcome scorecard |
-| Operations | System readiness endpoint and page, explicit provider probe, visible quote/candle data ages, stable in-place chart updates, release verification script, backup/recovery runbook, request IDs, graceful shutdown, bounded bodies, restrictive CORS, security headers, and write-rate limiting |
+| Market data | Backend-only Schwab OAuth, encrypted tokens, normalized SPY quote/candles/options, source freshness, bounded caches, timeouts, backoff, and in-flight deduplication |
+| Deterministic source engines | Session structure, VWAP, levels, expected move, GEX/DEX proxies, Market Context/State/Bias, Trade Plan, strict effective-ATM contract selection, and same-snapshot Assembly |
+| Trading policy | Versioned `TRADING_POLICY_V1` with $1,000 account, $150 premium, $50 planned risk, $150 daily loss, 3 trades, 2 losses, one position/contract, two attempts, time/event gates, 1.5:1 minimum R:R, and Target 2 primary exit |
+| Persistence | Day ledgers, positions, attempts, READY alerts, restricted events, Workspace runtime, lifecycle events, marks, and manual overrides with database constraints and transaction locks |
+| Setup registry | 14 independent families; 4 live bridges and 10 shadow-only families; explicit promotion status and analytics boundary |
+| Opportunity layer | Stable setup episodes, duplicate consolidation, fail-closed direction conflicts, strict policy eligibility, and no farther-strike contract fallback |
+| Lifecycle | 60-second READY expiration/revocation, manual entry/exit confirmation, audited overrides, ask-entry/bid-exit modeling, and user-executed versus pure-engine separation |
+| Monitoring and Discord | Persistent backend ownership, runtime lease/heartbeat, deterministic management-event priority, deduplication, and actionable-only delivery |
+| Research | Target 1/2/3 and time-review comparison, Gamma/volatility research-only context, Journal analytics, replay, and point-in-time backtesting |
+| Product UX | Trading Workspace, current Dashboard Guide, V1.9.0 System Readiness, five-component explicit probe, current page descriptions, and shared release metadata |
+| Operations | Verification script, Prisma deployment, source hygiene checks, backup/recovery runbook, request IDs, graceful shutdown, restrictive CORS, headers, bounded bodies, and write-rate limiting |
 
 ## Safety boundaries
 
-- No order execution, order routing, order preview, position modification, or brokerage write endpoint exists.
-- Schwab account access is read-only and only used for bounded risk context when explicitly requested.
-- Discord delivery cannot expose the webhook URL or provider response body.
-- Secrets, tokens, account hashes, database URLs, raw provider responses, and private balances are excluded from readiness, replay, journal, and automation audit payloads.
-- Deterministic calculations remain code-owned and versioned. GEX/DEX confirmation cannot create a direction, satisfy an eligibility gate, or block a structurally eligible setup.
-- LLM-generated trade decisions are not required for V1 correctness.
-- Every market-data product discloses source state and warning codes instead of silently substituting real and mock data.
-- Premarket completeness is evaluated only over the explicit provider-aligned 07:00–09:30 ET window; missing 04:00–07:00 data is neither fabricated nor treated as a failure.
-- Historical replay uses persisted captured snapshots only and does not claim to reconstruct raw history that was never stored.
+- No order execution, routing, preview, modification, or brokerage write endpoint exists.
+- Every paper-equivalent entry and exit requires explicit manual confirmation.
+- Manual overrides require reasons and remain separated from pure-engine results; they do not bypass hard transaction controls.
+- GEX/DEX and newer setup families cannot create direction or bypass eligibility.
+- Shadow setups cannot create live opportunities, READY alerts, positions, or actionable Discord events.
+- CPI, Employment Situation/NFP, and FOMC are full-day blocks; other major events use explicit windows.
+- The nearest effective-ATM strike must qualify; no farther strike is substituted.
+- Modeled execution uses ask-side entry and bid-side exit.
+- Secrets, tokens, account identifiers, raw provider bodies, and private balances are excluded from user-facing readiness and audit payloads.
+- Historical decision inputs remain separated from later outcome data.
 
 ## Known intentional limitations
 
 - Single local user and SPY only.
-- Backend must be running for persistent automation.
-- Quote, candle, and option caches are process-local and reset on restart. V1.3.0 uses a 2-second quote cache and 5-second candle cache during the faster frontend refresh cycle.
-- OAuth CSRF state is memory-bound; restart during the OAuth flow requires starting the flow again.
-- The Gamma-balance value is a cumulative returned-window proxy, not observed dealer inventory or a true dealer Gamma Flip.
-- Open interest can be stale intraday.
-- Legacy typed mock compatibility routes remain isolated from the primary deterministic dashboard pipeline and are not used by V1 decision panels.
-- V1 replay validates captured decisions, not uncaptured raw-market history.
-
-## Deferred post-V1 work
-
-Cloud deployment, multi-user authentication, QQQ or multi-symbol support, mobile-native delivery, broker execution, editable scoring profiles, and optional AI coaching are separate post-V1 projects. Broker execution is not implied by V1 completion and requires an independent safety and compliance design.
+- Backend and PostgreSQL must remain running for persistent monitoring.
+- Provider/open-interest limitations remain honestly disclosed.
+- Exact option-chain backtesting is limited to captures stored after capture support was installed.
+- Ten setup families remain shadow-only pending independent samples and promotion review.
+- The 15-minute rule is a review, not an automatic exit.
+- No cloud tenancy, public authentication, billing, or broker execution is included.

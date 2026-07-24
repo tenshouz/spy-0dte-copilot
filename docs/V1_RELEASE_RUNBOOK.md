@@ -1,11 +1,8 @@
-# SPY 0DTE Copilot V1.3.0 Release Runbook
-
-> **V1.4.0 note:** This runbook remains applicable to the local operating model, but V1.4.0 adds the `DeterministicDecisionCycle` migration and replaces soft directional exposure adjustment with context-only exposure. Follow `README_APPLY.txt` and `V1_4_EXECUTION_QUALITY.md` for the upgrade.
-
+# SPY 0DTE Copilot V1.9.0 Release Runbook
 
 ## Scope
 
-V1.3.0 is a local, single-user, SPY-only, read-only decision-support system. It provides normalized Schwab market data, deterministic market structure with provider-aligned 07:00–09:30 ET premarket levels, options exposure analytics, Trade Plan assembly with soft GEX/DEX confidence confirmation, read-only sizing support, Discord notifications, persistent journaling, analytics, and captured-snapshot replay. It includes an in-app Dashboard Guide for first-time users and does not create, modify, route, or execute orders.
+V1.9.0 is a local, single-user, SPY-only decision-support and paper-equivalent lifecycle system. It includes the V1.5 deterministic source engines plus V1.6–V1.9 policy, risk, position, setup-registry, opportunity, READY-alert, event-restriction, execution-research, and Trading Workspace layers. It does not create, modify, route, or execute brokerage orders.
 
 ## Required services
 
@@ -19,26 +16,44 @@ V1.3.0 is a local, single-user, SPY-only, read-only decision-support system. It 
 
 1. Start Docker Desktop.
 2. Run `docker compose up -d` from the repository root.
-3. Run `npx prisma migrate deploy --schema apps/server/prisma/schema.prisma` with `DATABASE_URL` loaded.
-4. Run `npx prisma generate --schema apps/server/prisma/schema.prisma`.
-5. Start the backend with `npm run dev:server`.
-6. Start the frontend with `npm run dev:web`.
-7. Keep the HTTPS tunnel running when Schwab OAuth must redirect back to the backend.
-8. Open `/system` and confirm there are no required failures.
+3. Run `npm run db:validate`.
+4. Run `npm run db:generate`.
+5. Run `npm run db:deploy`.
+6. Start the backend with `npm run dev:server`.
+7. Start the frontend with `npm run dev:web`.
+8. Keep the HTTPS tunnel running when Schwab OAuth must redirect to the backend.
+9. Open `/system`; confirm release `v1.9.0`, trading-framework persistence, policy, registry, and Workspace monitor status.
+10. Run the explicit complete probe to validate quote, candles, options, Assembly, and Trading Workspace together.
 
 ## Release verification
 
-Run `npm run verify:v1` after Prisma generation. The command executes every backend and frontend specification, both TypeScript builds, lint, the frontend production build, tracked-secret checks, route safety checks, and whitespace validation.
+With backend and frontend stopped, run:
 
-Premarket coverage is complete when the 07:00 through 09:25 ET five-minute buckets are present; 04:00–06:55 ET candles are outside the release methodology and do not block Trade Plans. During weekdays from 07:00 through 16:15 ET, the frontend requests quotes every 5 seconds, official candles every 10 seconds, and derived Trade Plan products every 15 seconds. Returning to a visible tab or reconnecting the network triggers an immediate refresh.
+```powershell
+npm run db:validate
+npm run db:generate
+npm run db:deploy
+npm run verify:v1
+```
 
-The explicit data probe on `/system` is intentionally manual because it may call Schwab. A closed market or a day without a current-date expiration can produce a legitimate stale or not-applicable result.
+Verification must cover backend and frontend specifications, TypeScript builds, lint, frontend production build, route safety, release metadata, current Guide/System copy, source hygiene, and whitespace.
+
+Keep Trade Plan Alerts disabled until verification passes and `/api/trading-workspace/spy` returns a validated response.
+
+## Trading Workspace operating checks
+
+- Confirm all V1.9 trading tables are present.
+- Confirm the Workspace monitor heartbeat is active or understand why it is stopped/stale.
+- Confirm the current event calendar before the session; CPI, Employment Situation/NFP, and FOMC require full-day blocks.
+- Confirm daily ledger values before manually recording an entry.
+- Confirm the READY alert is active and unexpired.
+- Confirm the selected contract is the strict effective-ATM contract and both underlying/option R:R are at least 1.5:1.
+- Confirm no new entry is recorded at or after 3:00 p.m. ET.
+- Manually record exits; Target 2 is primary, 3:55 p.m. is mandatory, and the position must be closed before 4:00 p.m. ET.
 
 ## Backup and restore
 
 ### Database backup
-
-Use a file inside the PostgreSQL container and then copy it out. This avoids corrupting the binary custom-format dump through Windows PowerShell output redirection.
 
 ```powershell
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -55,63 +70,47 @@ docker compose exec -T db rm -f $containerDump
 Get-FileHash $localDump -Algorithm SHA256
 ```
 
-The dump contains application records and encrypted Schwab tokens. Protect it like a credential-bearing backup. Never upload it to ChatGPT, source control, or public storage.
+The dump contains application records and encrypted Schwab tokens. Never upload it or commit it.
 
 ### Database restore
 
-1. Stop the backend and frontend.
-2. Create a fresh backup of the current database.
-3. Restore only into a trusted local PostgreSQL instance:
-
-```powershell
-$localDump = "C:\path\to\spy-copilot-backup.dump"
-$containerDump = "/tmp/spy-copilot-restore.dump"
-
-if (!(Test-Path $localDump)) { throw "Backup file was not found." }
-
-docker compose cp $localDump "db:$containerDump"
-if ($LASTEXITCODE -ne 0) { throw "Database restore copy failed." }
-
-docker compose exec -T db pg_restore -U spy -d spy_copilot --clean --if-exists $containerDump
-if ($LASTEXITCODE -ne 0) { throw "Database restore failed." }
-
-docker compose exec -T db rm -f $containerDump
-```
-
-4. Run Prisma migrations again.
-5. Restart the backend and confirm `/api/system/readiness`.
+1. Stop backend and frontend.
+2. Back up the current database.
+3. Restore only into a trusted local PostgreSQL instance.
+4. Run `npm run db:deploy` and `npm run db:generate`.
+5. Restart the backend and verify `/api/system/readiness` and `/api/trading-workspace/spy`.
 
 ### Source backup
 
-Use `git archive` from a committed checkpoint. Never include `.env`, database dumps, `node_modules`, `.next`, logs, or local Prisma databases.
+Use a committed Git checkpoint or a sanitized source archive. Exclude `.env`, database dumps, `node_modules`, `.next`, `dist`, logs, copied installers, and backup folders.
 
 ## Schwab recovery
 
-- `credentials_not_configured`: complete all Schwab variables and restart the backend.
-- `config_invalid`: correct the exact HTTPS callback path and encryption-key requirements.
-- `not_connected`: run the OAuth connection flow from Settings.
-- `token_expired`: reconnect. Normal near-expiry access tokens are refreshed automatically; a definitive refresh rejection invalidates the stored token so stale authenticated data is not mislabeled live.
-- rate limit, timeout, or network failure: the market-data services apply bounded timeouts, in-flight deduplication, shared backoff, and honest LIVE/STALE/MOCK or UNAVAILABLE labeling. If faster refresh produces a provider rate limit, do not lower the intervals further; allow the existing backoff to recover.
+- `credentials_not_configured`: complete required variables and restart.
+- `config_invalid`: correct the exact HTTPS callback and encryption-key requirements.
+- `not_connected`: repeat OAuth from Settings.
+- `token_expired`: reconnect; definitive refresh rejection invalidates the stored token.
+- Rate limit, timeout, or network failure: allow the existing bounded timeout, backoff, cache, and in-flight deduplication to recover.
 
-Never paste access tokens, refresh tokens, client secrets, account hashes, raw provider bodies, or the Discord webhook URL into support messages.
+Never paste tokens, secrets, account hashes, raw provider bodies, or webhook URLs into support messages.
 
 ## Discord and automation recovery
 
-- Keep persistent backend automation disabled until the webhook test passes.
-- If runtime state is `STANDBY`, another backend process owns the database lease; stop the duplicate process.
-- If runtime state is `STALE`, restart the backend and inspect sanitized delivery history.
-- `AMBIGUOUS` delivery outcomes are persistently suppressed to prevent duplicate messages.
-- Provider bodies and webhook secrets are not stored in delivery audit history.
+- Keep automation disabled until webhook and readiness checks pass.
+- `STANDBY`: another backend process owns the general automation lease.
+- `STALE`: restart the backend and inspect sanitized delivery history.
+- Workspace READY/position delivery is persistent-backend owned and actionable-only.
+- Expiration, revocation, and Target 3 research records must not create Discord noise.
 
 ## Incident response
 
-1. Stop the backend to stop scheduled evaluations and outbound notifications.
+1. Stop the backend to stop schedulers and outbound notifications.
 2. Do not delete the database before taking a backup.
-3. Record only sanitized reason codes and request IDs.
-4. Use `/system` to identify configuration, persistence, connection, or runtime failures.
-5. Re-run `npm run verify:v1` after any source repair.
-6. Re-enable persistent automation only after readiness and explicit delivery tests pass.
+3. Record sanitized reason codes and request IDs only.
+4. Use `/system` and the explicit probe to isolate configuration, migration, provider, Assembly, or Workspace failures.
+5. Re-run `npm run verify:v1` after source repair.
+6. Re-enable automation only after readiness, probe, and Workspace checks pass.
 
 ## Shutdown
 
-Press `Ctrl+C` in frontend and backend terminals. The backend stops its scheduler, stops accepting new requests, waits for active requests, disconnects Prisma, and force-closes connections only if the graceful-shutdown deadline is exceeded.
+Press `Ctrl+C` in frontend and backend terminals. The backend stops its schedulers, stops accepting requests, waits for active requests, disconnects Prisma, and uses forced shutdown only after the graceful deadline.
