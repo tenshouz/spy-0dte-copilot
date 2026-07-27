@@ -1,0 +1,32 @@
+SPY 0DTE Copilot V1.9.1 - Verification Report
+================================================
+
+Implemented scope
+-----------------
+- CONTRACT_V3 bounded effective-ATM plus one adjacent strike on each side.
+- SIZING_V2 separates planned structural loss from full-premium capital exposure.
+- $150 maximum premium and $50 maximum planned structural loss remain locked.
+- Actual-entry versus live-Bid $50 manual option-loss backstop.
+- Candidate diagnostics, UI, Guide, release docs, and V1.9.1 metadata.
+- No broker order execution and no database migration.
+
+Checks completed
+----------------
+PASS  Static V1.9.1 release/source audit.
+PASS  git diff whitespace/error check.
+PASS  TypeScript/TSX syntax parse: 350 files, no syntax diagnostics.
+PASS  Contract selection focused tests: 28/28.
+PASS  Reference sizing focused tests: 35/35.
+PASS  Schwab-assisted sizing core logic/services focused tests: 25/25.
+PASS  Trading policy focused tests: 14/14.
+PASS  Trade Plan Assembly focused tests: 8/8.
+PASS  Trading framework structure focused tests: 8/8.
+PASS  Dashboard Guide focused tests: 13/13.
+
+Environment limitation
+----------------------
+The sanitized source archive did not contain installed dependencies, and this
+environment could not reach the npm registry. Therefore the full dependency-
+backed npm suite, Prisma validation/generation, lint, server build, and Next.js
+production build were not run here. Run the project's consolidated verifier in
+the normal dependency-installed local checkout after file replacement.

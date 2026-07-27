@@ -238,8 +238,8 @@ function tradingPolicyCheck(): SystemReadinessCheck {
       ? "TRADING_POLICY_V1_READY"
       : "TRADING_POLICY_V1_MISMATCH",
     detail: policyMatchesLockedRules
-      ? "TRADING_POLICY_V1 matches the approved account, risk, timing, strict-ATM, R:R, alert, and Target 2 controls."
-      : "The loaded trading-policy constants do not match the approved V1.9 operating rules.",
+      ? "TRADING_POLICY_V1 matches the approved account, premium, planned-risk, timing, bounded-contract, R:R, alert, and Target 2 controls."
+      : "The loaded trading-policy constants do not match the approved V1.9.1 operating rules.",
     remediation: policyMatchesLockedRules
       ? null
       : "Restore the reviewed TRADING_POLICY_V1 implementation and rerun verification.",

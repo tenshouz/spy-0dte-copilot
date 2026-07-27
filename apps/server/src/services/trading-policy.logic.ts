@@ -427,6 +427,7 @@ export type PositionManagementSignal =
   | "ABSOLUTE_EXIT_DEADLINE"
   | "MANDATORY_1555_EXIT"
   | "STRUCTURAL_STOP"
+  | "PREMIUM_LOSS_BACKSTOP"
   | "TARGET_2"
   | "TARGET_1_MANAGEMENT"
   | "TARGET_3_RESEARCH"
@@ -442,6 +443,9 @@ export function selectPositionManagementSignal(input: {
   target2Level: number;
   target3Level: number | null;
   timeStopReviewAtMs: number;
+  contractBid?: number | null;
+  actualEntryPrice?: number | null;
+  maximumPlannedLossDollars?: number | null;
 }): PositionManagementSignal {
   const clock = evaluateTradingClock(input.nowMs);
   if (clock.absoluteExitDeadlineReached) return "ABSOLUTE_EXIT_DEADLINE";
@@ -451,6 +455,22 @@ export function selectPositionManagementSignal(input: {
       ? input.underlyingPrice <= input.structuralStopLevel
       : input.underlyingPrice >= input.structuralStopLevel;
   if (stopHit) return "STRUCTURAL_STOP";
+  const premiumLossBackstopHit =
+    input.contractBid !== null &&
+    input.contractBid !== undefined &&
+    Number.isFinite(input.contractBid) &&
+    input.contractBid >= 0 &&
+    input.actualEntryPrice !== null &&
+    input.actualEntryPrice !== undefined &&
+    Number.isFinite(input.actualEntryPrice) &&
+    input.actualEntryPrice > 0 &&
+    input.maximumPlannedLossDollars !== null &&
+    input.maximumPlannedLossDollars !== undefined &&
+    Number.isFinite(input.maximumPlannedLossDollars) &&
+    input.maximumPlannedLossDollars > 0 &&
+    (input.actualEntryPrice - input.contractBid) * 100 >=
+      input.maximumPlannedLossDollars - 1e-9;
+  if (premiumLossBackstopHit) return "PREMIUM_LOSS_BACKSTOP";
   const target2Hit =
     input.direction === "CALLS"
       ? input.underlyingPrice >= input.target2Level

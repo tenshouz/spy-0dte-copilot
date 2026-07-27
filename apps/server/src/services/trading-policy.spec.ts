@@ -243,6 +243,38 @@ test("CPI/NFP/FOMC full-day and configurable windows fail closed at boundaries",
   assert.equal(evaluateTradingRestrictions([event], "2026-07-23", Date.parse(event.windowEndAt)).blocked, false);
 });
 
+test("$50 bid-side premium-loss backstop is a hard manual exit prompt", () => {
+  const base = {
+    nowMs: Date.parse("2026-07-23T14:10:00Z"),
+    direction: "CALLS" as const,
+    underlyingPrice: 500.5,
+    structuralStopLevel: 499,
+    target1Level: 501,
+    target2Level: 502,
+    target3Level: 503,
+    timeStopReviewAtMs: Date.parse("2026-07-23T14:15:00Z"),
+    actualEntryPrice: 1.4,
+    maximumPlannedLossDollars: 50,
+  };
+  assert.equal(
+    selectPositionManagementSignal({ ...base, contractBid: 0.9 }),
+    "PREMIUM_LOSS_BACKSTOP",
+  );
+  assert.equal(
+    selectPositionManagementSignal({ ...base, contractBid: 0.91 }),
+    "NONE",
+  );
+  assert.equal(
+    selectPositionManagementSignal({
+      ...base,
+      underlyingPrice: 498.9,
+      contractBid: 0.8,
+    }),
+    "STRUCTURAL_STOP",
+    "structural invalidation keeps priority over the premium backstop",
+  );
+});
+
 test("position-management priority is deterministic and T2 remains primary", () => {
   const base = {
     direction: "CALLS" as const,

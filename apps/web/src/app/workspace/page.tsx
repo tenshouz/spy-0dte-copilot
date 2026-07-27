@@ -376,6 +376,12 @@ export default function TradingWorkspacePage() {
                   <MetricCard label="Current bid reference" value={price(workspace.executionModel.currentExitBid)} />
                   <MetricCard label="Modeled net P&L" value={dollars(workspace.executionModel.modeledNetPnlDollarsPerContract)} tone={(workspace.executionModel.modeledNetPnlDollarsPerContract ?? 0) >= 0 ? "bull" : "bear"} />
                   <MetricCard label="Structural stop" value={price(workspace.openPosition.structuralStopLevel)} tone="bear" />
+                  <MetricCard
+                    label="$50 bid backstop"
+                    value={price(Math.max(0, workspace.openPosition.actualEntryPrice - 0.5))}
+                    tone="bear"
+                    sublabel="Actual entry minus $0.50"
+                  />
                   <MetricCard label="Target 1" value={price(workspace.openPosition.target1Level)} />
                   <MetricCard label="Target 2" value={price(workspace.openPosition.target2Level)} tone="bull" />
                   <MetricCard label="Time review" value={localTime(workspace.openPosition.timeStopReviewAt)} />
@@ -398,6 +404,7 @@ export default function TradingWorkspacePage() {
                     {[
                       "TARGET_2",
                       "STRUCTURAL_STOP",
+                      "PREMIUM_LOSS_BACKSTOP",
                       "TIME_STOP",
                       "MANDATORY_1555",
                       "ABSOLUTE_1600",

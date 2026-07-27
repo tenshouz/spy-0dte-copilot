@@ -1,4 +1,4 @@
-# SPY 0DTE Copilot Web — V1.9.0
+# SPY 0DTE Copilot Web — V1.9.1
 
 Next.js frontend for the local SPY 0DTE deterministic decision-support and paper-equivalent lifecycle platform.
 
@@ -7,9 +7,9 @@ The frontend validates backend responses with shared Zod schemas and does not ca
 ## Current feature surfaces
 
 - Dashboard and Market Data for live structure and source quality.
-- Trade Plan for the deterministic source thesis and strict effective-ATM contract result.
-- Trading Workspace for `TRADING_POLICY_V1`, risk ledger, setup registry, READY lifecycle, event restrictions, and manual paper-equivalent entry/exit recording.
-- System Readiness for V1.9.0 framework checks and the explicit quote/candles/options/Assembly/Workspace probe.
+- Trade Plan for the deterministic source thesis, bounded `CONTRACT_V3` candidates, planned-risk references, and per-candidate rejection diagnostics.
+- Trading Workspace for `TRADING_POLICY_V1`, risk ledger, setup registry, READY lifecycle, event restrictions, the manual $50 Bid-side premium-loss backstop, and manual paper-equivalent entry/exit recording.
+- System Readiness for V1.9.1 framework checks and the explicit quote/candles/options/Assembly/Workspace probe.
 - Guide for current policy, workflow, page descriptions, alert behavior, and glossary.
 - Journal, Replay, and Backtest for captured evidence and research.
 

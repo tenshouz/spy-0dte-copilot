@@ -1,5 +1,5 @@
 /**
- * V1.9.0 system-readiness, explicit data-probe, and HTTP-hardening tests.
+ * V1.9.1 system-readiness, explicit data-probe, and HTTP-hardening tests.
  * Run: npx --no-install tsx apps/server/src/services/system-readiness.spec.ts
  */
 import assert from "node:assert/strict";

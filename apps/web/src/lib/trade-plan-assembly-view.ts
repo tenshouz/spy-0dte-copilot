@@ -22,7 +22,7 @@ const STATE_COPY: Record<
   },
   NO_QUALIFIED_CONTRACT: {
     title: "No qualified contract",
-    description: "The underlying setup qualified, but no contract passed the current CONTRACT_V2 liquidity rules.",
+    description: "The underlying setup qualified, but no contract passed the current CONTRACT_V3 bounded liquidity, premium, and planned-risk rules.",
     tone: "wait",
   },
   NOT_QUALIFIED: {

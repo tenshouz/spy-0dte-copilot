@@ -14,7 +14,7 @@ import {
 import { buildSpyZeroDtePositionSizing } from "./trade-sizing.logic";
 
 export const SCHWAB_ASSISTED_SIZING_METHODOLOGY_VERSION =
-  "SCHWAB_ASSISTED_SIZING_V1" as const;
+  "SCHWAB_ASSISTED_SIZING_V2" as const;
 
 const DISCLOSURES = {
   callerSuppliedAccountEquity: true as const,
@@ -23,19 +23,21 @@ const DISCLOSURES = {
   brokerAvailableCashMayBeUsed: true as const,
   readOnlyBrokerAccess: true as const,
   currentAskIsNotGuaranteed: true as const,
-  fullPremiumLossAssumption: true as const,
+  plannedStructuralLossUsedForSizing: true as const,
+  fullPremiumLossAcknowledged: true as const,
+  hardLossBackstopReferenceOnly: true as const,
   quantityIsReferenceOnly: true as const,
   noOrderExecution: true as const,
   positionsRequested: false as const,
   ordersRequested: false as const,
   transactionsRequested: false as const,
   noPersistence: true as const,
-  noPremiumStop: true as const,
+  noAutomatedPremiumStop: true as const,
   noPremiumTarget: true as const,
 };
 
 const METHODOLOGY = {
-  sourceSizingMethodology: "SIZING_V1" as const,
+  sourceSizingMethodology: "SIZING_V2" as const,
   accountEquityMethod: "CALLER_SUPPLIED" as const,
   availableCashMethod:
     "SCHWAB_CURRENT_BALANCES_CASH_AVAILABLE_FOR_TRADING" as const,
@@ -43,7 +45,9 @@ const METHODOLOGY = {
   remainingPortfolioRiskBudgetMethod: "CALLER_SUPPLIED" as const,
   assemblyFirstShortCircuit: true as const,
   sizingPremiumReference: "CURRENT_ASK" as const,
-  maximumLossMethod: "FULL_PREMIUM_DEBIT_REFERENCE" as const,
+  maximumLossMethod: "PLANNED_STRUCTURAL_LOSS_REFERENCE" as const,
+  catastrophicCapitalExposureMethod: "FULL_PREMIUM_DEBIT_REFERENCE" as const,
+  hardLossBackstopMethod: "FIXED_DOLLAR_LOSS_FROM_ACTUAL_ENTRY" as const,
   effectiveRiskBudgetMethod: "MINIMUM_OF_EXPLICIT_RISK_LIMITS" as const,
   effectiveCapitalBudgetMethod:
     "MINIMUM_OF_SCHWAB_AVAILABLE_CASH_AND_ALLOCATION_LIMIT" as const,
@@ -59,7 +63,10 @@ const EMPTY_PREMIUM_REFERENCE = {
   multiplier: null,
   premiumDebitReferencePerContractDollars: null,
   fullPremiumLossReferencePerContractDollars: null,
-  disclosureCode: "CURRENT_ASK_FULL_PREMIUM_LOSS_REFERENCE_ONLY" as const,
+  plannedStructuralLossReferencePerContractDollars: null,
+  hardLossBackstopDollars: null,
+  hardLossBackstopExitPremium: null,
+  disclosureCode: "CURRENT_ASK_CAPITAL_AND_STRUCTURAL_RISK_REFERENCE" as const,
 };
 
 const EMPTY_BUDGETS = {
@@ -72,6 +79,7 @@ const EMPTY_BUDGETS = {
 const EMPTY_POSITION_REFERENCES = {
   totalPremiumDebitReferenceDollars: null,
   totalFullPremiumLossReferenceDollars: null,
+  totalPlannedStructuralLossReferenceDollars: null,
   riskPercentOfAccountEquity: null,
   capitalPercentOfAccountEquity: null,
 };
@@ -129,6 +137,10 @@ function sanitizedSelectedContract(assembly: SpyZeroDteTradePlanAssemblyResponse
         : null,
     quoteFreshnessState: contract.quoteFreshnessState,
     selectionRank: contract.selectionRank,
+    estimatedPlannedStructuralLossDollars:
+      contract.estimatedPlannedStructuralLossDollars ?? null,
+    hardLossBackstopDollars: contract.hardLossBackstopDollars ?? null,
+    hardLossBackstopExitPremium: contract.hardLossBackstopExitPremium ?? null,
   };
 }
 
@@ -381,7 +393,7 @@ function brokerFailureMapping(snapshot: SchwabReadOnlyAccountRiskSnapshotRespons
 /**
  * Pure broker-assisted sizing composition. The broker snapshot is never used
  * for account equity, daily-loss, or portfolio-risk values. Only the approved
- * CASH available-cash field may enter SIZING_V1.
+ * CASH available-cash field may enter SIZING_V2.
  */
 export function buildSpyZeroDteSchwabAssistedPositionSizing(
   request: SpyZeroDteSchwabAssistedPositionSizingRequest,
@@ -515,8 +527,8 @@ export function getLastResortSpyZeroDteSchwabAssistedPositionSizing(
   );
 }
 
-// Compile-time checks that existing SIZING_V1 reason/warning values remain
-// admissible in the broker-assisted wrapper without changing SIZING_V1.
+// Compile-time checks that SIZING_V2 reason/warning values remain
+// admissible in the broker-assisted wrapper without changing SIZING_V2.
 const _reasonCompatibility: SchwabAssistedPositionSizingPrimaryReasonCode =
   "POSITION_SIZE_CALCULATED" satisfies PositionSizingPrimaryReasonCode;
 const _warningCompatibility: SchwabAssistedPositionSizingWarningCode =

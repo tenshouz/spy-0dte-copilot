@@ -196,7 +196,7 @@ function buildNoContractCandidate(
     category: "NO_QUALIFIED_CONTRACT",
     severity: "WARNING",
     title: `Qualified ${assembly.direction} structure has no eligible contract`,
-    message: `The underlying ${assembly.direction} structure passed deterministic risk qualification, but CONTRACT_V2 did not select a fresh, liquid, delta-qualified contract with acceptable estimated option reward/risk. ${confidenceContext(assembly)} No sizing or order action applies.`,
+    message: `The underlying ${assembly.direction} structure passed deterministic risk qualification, but CONTRACT_V3 did not select a fresh bounded-window contract that passed execution quality, premium, planned structural loss, delta, liquidity, and option reward/risk checks. ${confidenceContext(assembly)} No sizing or order action applies.`,
     direction: assembly.direction,
     currentPrice: assembly.entryCondition.currentPrice,
     planningReferenceType: assembly.entryCondition.planningReferenceType,

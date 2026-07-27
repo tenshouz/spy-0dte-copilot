@@ -43,17 +43,26 @@ function readyBundle(policyCompliant = true) {
     chain,
     V140_CONTRACT_EVAL_MS,
   );
-  return {
+  const assembly = buildSpyZeroDteTradePlanAssembly(
     marketState,
-    assembly: buildSpyZeroDteTradePlanAssembly(
-      marketState,
-      bias,
-      tradePlan,
-      risk,
-      contract,
-      V140_CONTRACT_EVAL_MS,
-    ),
-  };
+    bias,
+    tradePlan,
+    risk,
+    contract,
+    V140_CONTRACT_EVAL_MS,
+  );
+
+  if (!policyCompliant) {
+    // Deliberately tamper an otherwise READY assembly so this test verifies
+    // the setup-registry policy gate independently of CONTRACT_V3.
+    assembly.selectedContract.ask = 1.75;
+    if (assembly.optionRiskReward) {
+      assembly.optionRiskReward.estimatedPremiumRiskPerShare = 0.75;
+      assembly.optionRiskReward.estimatedPlannedStructuralLossDollars = 75;
+    }
+  }
+
+  return { marketState, assembly };
 }
 
 test("registry has exactly the approved 14 unique setup families", () => {
@@ -99,7 +108,7 @@ test("READY legacy assembly creates one live strict-effective-ATM candidate and 
   assert.ok(candidates.filter((row) => row.promotionStatus === "SHADOW").every((row) => !row.liveEligible && row.selectedContractSymbol === null));
 });
 
-test("READY legacy assembly that exceeds locked premium or planned-risk limits cannot create a live opportunity", () => {
+test("tampered READY legacy assembly that exceeds locked premium and planned-risk limits cannot create a live opportunity", () => {
   const { marketState, assembly } = readyBundle(false);
   assert.equal(assembly.planState, "READY");
   const legacy = buildTradingOpportunityCandidates(marketState, assembly).find(

@@ -74,7 +74,7 @@ export function SchwabAssistedSizingPanel({
           <div className="space-y-1">
             <p className="font-medium">Available cash may come from Schwab only after an explicit calculation.</p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Account equity and risk budgets remain caller supplied. Nothing is saved, and no positions, orders, or transactions are requested.
+              Account equity and risk budgets remain caller supplied. Risk capacity uses the modeled structural-invalidation loss; capital capacity uses the full Ask debit. Nothing is saved, and no positions, orders, or transactions are requested.
             </p>
           </div>
         </div>
@@ -280,11 +280,27 @@ function SizingResult({
           sublabel="Not a guaranteed fill"
         />
         <MetricCard
-          label="Full-Premium Loss / Contract"
+          label="Planned Structural Loss / Contract"
+          value={formatNullablePrice(
+            result.premiumRiskReference.plannedStructuralLossReferencePerContractDollars,
+          )}
+          sublabel="Used for risk capacity"
+          tone="bear"
+        />
+        <MetricCard
+          label="Full Premium Exposure / Contract"
           value={formatNullablePrice(
             result.premiumRiskReference.fullPremiumLossReferencePerContractDollars,
           )}
-          sublabel="Reference assumption"
+          sublabel="Catastrophic capital exposure"
+        />
+        <MetricCard
+          label="$50 Bid Backstop"
+          value={formatNullablePrice(
+            result.premiumRiskReference.hardLossBackstopExitPremium,
+          )}
+          sublabel="Manual exit reference; no automated order"
+          tone="bear"
         />
         <MetricCard
           label="Schwab Available Cash"
@@ -309,11 +325,26 @@ function SizingResult({
           sublabel="Reference only"
         />
         <MetricCard
+          label="Total Planned Structural Risk"
+          value={formatNullablePrice(
+            result.positionReferences.totalPlannedStructuralLossReferenceDollars,
+          )}
+          sublabel="Quantity × modeled structural loss"
+          tone="bear"
+        />
+        <MetricCard
           label="Account Equity Risk Reference"
           value={formatNullablePercent(
             result.positionReferences.riskPercentOfAccountEquity,
           )}
-          sublabel="Based on caller-supplied equity"
+          sublabel="Planned structural risk / caller equity"
+        />
+        <MetricCard
+          label="Account Equity Capital Reference"
+          value={formatNullablePercent(
+            result.positionReferences.capitalPercentOfAccountEquity,
+          )}
+          sublabel="Full premium debit / caller equity"
         />
       </div>
 
@@ -361,6 +392,8 @@ function SizingResult({
               ["Expiration", result.selectedContract.expirationDate ?? "—"],
               ["Quote freshness", result.selectedContract.quoteFreshnessState ?? "—"],
               ["Quote time", formatNullableTimestamp(result.selectedContract.quoteAt)],
+              ["Planned structural loss", formatNullablePrice(result.selectedContract.estimatedPlannedStructuralLossDollars)],
+              ["Hard-loss bid backstop", formatNullablePrice(result.selectedContract.hardLossBackstopExitPremium)],
             ]}
           />
         </div>
@@ -368,7 +401,7 @@ function SizingResult({
 
       <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-        Quantity is a deterministic reference only. Revalidate the current ask before any independently entered order. This dashboard does not create, preview, or transmit orders.
+        Quantity is a deterministic reference only. The full premium remains possible catastrophic loss, while risk sizing uses the conservative modeled loss at SPY structural invalidation. Revalidate the current ask before any independently entered order. The $50 bid backstop is a manual alert reference; this dashboard does not create, preview, or transmit orders.
       </p>
     </div>
   );

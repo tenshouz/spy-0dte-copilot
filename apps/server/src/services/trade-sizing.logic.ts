@@ -11,23 +11,27 @@ import {
   type SpyZeroDteTradePlanAssemblyResponse,
 } from "@spy-copilot/shared";
 
-export const SIZING_METHODOLOGY_VERSION = "SIZING_V1" as const;
+export const SIZING_METHODOLOGY_VERSION = "SIZING_V2" as const;
 
 const DISCLOSURES = {
   callerSuppliedAccountSnapshot: true as const,
   currentAskIsNotGuaranteed: true as const,
-  fullPremiumLossAssumption: true as const,
+  plannedStructuralLossUsedForSizing: true as const,
+  fullPremiumLossAcknowledged: true as const,
+  hardLossBackstopReferenceOnly: true as const,
   quantityIsReferenceOnly: true as const,
   noOrderExecution: true as const,
   noBrokerAccountAccess: true as const,
   noPersistence: true as const,
-  noPremiumStop: true as const,
+  noAutomatedPremiumStop: true as const,
   noPremiumTarget: true as const,
 };
 
 const METHODOLOGY = {
   sizingPremiumReference: "CURRENT_ASK" as const,
-  maximumLossMethod: "FULL_PREMIUM_DEBIT_REFERENCE" as const,
+  maximumLossMethod: "PLANNED_STRUCTURAL_LOSS_REFERENCE" as const,
+  catastrophicCapitalExposureMethod: "FULL_PREMIUM_DEBIT_REFERENCE" as const,
+  hardLossBackstopMethod: "FIXED_DOLLAR_LOSS_FROM_ACTUAL_ENTRY" as const,
   effectiveRiskBudgetMethod: "MINIMUM_OF_EXPLICIT_RISK_LIMITS" as const,
   effectiveCapitalBudgetMethod:
     "MINIMUM_OF_AVAILABLE_CASH_AND_ALLOCATION_LIMIT" as const,
@@ -49,6 +53,9 @@ const EMPTY_SELECTED_CONTRACT = {
   quoteAgeMilliseconds: null,
   quoteFreshnessState: null,
   selectionRank: null,
+  estimatedPlannedStructuralLossDollars: null,
+  hardLossBackstopDollars: null,
+  hardLossBackstopExitPremium: null,
 } as const;
 
 const EMPTY_PREMIUM_REFERENCE = {
@@ -57,7 +64,10 @@ const EMPTY_PREMIUM_REFERENCE = {
   multiplier: null,
   premiumDebitReferencePerContractDollars: null,
   fullPremiumLossReferencePerContractDollars: null,
-  disclosureCode: "CURRENT_ASK_FULL_PREMIUM_LOSS_REFERENCE_ONLY" as const,
+  plannedStructuralLossReferencePerContractDollars: null,
+  hardLossBackstopDollars: null,
+  hardLossBackstopExitPremium: null,
+  disclosureCode: "CURRENT_ASK_CAPITAL_AND_STRUCTURAL_RISK_REFERENCE" as const,
 };
 
 const EMPTY_BUDGETS = {
@@ -70,6 +80,7 @@ const EMPTY_BUDGETS = {
 const EMPTY_POSITION_REFERENCES = {
   totalPremiumDebitReferenceDollars: null,
   totalFullPremiumLossReferenceDollars: null,
+  totalPlannedStructuralLossReferenceDollars: null,
   riskPercentOfAccountEquity: null,
   capitalPercentOfAccountEquity: null,
 };
@@ -224,6 +235,10 @@ function sanitizedSelectedContract(assembly: SpyZeroDteTradePlanAssemblyResponse
         : null,
     quoteFreshnessState: contract.quoteFreshnessState,
     selectionRank: contract.selectionRank,
+    estimatedPlannedStructuralLossDollars:
+      contract.estimatedPlannedStructuralLossDollars ?? null,
+    hardLossBackstopDollars: contract.hardLossBackstopDollars ?? null,
+    hardLossBackstopExitPremium: contract.hardLossBackstopExitPremium ?? null,
   };
 }
 
@@ -316,9 +331,11 @@ function nonApplicableResponse(
 }
 
 /**
- * Pure SIZING_V1 calculator. It uses only one validated supported Assembly response
- * and the explicit caller-supplied policy snapshot. No provider, route,
- * database, persistence, midpoint, bid, mark, or option-pricing model is used.
+ * Pure SIZING_V2 calculator. It uses the selected contract Ask for capital
+ * exposure and the modeled structural invalidation loss for risk capacity. It
+ * preserves the full debit as catastrophic exposure rather than sizing risk.
+ * The caller supplies explicit account and policy limits. No provider, route,
+ * database, persistence, midpoint, bid, mark, or new pricing model is invoked.
  */
 export function buildSpyZeroDtePositionSizing(
   request: SpyZeroDtePositionSizingRequest,
@@ -464,6 +481,30 @@ export function buildSpyZeroDtePositionSizing(
     );
   }
 
+  const plannedStructuralLossReferencePerContractDollars =
+    contract.estimatedPlannedStructuralLossDollars;
+  const hardLossBackstopDollars = contract.hardLossBackstopDollars;
+  const hardLossBackstopExitPremium = contract.hardLossBackstopExitPremium;
+  if (
+    typeof plannedStructuralLossReferencePerContractDollars !== "number" ||
+    !Number.isFinite(plannedStructuralLossReferencePerContractDollars) ||
+    plannedStructuralLossReferencePerContractDollars <= 0 ||
+    typeof hardLossBackstopDollars !== "number" ||
+    !Number.isFinite(hardLossBackstopDollars) ||
+    hardLossBackstopDollars <= 0 ||
+    typeof hardLossBackstopExitPremium !== "number" ||
+    !Number.isFinite(hardLossBackstopExitPremium) ||
+    hardLossBackstopExitPremium < 0
+  ) {
+    return unavailableResponse(
+      request,
+      assembly,
+      calculatedAt,
+      "SOURCE_PLANNED_STRUCTURAL_LOSS_INVALID",
+      "SELECTED_CONTRACT_PLANNED_RISK_UNAVAILABLE",
+    );
+  }
+
   const premiumDebitReferencePerContractDollars = contract.ask * contract.multiplier;
   if (
     !Number.isFinite(premiumDebitReferencePerContractDollars) ||
@@ -482,7 +523,7 @@ export function buildSpyZeroDtePositionSizing(
   const capitalBudget = calculateEffectiveCapitalBudget(request);
   const contractsPermittedByRisk = Math.floor(
     riskBudget.effectiveRiskBudgetDollars /
-      premiumDebitReferencePerContractDollars,
+      plannedStructuralLossReferencePerContractDollars,
   );
   const contractsPermittedByCapital = Math.floor(
     capitalBudget.effectiveCapitalBudgetDollars /
@@ -536,13 +577,21 @@ export function buildSpyZeroDtePositionSizing(
 
   const totalPremiumDebitReferenceDollars =
     maximumContractsUnderPolicy * premiumDebitReferencePerContractDollars;
+  const totalPlannedStructuralLossReferenceDollars =
+    maximumContractsUnderPolicy * plannedStructuralLossReferencePerContractDollars;
   const riskPercentOfAccountEquity =
+    (totalPlannedStructuralLossReferenceDollars /
+      request.accountSnapshot.accountEquityDollars) *
+    100;
+  const capitalPercentOfAccountEquity =
     (totalPremiumDebitReferenceDollars /
       request.accountSnapshot.accountEquityDollars) *
     100;
   if (
     !Number.isFinite(totalPremiumDebitReferenceDollars) ||
-    !Number.isFinite(riskPercentOfAccountEquity)
+    !Number.isFinite(totalPlannedStructuralLossReferenceDollars) ||
+    !Number.isFinite(riskPercentOfAccountEquity) ||
+    !Number.isFinite(capitalPercentOfAccountEquity)
   ) {
     return unavailableResponse(
       request,
@@ -571,6 +620,10 @@ export function buildSpyZeroDtePositionSizing(
       quoteAgeMilliseconds: contract.quoteAgeMilliseconds,
       quoteFreshnessState: contract.quoteFreshnessState,
       selectionRank: contract.selectionRank,
+      estimatedPlannedStructuralLossDollars:
+        plannedStructuralLossReferencePerContractDollars,
+      hardLossBackstopDollars,
+      hardLossBackstopExitPremium,
     },
     premiumRiskReference: {
       premiumPriceReferenceType: "CURRENT_ASK",
@@ -579,7 +632,10 @@ export function buildSpyZeroDtePositionSizing(
       premiumDebitReferencePerContractDollars,
       fullPremiumLossReferencePerContractDollars:
         premiumDebitReferencePerContractDollars,
-      disclosureCode: "CURRENT_ASK_FULL_PREMIUM_LOSS_REFERENCE_ONLY",
+      plannedStructuralLossReferencePerContractDollars,
+      hardLossBackstopDollars,
+      hardLossBackstopExitPremium,
+      disclosureCode: "CURRENT_ASK_CAPITAL_AND_STRUCTURAL_RISK_REFERENCE",
     },
     budgets: {
       effectiveRiskBudgetDollars: riskBudget.effectiveRiskBudgetDollars,
@@ -601,8 +657,9 @@ export function buildSpyZeroDtePositionSizing(
       totalPremiumDebitReferenceDollars,
       totalFullPremiumLossReferenceDollars:
         totalPremiumDebitReferenceDollars,
+      totalPlannedStructuralLossReferenceDollars,
       riskPercentOfAccountEquity,
-      capitalPercentOfAccountEquity: riskPercentOfAccountEquity,
+      capitalPercentOfAccountEquity,
     },
     revalidation: {
       required: sizingState === "SIZED" || sizingState === "NO_CAPACITY",

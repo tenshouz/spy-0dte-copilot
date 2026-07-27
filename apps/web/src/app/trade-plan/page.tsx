@@ -43,7 +43,7 @@ export default function TradePlanPage() {
     <div className="mx-auto max-w-[1600px] min-w-0">
       <PageHeader
         title="Trade Plan"
-        description="Deterministic source structure with research-only GEX/DEX context, strict effective-ATM contract qualification, and read-only sizing references. Trading Workspace applies the V1.9 policy; no order or guaranteed fill."
+        description="Deterministic source structure with research-only GEX/DEX context, bounded three-strike contract qualification, planned structural-risk sizing, and a manual $50 option-loss backstop. Trading Workspace applies policy; no order or guaranteed fill."
         action={
           plan && view ? (
             <Badge variant={badgeVariant(view.tone)}>{plan.planState.replaceAll("_", " ")}</Badge>
@@ -257,6 +257,7 @@ export default function TradePlanPage() {
                 />
                 <MetricCard label="Direction" value={plan.selectedContract.contractDirection ?? "—"} tone={directionTone(plan.direction)} />
                 <MetricCard label="Moneyness" value={plan.selectedContract.moneyness ?? "—"} />
+                <MetricCard label="Candidate Role" value={plan.selectedContract.candidateWindowRole?.replaceAll("_", " ") ?? "—"} />
                 <MetricCard label="Strike" value={formatNullablePrice(plan.selectedContract.strikePrice)} />
                 <MetricCard label="Expiration" value={plan.selectedContract.expirationDate ?? "—"} />
                 <MetricCard label="Bid" value={formatNullablePrice(plan.selectedContract.bid)} />
@@ -267,6 +268,10 @@ export default function TradePlanPage() {
                   sublabel="Reference only — no fill is guaranteed"
                 />
                 <MetricCard label="Spread" value={formatNullablePercent(plan.selectedContract.spreadPercent)} />
+                <MetricCard label="Estimated Spread Cost" value={formatNullablePrice((plan.selectedContract.estimatedExecutionCostDollars ?? null))} sublabel="Dollar reference per contract" />
+                <MetricCard label="Premium Debit" value={formatNullablePrice(plan.optionRiskReward?.premiumDebitDollars ?? null)} sublabel="Capital committed; maximum $150" />
+                <MetricCard label="Planned Structural Loss" value={formatNullablePrice(plan.optionRiskReward?.estimatedPlannedStructuralLossDollars ?? null)} sublabel="Used for risk sizing; maximum $50" />
+                <MetricCard label="$50 Bid Backstop" value={formatNullablePrice(plan.optionRiskReward?.hardLossBackstopExitPremium ?? null)} sublabel="Manual exit reference from planned Ask" tone="bear" />
                 <MetricCard label="Quote Freshness" value={plan.selectedContract.quoteFreshnessState ?? "—"} />
                 <MetricCard label="Quote Time" value={formatNullableTimestamp(plan.selectedContract.quoteAt)} />
                 <MetricCard label="Open Interest" value={formatNullableNumber(plan.selectedContract.openInterest, 0)} />
@@ -280,6 +285,55 @@ export default function TradePlanPage() {
                 <MetricCard label="Estimated Stop Premium" value={formatNullablePrice(plan.optionRiskReward?.estimatedInvalidationExitPremium ?? null)} sublabel="Not a guaranteed fill" />
                 <MetricCard label="Estimated Objective Premium" value={formatNullablePrice(plan.optionRiskReward?.estimatedObjectiveExitPremium ?? null)} sublabel="Not a guaranteed fill" />
               </div>
+            </Panel>
+          ) : null}
+
+          {plan.planState === "NO_QUALIFIED_CONTRACT" &&
+          (plan.sourceSummary.contract.candidateDiagnostics?.length ?? 0) > 0 ? (
+            <Panel title="Contract Rejection Diagnostics" className="min-w-0 lg:col-span-3">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left text-xs">
+                  <thead className="border-b border-panel-border text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-2">Role</th>
+                      <th className="px-2 py-2">Strike</th>
+                      <th className="px-2 py-2">Bid / Ask</th>
+                      <th className="px-2 py-2">Spread</th>
+                      <th className="px-2 py-2">Delta</th>
+                      <th className="px-2 py-2">Debit</th>
+                      <th className="px-2 py-2">Planned loss</th>
+                      <th className="px-2 py-2">Premium R:R</th>
+                      <th className="px-2 py-2">Decision</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.sourceSummary.contract.candidateDiagnostics?.map((candidate) => (
+                      <tr key={candidate.contractSymbol} className="border-b border-panel-border/60 align-top">
+                        <td className="px-2 py-2 font-mono">{candidate.candidateWindowRole.replaceAll("_", " ")}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullablePrice(candidate.strikePrice)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullablePrice(candidate.bid)} / {formatNullablePrice(candidate.ask)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullablePercent(candidate.spreadPercent)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullableNumber(candidate.delta, 3)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullablePrice(candidate.premiumDebitDollars)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullablePrice(candidate.estimatedPlannedStructuralLossDollars)}</td>
+                        <td className="px-2 py-2 font-mono">{formatNullableNumber(candidate.estimatedPremiumRewardRiskRatio, 2)}</td>
+                        <td className="max-w-[360px] px-2 py-2">
+                          {candidate.selectable ? (
+                            <Badge variant="bull">SELECTABLE</Badge>
+                          ) : (
+                            <span className="break-words text-bear">
+                              {candidate.rejectionReasonCodes.map((reason) => reason.replaceAll("_", " ")).join("; ") || "Rejected"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                CONTRACT_V3 evaluates only the effective ATM strike and the immediately adjacent returned strike on each side. It never searches progressively farther strikes to force an affordable trade.
+              </p>
             </Panel>
           ) : null}
 
@@ -328,7 +382,7 @@ export default function TradePlanPage() {
               <p>{view.description}</p>
               {plan.planState === "NO_QUALIFIED_CONTRACT" ? (
                 <p className="text-muted-foreground">
-                  The underlying setup remains structurally qualified, but no fallback contract or manual override is supplied.
+                  The underlying setup remains structurally qualified, but none of the bounded ATM-plus-adjacent candidates passed premium, planned-loss, freshness, spread, liquidity, delta, and option-economics gates. Review the exact rejection table rather than substituting an arbitrary farther strike.
                 </p>
               ) : null}
               {plan.planState === "WAITING_FOR_TRIGGER" ? (
@@ -337,7 +391,7 @@ export default function TradePlanPage() {
                 </p>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                This page displays deterministic state and references. Position sizing requires explicit caller inputs and remains reference-only; no order, premium target, or premium stop is generated.
+                This page displays deterministic state and references. Sizing uses modeled loss at SPY structural invalidation, while the full debit remains acknowledged catastrophic exposure. During an open paper-equivalent position, the primary SPY invalidation and the $50 executable-bid loss backstop are manual exit prompts; no order is generated.
               </p>
             </div>
           </Panel>
@@ -349,6 +403,10 @@ export default function TradePlanPage() {
               <Disclosure text="Underlying objective reference only" />
               <Disclosure text="GEX/DEX exposure adjusts confidence only and cannot create a direction or block eligibility" />
               <Disclosure text="Exposure data is returned-window analytical context, not observed dealer inventory" />
+              <Disclosure text="CONTRACT_V3 evaluates only ATM plus one adjacent strike on each side" />
+              <Disclosure text="Premium debit is capital exposure; modeled structural loss is the sizing risk" />
+              <Disclosure text="Full premium remains possible catastrophic loss under gaps or execution failure" />
+              <Disclosure text="$50 option-loss backstop is a manual bid-side exit prompt, not an automated stop" />
               <Disclosure text="Midpoint reference only" />
               <Disclosure text="No order is generated" />
               <Disclosure text="Sizing quantity is reference only" />

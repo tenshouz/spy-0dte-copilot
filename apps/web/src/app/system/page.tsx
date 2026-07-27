@@ -8,7 +8,7 @@ export default function SystemPage() {
     <div className="space-y-4">
       <PageHeader
         title="System Readiness"
-        description="V1.9.0 configuration, persistence, locked-policy, setup-registry, Trading Workspace runtime, security, and explicit end-to-end data status."
+        description="V1.9.1 configuration, persistence, locked-policy, setup-registry, Trading Workspace runtime, security, and explicit end-to-end data status."
       />
       <SystemReadinessPanel />
     </div>

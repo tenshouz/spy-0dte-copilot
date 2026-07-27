@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for SCHWAB_ASSISTED_SIZING_V1.
+ * Deterministic tests for SCHWAB_ASSISTED_SIZING_V2 planned structural risk.
  * Run: npx --no-install tsx apps/server/src/services/trade-sizing-schwab.spec.ts
  */
 import assert from "node:assert/strict";
@@ -42,14 +42,14 @@ function request(
 ): SpyZeroDteSchwabAssistedPositionSizingRequest {
   const base: SpyZeroDteSchwabAssistedPositionSizingRequest = {
     callerRiskInputs: {
-      accountEquityDollars: 25_000,
-      remainingDailyLossBudgetDollars: 1_000,
-      remainingPortfolioRiskBudgetDollars: 1_500,
+      accountEquityDollars: 1_000,
+      remainingDailyLossBudgetDollars: 150,
+      remainingPortfolioRiskBudgetDollars: 150,
     },
     riskPolicy: {
-      maximumRiskPerTradeDollars: 800,
-      maximumCapitalAllocationDollars: 3_000,
-      maximumContracts: 10,
+      maximumRiskPerTradeDollars: 50,
+      maximumCapitalAllocationDollars: 150,
+      maximumContracts: 1,
     },
   };
   return {
@@ -69,7 +69,7 @@ function readyAssembly(
 ): SpyZeroDteTradePlanAssemblyResponse {
   const base = {
     product: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
-    methodologyVersion: "ASSEMBLY_V1",
+    methodologyVersion: "ASSEMBLY_V2",
     currentMarketDate: MARKET_DATE,
     calculatedAt: ASSEMBLY_AT,
     engineState: "AVAILABLE",
@@ -88,24 +88,27 @@ function readyAssembly(
     },
     premiumReference: {
       type: "CALCULATED_BID_ASK_MIDPOINT",
-      value: 2.45,
+      value: 1.35,
       disclosureCode: "MIDPOINT_REFERENCE_ONLY",
     },
     selectedContract: {
-      candidateId: "SPY_CALL_750",
-      contractSymbol: "SPY   260717C00750000",
+      candidateId: "SPY_CALL_758",
+      contractSymbol: "SPY   260717C00758000",
       contractDirection: "CALL",
-      strikePrice: 750,
+      strikePrice: 758,
       expirationDate: MARKET_DATE,
       multiplier: 100,
-      ask: 2.5,
-      bid: 2.4,
-      calculatedMidpoint: 2.45,
-      providerMark: 2.46,
+      ask: 1.4,
+      bid: 1.3,
+      calculatedMidpoint: 1.35,
+      providerMark: 1.35,
       quoteAt: QUOTE_AT,
       quoteAgeMilliseconds: 5_000,
       quoteFreshnessState: "FRESH",
       selectionRank: 1,
+      estimatedPlannedStructuralLossDollars: 45,
+      hardLossBackstopDollars: 50,
+      hardLossBackstopExitPremium: 0.9,
     },
   };
   return structuredClone({ ...base, ...overrides }) as unknown as SpyZeroDteTradePlanAssemblyResponse;
@@ -145,6 +148,9 @@ function nonReadyAssembly(
       quoteAgeMilliseconds: null,
       quoteFreshnessState: null,
       selectionRank: null,
+      estimatedPlannedStructuralLossDollars: null,
+      hardLossBackstopDollars: null,
+      hardLossBackstopExitPremium: null,
     },
   });
 }
@@ -167,7 +173,7 @@ function accountSnapshot(
     },
     balances: {
       accountEquityDollars: null,
-      availableCashDollars: 5_000,
+      availableCashDollars: 1_000,
       currency: "USD",
       equitySourceField: null,
       availableCashSourceField:
@@ -322,7 +328,7 @@ function marginSnapshot(): SchwabReadOnlyAccountRiskSnapshotResponse {
       accountType: "MARGIN",
     },
     balances: {
-      accountEquityDollars: 25_000,
+      accountEquityDollars: 1_000,
       availableCashDollars: null,
       currency: "USD",
       equitySourceField: "securitiesAccount.currentBalances.equity",
@@ -374,7 +380,7 @@ function assertNoPrivateFields(value: unknown): void {
 test("methodology version is locked", () => {
   assert.equal(
     SCHWAB_ASSISTED_SIZING_METHODOLOGY_VERSION,
-    "SCHWAB_ASSISTED_SIZING_V1",
+    "SCHWAB_ASSISTED_SIZING_V2",
   );
 });
 
@@ -382,7 +388,7 @@ test("strict request parses", () => {
   assert.equal(
     SpyZeroDteSchwabAssistedPositionSizingRequestSchema.parse(request())
       .riskPolicy.maximumContracts,
-    10,
+    1,
   );
 });
 
@@ -439,25 +445,44 @@ test("ready CASH snapshot produces SIZED using broker cash", () => {
   assert.equal(result.engineState, "AVAILABLE");
   assert.equal(result.sizingState, "SIZED");
   assert.equal(result.primaryReasonCode, "POSITION_SIZE_CALCULATED");
-  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 3);
-  assert.equal(result.accountContext.availableCashDollars, 5_000);
+  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 1);
+  assert.equal(result.accountContext.availableCashDollars, 1_000);
   assert.equal(
     result.accountContext.availableCashSource,
     "SCHWAB_CASH_AVAILABLE_FOR_TRADING",
   );
   assert.equal(result.accountContext.brokerSnapshot.usedForSizing, true);
+  assert.equal(result.premiumRiskReference.premiumDebitReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.plannedStructuralLossReferencePerContractDollars, 45);
+  assert.equal(result.premiumRiskReference.hardLossBackstopDollars, 50);
+  assert.equal(result.premiumRiskReference.hardLossBackstopExitPremium, 0.9);
+  assert.equal(result.positionReferences.totalPlannedStructuralLossReferenceDollars, 45);
 });
 
 test("broker cash is the capital budget input", () => {
-  const result = calculate(request(), readyAssembly(), accountSnapshot({
-    balances: {
-      ...accountSnapshot().balances,
-      availableCashDollars: 600,
-    },
-  }));
+  const result = calculate(
+    request({
+      callerRiskInputs: {
+        remainingDailyLossBudgetDollars: 500,
+        remainingPortfolioRiskBudgetDollars: 500,
+      } as never,
+      riskPolicy: {
+        maximumRiskPerTradeDollars: 500,
+        maximumCapitalAllocationDollars: 1_000,
+        maximumContracts: 10,
+      } as never,
+    }),
+    readyAssembly(),
+    accountSnapshot({
+      balances: {
+        ...accountSnapshot().balances,
+        availableCashDollars: 600,
+      },
+    }),
+  );
   assert.equal(result.budgets.effectiveCapitalBudgetDollars, 600);
   assert.deepEqual(result.budgets.limitingCapitalControls, ["AVAILABLE_CASH"]);
-  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 2);
+  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 4);
 });
 
 test("zero broker cash is preserved and blocks sizing", () => {
@@ -476,7 +501,7 @@ test("cash below one contract produces NO_CAPACITY", () => {
   const result = calculate(request(), readyAssembly(), accountSnapshot({
     balances: {
       ...accountSnapshot().balances,
-      availableCashDollars: 200,
+      availableCashDollars: 139,
     },
   }));
   assert.equal(result.sizingState, "NO_CAPACITY");
@@ -485,9 +510,9 @@ test("cash below one contract produces NO_CAPACITY", () => {
 
 test("caller equity is retained only as caller-supplied context", () => {
   const result = calculate();
-  assert.equal(result.accountContext.accountEquityDollars, 25_000);
+  assert.equal(result.accountContext.accountEquityDollars, 1_000);
   assert.equal(result.accountContext.accountEquitySource, "CALLER_SUPPLIED");
-  assert.equal(result.positionReferences.riskPercentOfAccountEquity, 3);
+  assert.equal(result.positionReferences.riskPercentOfAccountEquity, 4.5);
 });
 
 test("caller daily and portfolio budgets remain explicit", () => {
@@ -497,6 +522,7 @@ test("caller daily and portfolio budgets remain explicit", () => {
         remainingDailyLossBudgetDollars: 300,
         remainingPortfolioRiskBudgetDollars: 400,
       } as never,
+      riskPolicy: { maximumRiskPerTradeDollars: 500 } as never,
     }),
   );
   assert.equal(result.budgets.effectiveRiskBudgetDollars, 300);
@@ -506,7 +532,19 @@ test("caller daily and portfolio budgets remain explicit", () => {
 });
 
 test("maximumContracts policy still limits quantity", () => {
-  const result = calculate(request({ riskPolicy: { maximumContracts: 1 } as never }));
+  const result = calculate(
+    request({
+      callerRiskInputs: {
+        remainingDailyLossBudgetDollars: 500,
+        remainingPortfolioRiskBudgetDollars: 500,
+      } as never,
+      riskPolicy: {
+        maximumRiskPerTradeDollars: 500,
+        maximumCapitalAllocationDollars: 1_000,
+        maximumContracts: 1,
+      } as never,
+    }),
+  );
   assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 1);
   assert.deepEqual(result.quantityCalculation.limitingQuantityControls, [
     "MAXIMUM_CONTRACTS",
@@ -618,11 +656,15 @@ test("response disclosures lock read-only behavior", () => {
   assert.equal(result.disclosures.ordersRequested, false);
   assert.equal(result.disclosures.transactionsRequested, false);
   assert.equal(result.disclosures.noPersistence, true);
+  assert.equal(result.disclosures.plannedStructuralLossUsedForSizing, true);
+  assert.equal(result.disclosures.fullPremiumLossAcknowledged, true);
+  assert.equal(result.disclosures.hardLossBackstopReferenceOnly, true);
+  assert.equal(result.disclosures.noAutomatedPremiumStop, true);
 });
 
 test("response methodology explicitly identifies mixed sources", () => {
   const result = calculate();
-  assert.equal(result.methodology.sourceSizingMethodology, "SIZING_V1");
+  assert.equal(result.methodology.sourceSizingMethodology, "SIZING_V2");
   assert.equal(result.methodology.accountEquityMethod, "CALLER_SUPPLIED");
   assert.equal(
     result.methodology.availableCashMethod,

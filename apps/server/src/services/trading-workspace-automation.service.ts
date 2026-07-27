@@ -5,6 +5,7 @@ import { getDiscordWebhookConfig } from "./discord-webhook.logic";
 import { getSpyZeroDteOptionsChain } from "./schwab-options-chain.service";
 import {
   selectPositionManagementSignal,
+  TRADING_POLICY_V1,
   type PositionManagementSignal,
 } from "./trading-policy.logic";
 import { getTradingWorkspace } from "./trading-workspace.service";
@@ -84,6 +85,16 @@ function signalMetadata(signal: PositionManagementSignal): {
         markType: "STRUCTURAL_STOP",
         title: "Structural invalidation touched",
         message: "The underlying reached the locked structural invalidation. Review and manually record the exit.",
+      };
+    case "PREMIUM_LOSS_BACKSTOP":
+      return {
+        eventType: "PREMIUM_LOSS_BACKSTOP_TOUCHED",
+        severity: "URGENT",
+        field: "stopTouchedAt",
+        markType: "PREMIUM_LOSS_BACKSTOP",
+        title: "$50 option-loss backstop touched",
+        message:
+          "The executable option bid implies the maximum $50 planned loss from the actual entry. Review and manually record the exit; no broker order is submitted.",
       };
     case "TARGET_2":
       return {
@@ -247,10 +258,20 @@ async function evaluateOpenPosition(userId: string, now: Date): Promise<void> {
     target2Level: position.target2Level,
     target3Level: position.target3Level,
     timeStopReviewAtMs: Date.parse(position.timeStopReviewAt),
+    contractBid: quote.bid,
+    actualEntryPrice: position.actualEntryPrice,
+    maximumPlannedLossDollars:
+      TRADING_POLICY_V1.maximumPlannedStructuralLossDollars,
   });
 
   // Record every crossed research/management boundary independently, but mark
   // only the deterministic highest-priority signal actionable for delivery.
+  const premiumLossBackstopActive =
+    quote.bid !== null &&
+    Number.isFinite(quote.bid) &&
+    quote.bid >= 0 &&
+    (position.actualEntryPrice - quote.bid) * 100 >=
+      TRADING_POLICY_V1.maximumPlannedStructuralLossDollars - 1e-9;
   const conditions: Array<[PositionManagementSignal, boolean]> = [
     [
       "STRUCTURAL_STOP",
@@ -261,6 +282,7 @@ async function evaluateOpenPosition(userId: string, now: Date): Promise<void> {
         favorable: false,
       }),
     ],
+    ["PREMIUM_LOSS_BACKSTOP", premiumLossBackstopActive],
     [
       "TARGET_1_MANAGEMENT",
       touched({

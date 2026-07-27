@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api-client";
  */
 export function useSpyZeroDteSchwabAssistedPositionSizing() {
   return useMutation({
-    mutationKey: ["spy-zero-dte-schwab-assisted-position-sizing", "SCHWAB_ASSISTED_SIZING_V1"],
+    mutationKey: ["spy-zero-dte-schwab-assisted-position-sizing", "SCHWAB_ASSISTED_SIZING_V2"],
     mutationFn: (request: SpyZeroDteSchwabAssistedPositionSizingRequest) =>
       apiClient.calculateSpyZeroDteSchwabAssistedPositionSizing(request),
     retry: false,

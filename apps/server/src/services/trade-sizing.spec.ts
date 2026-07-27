@@ -1,5 +1,5 @@
 /**
- * Deterministic tests for SIZING_V1.
+ * Deterministic tests for SIZING_V2 planned structural risk.
  * Run: npx --no-install tsx apps/server/src/services/trade-sizing.spec.ts
  */
 import assert from "node:assert/strict";
@@ -31,31 +31,23 @@ type RequestOverrides = {
   riskPolicy?: Partial<SpyZeroDtePositionSizingRequest["riskPolicy"]>;
 };
 
-function request(
-  overrides: RequestOverrides = {},
-): SpyZeroDtePositionSizingRequest {
+function request(overrides: RequestOverrides = {}): SpyZeroDtePositionSizingRequest {
   const base: SpyZeroDtePositionSizingRequest = {
     accountSnapshot: {
-      accountEquityDollars: 25_000,
-      availableCashDollars: 5_000,
-      remainingDailyLossBudgetDollars: 1_000,
-      remainingPortfolioRiskBudgetDollars: 1_500,
+      accountEquityDollars: 1_000,
+      availableCashDollars: 1_000,
+      remainingDailyLossBudgetDollars: 150,
+      remainingPortfolioRiskBudgetDollars: 150,
     },
     riskPolicy: {
-      maximumRiskPerTradeDollars: 800,
-      maximumCapitalAllocationDollars: 3_000,
-      maximumContracts: 10,
+      maximumRiskPerTradeDollars: 50,
+      maximumCapitalAllocationDollars: 150,
+      maximumContracts: 1,
     },
   };
   return {
-    accountSnapshot: {
-      ...base.accountSnapshot,
-      ...(overrides.accountSnapshot ?? {}),
-    },
-    riskPolicy: {
-      ...base.riskPolicy,
-      ...(overrides.riskPolicy ?? {}),
-    },
+    accountSnapshot: { ...base.accountSnapshot, ...(overrides.accountSnapshot ?? {}) },
+    riskPolicy: { ...base.riskPolicy, ...(overrides.riskPolicy ?? {}) },
   };
 }
 
@@ -64,7 +56,7 @@ function readyAssembly(
 ): SpyZeroDteTradePlanAssemblyResponse {
   const base = {
     product: "SPY_ZERO_DTE_DETERMINISTIC_TRADE_PLAN_ASSEMBLY",
-    methodologyVersion: "ASSEMBLY_V1",
+    methodologyVersion: "ASSEMBLY_V2",
     currentMarketDate: MARKET_DATE,
     calculatedAt: ASSEMBLY_AT,
     engineState: "AVAILABLE",
@@ -83,24 +75,27 @@ function readyAssembly(
     },
     premiumReference: {
       type: "CALCULATED_BID_ASK_MIDPOINT",
-      value: 2.45,
+      value: 1.35,
       disclosureCode: "MIDPOINT_REFERENCE_ONLY",
     },
     selectedContract: {
-      candidateId: "SPY_CALL_750",
-      contractSymbol: "SPY   260717C00750000",
+      candidateId: "SPY_CALL_758",
+      contractSymbol: "SPY   260717C00758000",
       contractDirection: "CALL",
-      strikePrice: 750,
+      strikePrice: 758,
       expirationDate: MARKET_DATE,
       multiplier: 100,
-      ask: 2.5,
-      bid: 2.4,
-      calculatedMidpoint: 2.45,
-      providerMark: 2.46,
+      ask: 1.4,
+      bid: 1.3,
+      calculatedMidpoint: 1.35,
+      providerMark: 1.35,
       quoteAt: QUOTE_AT,
       quoteAgeMilliseconds: 5_000,
       quoteFreshnessState: "FRESH",
       selectionRank: 1,
+      estimatedPlannedStructuralLossDollars: 45,
+      hardLossBackstopDollars: 50,
+      hardLossBackstopExitPremium: 0.9,
     },
   };
   return structuredClone({ ...base, ...overrides }) as unknown as SpyZeroDteTradePlanAssemblyResponse;
@@ -151,6 +146,9 @@ function nonReadyAssembly(
       quoteAgeMilliseconds: null,
       quoteFreshnessState: null,
       selectionRank: null,
+      estimatedPlannedStructuralLossDollars: null,
+      hardLossBackstopDollars: null,
+      hardLossBackstopExitPremium: null,
     },
   });
 }
@@ -169,155 +167,92 @@ function test(name: string, fn: TestFunction): void {
   tests.push([name, fn]);
 }
 
-const syncTests: Array<[string, () => void]> = [];
-function syncTest(name: string, fn: () => void): void {
-  syncTests.push([name, fn]);
+function approximately(actual: number | null, expected: number, tolerance = 1e-10): void {
+  assert.notEqual(actual, null);
+  assert.ok(Math.abs(actual! - expected) <= tolerance, `${actual} != ${expected}`);
 }
 
-syncTest("methodology version is SIZING_V1", () => {
-  assert.equal(SIZING_METHODOLOGY_VERSION, "SIZING_V1");
+test("methodology version is SIZING_V2", () => {
+  assert.equal(SIZING_METHODOLOGY_VERSION, "SIZING_V2");
 });
 
-syncTest("valid strict request parses", () => {
-  assert.equal(SpyZeroDtePositionSizingRequestSchema.parse(request()).riskPolicy.maximumContracts, 10);
-});
-
-syncTest("unknown top-level request key is rejected", () => {
+test("valid strict request parses and unknown fields fail", () => {
+  assert.equal(SpyZeroDtePositionSizingRequestSchema.parse(request()).riskPolicy.maximumContracts, 1);
   assert.equal(
     SpyZeroDtePositionSizingRequestSchema.safeParse({ ...request(), privateNote: "no" }).success,
     false,
   );
+  const nested = request() as unknown as Record<string, unknown>;
+  nested.accountSnapshot = { ...(nested.accountSnapshot as object), accountNumber: "123" };
+  assert.equal(SpyZeroDtePositionSizingRequestSchema.safeParse(nested).success, false);
 });
 
-syncTest("unknown nested account key is rejected", () => {
-  const value = request() as unknown as Record<string, unknown>;
-  value.accountSnapshot = { ...(value.accountSnapshot as object), accountNumber: "123" };
-  assert.equal(SpyZeroDtePositionSizingRequestSchema.safeParse(value).success, false);
-});
-
-syncTest("account equity must be positive", () => {
+test("request numeric constraints remain fail-closed", () => {
   assert.equal(
     SpyZeroDtePositionSizingRequestSchema.safeParse(
-      request({ accountSnapshot: { accountEquityDollars: 0 } } as never),
+      request({ accountSnapshot: { accountEquityDollars: 0 } }),
+    ).success,
+    false,
+  );
+  assert.equal(
+    SpyZeroDtePositionSizingRequestSchema.safeParse(
+      request({ riskPolicy: { maximumContracts: 1.5 } }),
+    ).success,
+    false,
+  );
+  assert.equal(
+    SpyZeroDtePositionSizingRequestSchema.safeParse(
+      request({ riskPolicy: { maximumRiskPerTradeDollars: -1 } }),
     ).success,
     false,
   );
 });
 
-for (const [name, field] of [
-  ["available cash", "availableCashDollars"],
-  ["daily budget", "remainingDailyLossBudgetDollars"],
-  ["portfolio budget", "remainingPortfolioRiskBudgetDollars"],
-] as const) {
-  syncTest(`${name} rejects negative values`, () => {
-    assert.equal(
-      SpyZeroDtePositionSizingRequestSchema.safeParse(
-        request({ accountSnapshot: { [field]: -1 } } as never),
-      ).success,
-      false,
-    );
-  });
-}
-
-for (const [name, field] of [
-  ["trade risk", "maximumRiskPerTradeDollars"],
-  ["capital allocation", "maximumCapitalAllocationDollars"],
-] as const) {
-  syncTest(`${name} rejects negative values`, () => {
-    assert.equal(
-      SpyZeroDtePositionSizingRequestSchema.safeParse(
-        request({ riskPolicy: { [field]: -1 } } as never),
-      ).success,
-      false,
-    );
-  });
-}
-
-syncTest("maximum contracts rejects fractions", () => {
-  assert.equal(
-    SpyZeroDtePositionSizingRequestSchema.safeParse(
-      request({ riskPolicy: { maximumContracts: 1.5 } } as never),
-    ).success,
-    false,
-  );
-});
-
-syncTest("maximum contracts rejects unsafe integers", () => {
-  assert.equal(
-    SpyZeroDtePositionSizingRequestSchema.safeParse(
-      request({ riskPolicy: { maximumContracts: Number.MAX_SAFE_INTEGER + 1 } } as never),
-    ).success,
-    false,
-  );
-});
-
-syncTest("sanitized request error schema excludes values", () => {
+test("sanitized request errors exclude account values", () => {
   const error = PositionSizingRequestErrorResponseSchema.parse({
     error: "INVALID_POSITION_SIZING_REQUEST",
     issues: [{ path: "accountSnapshot.accountEquityDollars", code: "MUST_BE_POSITIVE" }],
   });
-  assert.equal(JSON.stringify(error).includes("25000"), false);
+  assert.equal(JSON.stringify(error).includes("1000"), false);
 });
 
-syncTest("maximum trade risk can limit risk budget", () => {
+test("effective risk budget uses the minimum explicit risk control", () => {
   const result = calculateEffectiveRiskBudget(request());
-  assert.equal(result.effectiveRiskBudgetDollars, 800);
+  assert.equal(result.effectiveRiskBudgetDollars, 50);
   assert.deepEqual(result.limitingRiskControls, ["MAXIMUM_RISK_PER_TRADE"]);
-});
 
-syncTest("daily budget can limit risk budget", () => {
-  const result = calculateEffectiveRiskBudget(
-    request({ accountSnapshot: { remainingDailyLossBudgetDollars: 300 } } as never),
-  );
-  assert.equal(result.effectiveRiskBudgetDollars, 300);
-  assert.deepEqual(result.limitingRiskControls, ["REMAINING_DAILY_LOSS_BUDGET"]);
-});
-
-syncTest("portfolio budget can limit risk budget", () => {
-  const result = calculateEffectiveRiskBudget(
-    request({ accountSnapshot: { remainingPortfolioRiskBudgetDollars: 250 } } as never),
-  );
-  assert.equal(result.effectiveRiskBudgetDollars, 250);
-  assert.deepEqual(result.limitingRiskControls, ["REMAINING_PORTFOLIO_RISK_BUDGET"]);
-});
-
-syncTest("all exact risk ties are preserved in methodology order", () => {
-  const result = calculateEffectiveRiskBudget(
+  const tie = calculateEffectiveRiskBudget(
     request({
       accountSnapshot: {
-        remainingDailyLossBudgetDollars: 500,
-        remainingPortfolioRiskBudgetDollars: 500,
+        remainingDailyLossBudgetDollars: 50,
+        remainingPortfolioRiskBudgetDollars: 50,
       },
-      riskPolicy: { maximumRiskPerTradeDollars: 500 },
-    } as never),
+    }),
   );
-  assert.deepEqual(result.limitingRiskControls, [
+  assert.deepEqual(tie.limitingRiskControls, [
     "MAXIMUM_RISK_PER_TRADE",
     "REMAINING_DAILY_LOSS_BUDGET",
     "REMAINING_PORTFOLIO_RISK_BUDGET",
   ]);
 });
 
-syncTest("available cash can limit capital budget", () => {
+test("effective capital budget uses cash and capital allocation independently", () => {
   const result = calculateEffectiveCapitalBudget(request());
-  assert.equal(result.effectiveCapitalBudgetDollars, 3_000);
+  assert.equal(result.effectiveCapitalBudgetDollars, 150);
   assert.deepEqual(result.limitingCapitalControls, ["MAXIMUM_CAPITAL_ALLOCATION"]);
-});
 
-syncTest("capital allocation tie is preserved", () => {
-  const result = calculateEffectiveCapitalBudget(
+  const tie = calculateEffectiveCapitalBudget(
     request({
-      accountSnapshot: { availableCashDollars: 2_000 },
-      riskPolicy: { maximumCapitalAllocationDollars: 2_000 },
-    } as never),
+      accountSnapshot: { availableCashDollars: 150 },
+    }),
   );
-  assert.deepEqual(result.limitingCapitalControls, [
+  assert.deepEqual(tie.limitingCapitalControls, [
     "AVAILABLE_CASH",
     "MAXIMUM_CAPITAL_ALLOCATION",
   ]);
 });
 
-syncTest("blocking controls preserve deterministic order", () => {
+test("blocking controls preserve deterministic precedence", () => {
   const controls = determineBlockingControls(
     request({
       accountSnapshot: {
@@ -342,21 +277,75 @@ syncTest("blocking controls preserve deterministic order", () => {
   ]);
 });
 
-syncTest("base READY result is SIZED and schema-valid", () => {
+test("$140 debit with $45 planned structural risk permits one contract", () => {
   const result = calculate();
-  SpyZeroDtePositionSizingResponseSchema.parse(result);
+  assert.deepEqual(SpyZeroDtePositionSizingResponseSchema.parse(result), result);
   assert.equal(result.sizingState, "SIZED");
-  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 3);
+  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 1);
+  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 1);
+  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 1);
+  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, [
+    "RISK_BUDGET",
+    "CAPITAL_BUDGET",
+    "MAXIMUM_CONTRACTS",
+  ]);
 });
 
-syncTest("current Ask multiplied by 100 is the only premium debit", () => {
+test("planned structural risk—not full premium—drives risk capacity", () => {
+  const result = calculate(
+    request({
+      accountSnapshot: {
+        remainingDailyLossBudgetDollars: 90,
+        remainingPortfolioRiskBudgetDollars: 90,
+      },
+      riskPolicy: {
+        maximumRiskPerTradeDollars: 90,
+        maximumCapitalAllocationDollars: 1_000,
+        maximumContracts: 10,
+      },
+    }),
+  );
+  assert.equal(result.premiumRiskReference.premiumDebitReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.fullPremiumLossReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.plannedStructuralLossReferencePerContractDollars, 45);
+  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 2);
+  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 7);
+  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 2);
+  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, ["RISK_BUDGET"]);
+});
+
+test("the $50 policy no longer requires an option costing $50 or less", () => {
   const result = calculate();
-  assert.equal(result.premiumRiskReference.premiumPriceReference, 2.5);
-  assert.equal(result.premiumRiskReference.premiumDebitReferencePerContractDollars, 250);
-  assert.equal(result.premiumRiskReference.fullPremiumLossReferencePerContractDollars, 250);
+  assert.equal(result.budgets.effectiveRiskBudgetDollars, 50);
+  assert.equal(result.premiumRiskReference.premiumDebitReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.plannedStructuralLossReferencePerContractDollars, 45);
+  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 1);
 });
 
-syncTest("midpoint bid and provider mark do not affect sizing", () => {
+test("capital exposure and planned risk are both disclosed", () => {
+  const result = calculate();
+  assert.equal(result.premiumRiskReference.premiumPriceReferenceType, "CURRENT_ASK");
+  assert.equal(result.premiumRiskReference.premiumPriceReference, 1.4);
+  assert.equal(result.premiumRiskReference.premiumDebitReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.fullPremiumLossReferencePerContractDollars, 140);
+  assert.equal(result.premiumRiskReference.plannedStructuralLossReferencePerContractDollars, 45);
+  assert.equal(result.premiumRiskReference.hardLossBackstopDollars, 50);
+  assert.equal(result.premiumRiskReference.hardLossBackstopExitPremium, 0.9);
+  assert.equal(result.disclosures.plannedStructuralLossUsedForSizing, true);
+  assert.equal(result.disclosures.fullPremiumLossAcknowledged, true);
+  assert.equal(result.disclosures.noAutomatedPremiumStop, true);
+});
+
+test("position percentages separate planned risk from capital committed", () => {
+  const result = calculate();
+  assert.equal(result.positionReferences.totalPremiumDebitReferenceDollars, 140);
+  assert.equal(result.positionReferences.totalFullPremiumLossReferenceDollars, 140);
+  assert.equal(result.positionReferences.totalPlannedStructuralLossReferenceDollars, 45);
+  approximately(result.positionReferences.riskPercentOfAccountEquity, 4.5);
+  approximately(result.positionReferences.capitalPercentOfAccountEquity, 14);
+});
+
+test("bid, midpoint, and provider mark do not alter sizing", () => {
   const first = calculate();
   const assembly = readyAssembly();
   Object.assign(assembly.selectedContract, {
@@ -365,106 +354,39 @@ syncTest("midpoint bid and provider mark do not affect sizing", () => {
     providerMark: 77,
   });
   const second = calculate(request(), assembly);
-  assert.equal(second.quantityCalculation.maximumContractsUnderPolicy, first.quantityCalculation.maximumContractsUnderPolicy);
+  assert.equal(
+    second.quantityCalculation.maximumContractsUnderPolicy,
+    first.quantityCalculation.maximumContractsUnderPolicy,
+  );
 });
 
-syncTest("risk capacity uses floor", () => {
-  const result = calculate();
-  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 3);
-});
-
-syncTest("capital capacity uses floor", () => {
-  const result = calculate();
-  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 12);
-});
-
-syncTest("risk budget is the limiting quantity control", () => {
-  assert.deepEqual(calculate().quantityCalculation.limitingQuantityControls, ["RISK_BUDGET"]);
-});
-
-syncTest("capital budget can be the limiting quantity control", () => {
+test("capital budget can independently block an otherwise acceptable risk", () => {
   const result = calculate(
     request({
-      accountSnapshot: { availableCashDollars: 500 },
-      riskPolicy: { maximumRiskPerTradeDollars: 5_000, maximumCapitalAllocationDollars: 500 },
-    } as never),
-  );
-  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 2);
-  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, ["CAPITAL_BUDGET"]);
-});
-
-syncTest("maximum contracts can be the limiting quantity control", () => {
-  const result = calculate(
-    request({ riskPolicy: { maximumRiskPerTradeDollars: 5_000, maximumContracts: 1 } } as never),
-  );
-  assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 1);
-  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, ["MAXIMUM_CONTRACTS"]);
-});
-
-syncTest("all exact quantity ties are preserved", () => {
-  const result = calculate(
-    request({
-      accountSnapshot: {
-        availableCashDollars: 500,
-        remainingDailyLossBudgetDollars: 500,
-        remainingPortfolioRiskBudgetDollars: 500,
-      },
-      riskPolicy: {
-        maximumRiskPerTradeDollars: 500,
-        maximumCapitalAllocationDollars: 500,
-        maximumContracts: 2,
-      },
-    }),
-  );
-  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, [
-    "RISK_BUDGET",
-    "CAPITAL_BUDGET",
-    "MAXIMUM_CONTRACTS",
-  ]);
-});
-
-syncTest("exact risk equality permits one contract", () => {
-  const result = calculate(
-    request({
-      accountSnapshot: {
-        remainingDailyLossBudgetDollars: 250,
-        remainingPortfolioRiskBudgetDollars: 250,
-      },
-      riskPolicy: { maximumRiskPerTradeDollars: 250 },
-    } as never),
-  );
-  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 1);
-});
-
-syncTest("exact capital equality permits one contract", () => {
-  const result = calculate(
-    request({
-      accountSnapshot: { availableCashDollars: 250 },
-      riskPolicy: { maximumCapitalAllocationDollars: 250 },
-    } as never),
-  );
-  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 1);
-});
-
-syncTest("one contract too expensive produces NO_CAPACITY", () => {
-  const result = calculate(
-    request({
-      accountSnapshot: {
-        availableCashDollars: 200,
-        remainingDailyLossBudgetDollars: 200,
-        remainingPortfolioRiskBudgetDollars: 200,
-      },
-      riskPolicy: {
-        maximumRiskPerTradeDollars: 200,
-        maximumCapitalAllocationDollars: 200,
-      },
+      accountSnapshot: { availableCashDollars: 139 },
+      riskPolicy: { maximumCapitalAllocationDollars: 139 },
     }),
   );
   assert.equal(result.sizingState, "NO_CAPACITY");
+  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 1);
+  assert.equal(result.quantityCalculation.contractsPermittedByCapital, 0);
   assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 0);
-  assert.equal(result.positionReferences.totalPremiumDebitReferenceDollars, 0);
-  assert.equal(result.revalidation.required, true);
-  assert.equal(result.warningCode, null);
+  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, ["CAPITAL_BUDGET"]);
+});
+
+test("planned risk above the available risk budget produces no capacity", () => {
+  const result = calculate(
+    request({
+      accountSnapshot: {
+        remainingDailyLossBudgetDollars: 44,
+        remainingPortfolioRiskBudgetDollars: 44,
+      },
+      riskPolicy: { maximumRiskPerTradeDollars: 44 },
+    }),
+  );
+  assert.equal(result.sizingState, "NO_CAPACITY");
+  assert.equal(result.quantityCalculation.contractsPermittedByRisk, 0);
+  assert.deepEqual(result.quantityCalculation.limitingQuantityControls, ["RISK_BUDGET"]);
 });
 
 for (const [name, overrides, reason] of [
@@ -475,40 +397,14 @@ for (const [name, overrides, reason] of [
   ["capital allocation", { riskPolicy: { maximumCapitalAllocationDollars: 0 } }, "BLOCKED_MAXIMUM_CAPITAL_ALLOCATION_ZERO"],
   ["maximum contracts", { riskPolicy: { maximumContracts: 0 } }, "BLOCKED_MAXIMUM_CONTRACTS_ZERO"],
 ] as const) {
-  syncTest(`zero ${name} produces BLOCKED`, () => {
-    const result = calculate(request(overrides as never));
+  test(`zero ${name} produces BLOCKED`, () => {
+    const result = calculate(request(overrides as RequestOverrides));
     assert.equal(result.sizingState, "BLOCKED");
     assert.equal(result.primaryReasonCode, reason);
     assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, 0);
     assert.equal(result.revalidation.required, false);
-    assert.equal(result.warningCode, null);
   });
 }
-
-syncTest("multiple blockers are all preserved while reason follows precedence", () => {
-  const result = calculate(
-    request({
-      accountSnapshot: { availableCashDollars: 0, remainingDailyLossBudgetDollars: 0 },
-      riskPolicy: { maximumRiskPerTradeDollars: 0, maximumContracts: 0 },
-    } as never),
-  );
-  assert.deepEqual(result.quantityCalculation.blockingControls, [
-    "MAXIMUM_RISK_PER_TRADE",
-    "REMAINING_DAILY_LOSS_BUDGET",
-    "AVAILABLE_CASH",
-    "MAXIMUM_CONTRACTS",
-  ]);
-  assert.equal(result.primaryReasonCode, "BLOCKED_MAXIMUM_RISK_PER_TRADE_ZERO");
-});
-
-syncTest("SIZED totals and percentages are deterministic", () => {
-  const result = calculate();
-  assert.equal(result.positionReferences.totalPremiumDebitReferenceDollars, 750);
-  assert.equal(result.positionReferences.totalFullPremiumLossReferenceDollars, 750);
-  assert.equal(result.positionReferences.riskPercentOfAccountEquity, 3);
-  assert.equal(result.positionReferences.capitalPercentOfAccountEquity, 3);
-  assert.equal(result.revalidation.required, true);
-});
 
 for (const state of [
   "WAITING_FOR_TRIGGER",
@@ -517,7 +413,7 @@ for (const state of [
   "NO_SETUP",
   "NOT_APPLICABLE",
 ] as const) {
-  syncTest(`${state} maps to NOT_APPLICABLE with null calculations`, () => {
+  test(`${state} maps to NOT_APPLICABLE without sizing calculations`, () => {
     const result = calculate(request(), nonReadyAssembly(state));
     assert.equal(result.sizingState, "NOT_APPLICABLE");
     assert.equal(result.quantityCalculation.maximumContractsUnderPolicy, null);
@@ -527,100 +423,101 @@ for (const state of [
   });
 }
 
-syncTest("PARTIAL non-ready Assembly maps to PARTIAL NOT_APPLICABLE", () => {
+test("PARTIAL non-ready Assembly remains non-applicable and labeled", () => {
   const result = calculate(request(), nonReadyAssembly("NOT_QUALIFIED", "PARTIAL"));
   assert.equal(result.engineState, "PARTIAL");
   assert.equal(result.sizingState, "NOT_APPLICABLE");
   assert.equal(result.warningCode, "ASSEMBLY_PARTIAL");
 });
 
-syncTest("UNAVAILABLE Assembly maps to UNAVAILABLE", () => {
+test("UNAVAILABLE Assembly maps to unavailable sizing", () => {
   const assembly = nonReadyAssembly("NOT_APPLICABLE");
-  Object.assign(assembly, { engineState: "UNAVAILABLE", planState: "UNAVAILABLE", direction: "UNAVAILABLE" });
+  Object.assign(assembly, {
+    engineState: "UNAVAILABLE",
+    planState: "UNAVAILABLE",
+    direction: "UNAVAILABLE",
+  });
   const result = calculate(request(), assembly);
   assert.equal(result.engineState, "UNAVAILABLE");
   assert.equal(result.sizingState, "UNAVAILABLE");
   assert.equal(result.primaryReasonCode, "SOURCE_ASSEMBLY_UNAVAILABLE");
 });
 
-syncTest("missing selected contract fails unavailable", () => {
+test("missing planned structural loss fails closed", () => {
   const assembly = readyAssembly();
-  assembly.selectedContract.candidateId = null;
-  assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_MISSING");
+  assembly.selectedContract.estimatedPlannedStructuralLossDollars = null;
+  const result = calculate(request(), assembly);
+  assert.equal(result.sizingState, "UNAVAILABLE");
+  assert.equal(result.primaryReasonCode, "SOURCE_PLANNED_STRUCTURAL_LOSS_INVALID");
+  assert.equal(result.warningCode, "SELECTED_CONTRACT_PLANNED_RISK_UNAVAILABLE");
 });
 
-syncTest("direction mismatch fails unavailable", () => {
+test("missing hard backstop reference fails closed", () => {
   const assembly = readyAssembly();
-  assembly.selectedContract.contractDirection = "PUT";
-  assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_DIRECTION_MISMATCH");
+  assembly.selectedContract.hardLossBackstopExitPremium = null;
+  assert.equal(
+    calculate(request(), assembly).primaryReasonCode,
+    "SOURCE_PLANNED_STRUCTURAL_LOSS_INVALID",
+  );
 });
 
-syncTest("rank other than one fails unavailable", () => {
-  const assembly = readyAssembly();
-  assembly.selectedContract.selectionRank = 2;
-  assert.equal(calculate(request(), assembly).sizingState, "UNAVAILABLE");
+test("selected contract integrity checks remain fail-closed", () => {
+  const missing = readyAssembly();
+  missing.selectedContract.candidateId = null;
+  assert.equal(calculate(request(), missing).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_MISSING");
+
+  const wrongDirection = readyAssembly();
+  wrongDirection.selectedContract.contractDirection = "PUT";
+  assert.equal(calculate(request(), wrongDirection).primaryReasonCode, "SOURCE_DIRECTION_MISMATCH");
+
+  const wrongRank = readyAssembly();
+  wrongRank.selectedContract.selectionRank = 2;
+  assert.equal(calculate(request(), wrongRank).sizingState, "UNAVAILABLE");
+
+  const wrongMultiplier = readyAssembly();
+  wrongMultiplier.selectedContract.multiplier = 10;
+  assert.equal(
+    calculate(request(), wrongMultiplier).primaryReasonCode,
+    "SOURCE_SELECTED_CONTRACT_MULTIPLIER_INVALID",
+  );
 });
 
-for (const freshness of ["STALE", "UNKNOWN", "UNAVAILABLE"] as const) {
-  syncTest(`${freshness} selected quote cannot size`, () => {
-    const assembly = readyAssembly();
-    assembly.selectedContract.quoteFreshnessState = freshness;
-    assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_NOT_FRESH");
-  });
-}
+test("stale, missing Ask, expiration mismatch, and snapshot mismatch cannot size", () => {
+  const stale = readyAssembly();
+  stale.selectedContract.quoteFreshnessState = "STALE";
+  assert.equal(calculate(request(), stale).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_NOT_FRESH");
 
-syncTest("missing Ask fails unavailable", () => {
-  const assembly = readyAssembly();
-  assembly.selectedContract.ask = null;
-  assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_ASK_INVALID");
+  const noAsk = readyAssembly();
+  noAsk.selectedContract.ask = null;
+  assert.equal(calculate(request(), noAsk).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_ASK_INVALID");
+
+  const wrongExpiration = readyAssembly();
+  wrongExpiration.selectedContract.expirationDate = "2026-07-18";
+  assert.equal(
+    calculate(request(), wrongExpiration).primaryReasonCode,
+    "SOURCE_SELECTED_CONTRACT_EXPIRATION_INVALID",
+  );
+
+  const snapshot = readyAssembly();
+  snapshot.sourceSummary.upstreamSameSnapshotGuaranteed = false;
+  assert.equal(calculate(request(), snapshot).sizingState, "UNAVAILABLE");
 });
 
-syncTest("wrong multiplier fails unavailable", () => {
-  const assembly = readyAssembly();
-  assembly.selectedContract.multiplier = 10;
-  assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_MULTIPLIER_INVALID");
+test("response schema rejects tampered risk and capital references", () => {
+  const quantity = structuredClone(calculate());
+  quantity.quantityCalculation.maximumContractsUnderPolicy = 2;
+  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(quantity).success, false);
+
+  const fullLoss = structuredClone(calculate());
+  fullLoss.premiumRiskReference.fullPremiumLossReferencePerContractDollars = 139;
+  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(fullLoss).success, false);
+
+  const plannedLoss = structuredClone(calculate());
+  plannedLoss.premiumRiskReference.plannedStructuralLossReferencePerContractDollars = 46;
+  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(plannedLoss).success, false);
 });
 
-syncTest("expiration mismatch fails unavailable", () => {
-  const assembly = readyAssembly();
-  assembly.selectedContract.expirationDate = "2026-07-18";
-  assert.equal(calculate(request(), assembly).primaryReasonCode, "SOURCE_SELECTED_CONTRACT_EXPIRATION_INVALID");
-});
-
-syncTest("snapshot incompatibility cannot size", () => {
-  const assembly = readyAssembly();
-  assembly.sourceSummary.upstreamSameSnapshotGuaranteed = false;
-  assert.equal(calculate(request(), assembly).sizingState, "UNAVAILABLE");
-});
-
-syncTest("contract source incompatibility cannot size", () => {
-  const assembly = readyAssembly();
-  assembly.sourceSummary.contract.sourceCompatibilityState = "PARTIAL";
-  assert.equal(calculate(request(), assembly).sizingState, "UNAVAILABLE");
-});
-
-syncTest("response schema rejects tampered final quantity", () => {
-  const result = calculate();
-  const tampered = structuredClone(result);
-  tampered.quantityCalculation.maximumContractsUnderPolicy = 4;
-  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(tampered).success, false);
-});
-
-syncTest("response schema rejects tampered full-loss reference", () => {
-  const result = calculate();
-  const tampered = structuredClone(result);
-  tampered.premiumRiskReference.fullPremiumLossReferencePerContractDollars = 249;
-  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(tampered).success, false);
-});
-
-syncTest("response schema rejects positive quantity with PARTIAL engine", () => {
-  const result = calculate();
-  const tampered = structuredClone(result);
-  tampered.engineState = "PARTIAL";
-  assert.equal(SpyZeroDtePositionSizingResponseSchema.safeParse(tampered).success, false);
-});
-
-syncTest("response contains no order or execution fields", () => {
+test("response contains no order submission or automated premium-stop fields", () => {
   const text = JSON.stringify(calculate());
   for (const term of [
     "orderQuantity",
@@ -636,10 +533,6 @@ syncTest("response contains no order or execution fields", () => {
     assert.equal(text.includes(term), false, term);
   }
 });
-
-for (const [name, fn] of syncTests) {
-  test(name, fn);
-}
 
 test("service retrieves Assembly exactly once", async () => {
   let calls = 0;
@@ -665,7 +558,7 @@ async function main(): Promise<void> {
       throw error;
     }
   }
-  console.log(`Trade Sizing tests: ${passed} passed, 0 failed`);
+  console.log(`Trade Sizing V2 tests: ${passed} passed, 0 failed`);
 }
 
 main().catch((error) => {

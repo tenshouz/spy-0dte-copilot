@@ -144,7 +144,7 @@ export function DashboardGuide() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Try: policy, strict ATM, shadow, READY alert, replay…"
+              placeholder="Try: policy, bounded contract, planned risk, READY alert, replay…"
               className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
@@ -320,7 +320,7 @@ export function DashboardGuide() {
           id="sharing"
           icon={ShieldCheck}
           title="How to share or publish it safely"
-          description="V1.9.0 is a local single-user tool. Sharing access is different from publishing a public service."
+          description="V1.9.1 is a local single-user tool. Sharing access is different from publishing a public service."
         >
           <div className="space-y-3">
             {GUIDE_SHARING_CHECKLIST.map((item, index) => (

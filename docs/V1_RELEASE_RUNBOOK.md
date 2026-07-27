@@ -1,8 +1,8 @@
-# SPY 0DTE Copilot V1.9.0 Release Runbook
+# SPY 0DTE Copilot V1.9.1 Release Runbook
 
 ## Scope
 
-V1.9.0 is a local, single-user, SPY-only decision-support and paper-equivalent lifecycle system. It includes the V1.5 deterministic source engines plus V1.6–V1.9 policy, risk, position, setup-registry, opportunity, READY-alert, event-restriction, execution-research, and Trading Workspace layers. It does not create, modify, route, or execute brokerage orders.
+V1.9.1 is a local, single-user, SPY-only decision-support and paper-equivalent lifecycle system. It includes the V1.5 deterministic source engines plus V1.6–V1.9 policy, risk, position, setup-registry, opportunity, READY-alert, event-restriction, execution-research, and Trading Workspace layers. It does not create, modify, route, or execute brokerage orders.
 
 ## Required services
 
@@ -22,7 +22,7 @@ V1.9.0 is a local, single-user, SPY-only decision-support and paper-equivalent l
 6. Start the backend with `npm run dev:server`.
 7. Start the frontend with `npm run dev:web`.
 8. Keep the HTTPS tunnel running when Schwab OAuth must redirect to the backend.
-9. Open `/system`; confirm release `v1.9.0`, trading-framework persistence, policy, registry, and Workspace monitor status.
+9. Open `/system`; confirm release `v1.9.1`, trading-framework persistence, policy, registry, and Workspace monitor status.
 10. Run the explicit complete probe to validate quote, candles, options, Assembly, and Trading Workspace together.
 
 ## Release verification
@@ -47,9 +47,9 @@ Keep Trade Plan Alerts disabled until verification passes and `/api/trading-work
 - Confirm the current event calendar before the session; CPI, Employment Situation/NFP, and FOMC require full-day blocks.
 - Confirm daily ledger values before manually recording an entry.
 - Confirm the READY alert is active and unexpired.
-- Confirm the selected contract is the strict effective-ATM contract and both underlying/option R:R are at least 1.5:1.
+- Confirm the selected contract came from the bounded ATM-adjacent `CONTRACT_V3` window, premium is no more than $150, modeled planned structural loss is no more than $50, and both underlying/option R:R are at least 1.5:1.
 - Confirm no new entry is recorded at or after 3:00 p.m. ET.
-- Manually record exits; Target 2 is primary, 3:55 p.m. is mandatory, and the position must be closed before 4:00 p.m. ET.
+- Manually record exits. SPY structural invalidation is primary; also act on the executable-Bid $50 loss backstop. Target 2 is the primary objective, 3:55 p.m. is mandatory, and the position must be closed before 4:00 p.m. ET.
 
 ## Backup and restore
 

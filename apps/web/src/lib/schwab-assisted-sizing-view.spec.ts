@@ -35,7 +35,7 @@ const VALID_FORM: SchwabAssistedSizingFormValues = {
   maximumContracts: "10",
 };
 
-test("valid form builds the exact SCHWAB_ASSISTED_SIZING_V1 request shape", () => {
+test("valid form builds the exact SCHWAB_ASSISTED_SIZING_V2 request shape", () => {
   const result = buildSchwabAssistedSizingRequest(VALID_FORM);
   assert.equal(result.success, true);
   if (!result.success) return;

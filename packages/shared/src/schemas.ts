@@ -3893,7 +3893,11 @@ export type SpyZeroDteObjectiveRiskResponse = z.infer<
 >;
 
 /** Deterministic SPY 0DTE contract-selection and liquidity foundation. */
-export const ContractMethodologyVersionSchema = z.enum(["CONTRACT_V1", "CONTRACT_V2"]);
+export const ContractMethodologyVersionSchema = z.enum([
+  "CONTRACT_V1",
+  "CONTRACT_V2",
+  "CONTRACT_V3",
+]);
 export type ContractMethodologyVersion = z.infer<typeof ContractMethodologyVersionSchema>;
 
 export const ContractSourceCompatibilityStateSchema = z.enum([
@@ -4013,6 +4017,8 @@ export const ContractCandidateRejectionReasonCodeSchema = z.enum([
   "DELTA_OUTSIDE_RANGE",
   "OPTION_SCENARIO_UNAVAILABLE",
   "OPTION_REWARD_RISK_BELOW_MINIMUM",
+  "PREMIUM_EXCEEDS_MAXIMUM",
+  "PLANNED_STRUCTURAL_LOSS_EXCEEDS_MAXIMUM",
 ]);
 export type ContractCandidateRejectionReasonCode = z.infer<
   typeof ContractCandidateRejectionReasonCodeSchema
@@ -4079,6 +4085,11 @@ export const ContractSelectionCandidateSchema = z.object({
   eligibilityStatus: ContractCandidateEligibilityStatusSchema,
   selectable: z.boolean(),
   moneyness: ContractMoneynessSchema,
+  candidateWindowRole: z.enum([
+    "LOWER_ADJACENT",
+    "EFFECTIVE_ATM",
+    "UPPER_ADJACENT",
+  ]),
   providerInTheMoney: z.boolean().nullable(),
   chainUnderlyingPrice: z.number().finite().positive().nullable(),
   strikeDistancePoints: z.number().finite().nonnegative().nullable(),
@@ -4089,6 +4100,7 @@ export const ContractSelectionCandidateSchema = z.object({
   spreadPoints: z.number().finite().nonnegative().nullable(),
   spreadRatio: z.number().finite().nonnegative().nullable(),
   spreadPercent: z.number().finite().nonnegative().nullable(),
+  estimatedExecutionCostDollars: z.number().finite().nonnegative().nullable().optional(),
   bidSize: z.number().int().nonnegative().nullable(),
   askSize: z.number().int().nonnegative().nullable(),
   openInterest: z.number().int().nonnegative().nullable(),
@@ -4113,6 +4125,11 @@ export const ContractSelectionCandidateSchema = z.object({
   estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
   estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
   estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  premiumDebitDollars: z.number().finite().positive().nullable().optional(),
+  catastrophicFullPremiumLossDollars: z.number().finite().positive().nullable().optional(),
+  estimatedPlannedStructuralLossDollars: z.number().finite().nonnegative().nullable().optional(),
+  hardLossBackstopDollars: z.number().finite().positive().nullable().optional(),
+  hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable().optional(),
   scenarioMinutes: z.number().int().positive().nullable().optional(),
   selectionRank: z.number().int().positive().nullable(),
   rejectionReasonCodes: z.array(ContractCandidateRejectionReasonCodeSchema),
@@ -4127,12 +4144,17 @@ export const SelectedContractSchema = z.object({
   strikePrice: z.number().finite().positive().nullable(),
   expirationDate: MarketDateSchema.nullable(),
   moneyness: ContractMoneynessSchema.nullable(),
+  candidateWindowRole: z
+    .enum(["LOWER_ADJACENT", "EFFECTIVE_ATM", "UPPER_ADJACENT"])
+    .nullable()
+    .optional(),
   bid: z.number().finite().positive().nullable(),
   ask: z.number().finite().positive().nullable(),
   calculatedMidpoint: z.number().finite().positive().nullable(),
   spreadPoints: z.number().finite().nonnegative().nullable(),
   spreadRatio: z.number().finite().nonnegative().nullable(),
   spreadPercent: z.number().finite().nonnegative().nullable(),
+  estimatedExecutionCostDollars: z.number().finite().nonnegative().nullable().optional(),
   delta: z.number().finite().nullable().optional(),
   gamma: z.number().finite().nonnegative().nullable().optional(),
   theta: z.number().finite().nullable().optional(),
@@ -4146,6 +4168,11 @@ export const SelectedContractSchema = z.object({
   estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
   estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
   estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  premiumDebitDollars: z.number().finite().positive().nullable().optional(),
+  catastrophicFullPremiumLossDollars: z.number().finite().positive().nullable().optional(),
+  estimatedPlannedStructuralLossDollars: z.number().finite().nonnegative().nullable().optional(),
+  hardLossBackstopDollars: z.number().finite().positive().nullable().optional(),
+  hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable().optional(),
   scenarioMinutes: z.number().int().positive().nullable().optional(),
   quoteAt: z.string().datetime().nullable(),
   quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
@@ -4173,11 +4200,18 @@ export const ContractSelectionMethodologySchema = z.object({
     "ATM_PROXIMITY_THEN_LIQUIDITY_TIE_BREAKS",
     "TARGET_DELTA_THEN_OPTION_RR_AND_LIQUIDITY",
     "STRICT_EFFECTIVE_ATM_THEN_OPTION_RR_AND_LIQUIDITY",
+    "BOUNDED_THREE_STRIKE_EXECUTION_COST_THEN_DELTA_LIQUIDITY_RR",
   ]),
   atmStrikeSelectionPolicy: z
     .literal("NEAREST_RETURNED_STRIKE_LOWER_STRIKE_ON_EXACT_TIE")
     .optional(),
-  fartherStrikeFallbackPolicy: z.literal("PROHIBITED").optional(),
+  fartherStrikeFallbackPolicy: z
+    .enum(["PROHIBITED", "BOUNDED_ADJACENT_ONLY"])
+    .optional(),
+  candidateWindowPolicy: z
+    .literal("EFFECTIVE_ATM_PLUS_ONE_ADJACENT_STRIKE_EACH_SIDE")
+    .optional(),
+  maximumCandidateStrikes: z.literal(3).optional(),
   itmExactDistanceTiePreference: z.boolean(),
   openInterestHardMinimum: z.number().int().nonnegative().nullable(),
   volumeHardMinimum: z.number().int().nonnegative().nullable(),
@@ -4190,10 +4224,21 @@ export const ContractSelectionMethodologySchema = z.object({
   thetaHardRange: z.null(),
   impliedVolatilityHardRange: z.null(),
   minimumEstimatedPremiumRewardRiskRatio: z.number().finite().positive().optional(),
+  maximumContractPremiumDollars: z.number().finite().positive().optional(),
+  maximumPlannedStructuralLossDollars: z.number().finite().positive().optional(),
+  hardLossBackstopPolicy: z
+    .literal("STRUCTURAL_INVALIDATION_OR_FIXED_DOLLAR_BACKSTOP_FIRST")
+    .optional(),
+  catastrophicLossPolicy: z
+    .literal("FULL_PREMIUM_ACKNOWLEDGED_NOT_POSITION_SIZING_RISK")
+    .optional(),
   optionScenarioMinutes: z.number().int().positive().optional(),
   optionScenarioPolicy: z.literal("DELTA_GAMMA_THETA_CONSTANT_IV_CONSERVATIVE_SPREAD_EXIT").optional(),
   preflightPolicy: z.literal("EVALUATE_CHAIN_WHILE_RISK_PREVIEW_WITHOUT_SELECTING").optional(),
-  evaluationScope: z.literal("RETURNED_CHAIN_WINDOW_SELECTED_SIDE"),
+  evaluationScope: z.enum([
+    "RETURNED_CHAIN_WINDOW_SELECTED_SIDE",
+    "BOUNDED_ATM_ADJACENT_SELECTED_SIDE",
+  ]),
   calculationsUse: z.enum([
     "OPTIONS_CHAIN_BID_ASK_AND_CHAIN_UNDERLYING",
     "OPTIONS_CHAIN_LIQUIDITY_AND_OPTION_SCENARIO_ESTIMATE",
@@ -4202,6 +4247,7 @@ export const ContractSelectionMethodologySchema = z.object({
   thresholdPolicy: z.enum([
     "EXPLICIT_CONTRACT_V1_PRODUCT_POLICY_NOT_BACKTESTED",
     "EXPLICIT_CONTRACT_V2_CONSERVATIVE_EXECUTION_POLICY_NOT_CALIBRATED",
+    "EXPLICIT_CONTRACT_V3_BOUNDED_SELECTION_AND_PLANNED_RISK_POLICY_NOT_CALIBRATED",
   ]),
 });
 export type ContractSelectionMethodology = z.infer<
@@ -4250,7 +4296,10 @@ export const SpyZeroDteContractSelectionResponseSchema = z
     chainUnderlyingPrice: z.number().finite().positive().nullable(),
     underlyingPriceDifferencePoints: z.number().finite().nullable(),
     expirationDate: MarketDateSchema.nullable(),
-    evaluationScope: z.literal("RETURNED_CHAIN_WINDOW_SELECTED_SIDE"),
+    evaluationScope: z.enum([
+      "RETURNED_CHAIN_WINDOW_SELECTED_SIDE",
+      "BOUNDED_ATM_ADJACENT_SELECTED_SIDE",
+    ]),
     evaluatedCandidateCount: z.number().int().nonnegative(),
     selectableCandidateCount: z.number().int().nonnegative(),
     rejectedCandidateCount: z.number().int().nonnegative(),
@@ -4627,6 +4676,10 @@ export const TradePlanAssemblySelectedContractSummarySchema = z.object({
   mini: z.boolean().nullable(),
   multiplier: z.number().finite().positive().nullable(),
   moneyness: ContractMoneynessSchema.nullable(),
+  candidateWindowRole: z
+    .enum(["LOWER_ADJACENT", "EFFECTIVE_ATM", "UPPER_ADJACENT"])
+    .nullable()
+    .optional(),
   bid: z.number().finite().positive().nullable(),
   ask: z.number().finite().positive().nullable(),
   calculatedMidpoint: z.number().finite().positive().nullable(),
@@ -4634,6 +4687,7 @@ export const TradePlanAssemblySelectedContractSummarySchema = z.object({
   spreadPoints: z.number().finite().nonnegative().nullable(),
   spreadRatio: z.number().finite().nonnegative().nullable(),
   spreadPercent: z.number().finite().nonnegative().nullable(),
+  estimatedExecutionCostDollars: z.number().finite().nonnegative().nullable().optional(),
   bidSize: z.number().int().nonnegative().nullable(),
   askSize: z.number().int().nonnegative().nullable(),
   openInterest: z.number().int().nonnegative().nullable(),
@@ -4654,6 +4708,11 @@ export const TradePlanAssemblySelectedContractSummarySchema = z.object({
   estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable().optional(),
   estimatedPremiumRewardPerShare: z.number().finite().nullable().optional(),
   estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable().optional(),
+  premiumDebitDollars: z.number().finite().positive().nullable().optional(),
+  catastrophicFullPremiumLossDollars: z.number().finite().positive().nullable().optional(),
+  estimatedPlannedStructuralLossDollars: z.number().finite().nonnegative().nullable().optional(),
+  hardLossBackstopDollars: z.number().finite().positive().nullable().optional(),
+  hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable().optional(),
   scenarioMinutes: z.number().int().positive().nullable().optional(),
   strikeDistancePoints: z.number().finite().nonnegative().nullable(),
   selectionRank: z.number().int().positive().nullable(),
@@ -4669,6 +4728,12 @@ export const TradePlanAssemblyOptionRiskRewardSchema = z.object({
   estimatedPremiumRiskPerShare: z.number().finite().nonnegative().nullable(),
   estimatedPremiumRewardPerShare: z.number().finite().nullable(),
   estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable(),
+  estimatedPlannedStructuralLossDollars: z.number().finite().nonnegative().nullable().optional(),
+  maximumPlannedStructuralLossDollars: z.number().finite().positive().optional(),
+  premiumDebitDollars: z.number().finite().positive().nullable().optional(),
+  maximumContractPremiumDollars: z.number().finite().positive().optional(),
+  hardLossBackstopDollars: z.number().finite().positive().nullable().optional(),
+  hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable().optional(),
   minimumRequiredPremiumRewardRiskRatio: z.number().finite().positive(),
   scenarioMinutes: z.number().int().positive().nullable(),
   calculationUnit: z.literal("OPTION_PREMIUM_PER_SHARE_ESTIMATE"),
@@ -4742,6 +4807,37 @@ export const TradePlanAssemblySourceSummarySchema = z.object({
     sourceOptionsChainIsDelayed: z.boolean().nullable(),
     primaryReasonCode: ContractSelectionPrimaryReasonCodeSchema,
     warningCode: ContractSelectionOverallWarningCodeSchema.nullable(),
+    evaluatedCandidateCount: z.number().int().nonnegative().optional(),
+    selectableCandidateCount: z.number().int().nonnegative().optional(),
+    candidateDiagnostics: z
+      .array(
+        z.object({
+          contractSymbol: z.string().min(1),
+          strikePrice: z.number().finite().positive(),
+          moneyness: ContractMoneynessSchema,
+          candidateWindowRole: z.enum([
+            "LOWER_ADJACENT",
+            "EFFECTIVE_ATM",
+            "UPPER_ADJACENT",
+          ]),
+          selectable: z.boolean(),
+          selectionRank: z.number().int().positive().nullable(),
+          bid: z.number().finite().nonnegative().nullable(),
+          ask: z.number().finite().nonnegative().nullable(),
+          spreadPercent: z.number().finite().nonnegative().nullable(),
+          delta: z.number().finite().nullable(),
+          premiumDebitDollars: z.number().finite().positive().nullable(),
+          estimatedPlannedStructuralLossDollars: z
+            .number()
+            .finite()
+            .nonnegative()
+            .nullable(),
+          estimatedPremiumRewardRiskRatio: z.number().finite().nonnegative().nullable(),
+          rejectionReasonCodes: z.array(ContractCandidateRejectionReasonCodeSchema),
+        }),
+      )
+      .max(3)
+      .optional(),
   }),
   selectedContractQuoteAt: z.string().datetime().nullable(),
 });
@@ -5050,7 +5146,7 @@ export type SpyZeroDteTradePlanAssemblyResponse = z.infer<
 >;
 
 /** Deterministic SPY 0DTE position-sizing and caller-supplied account-risk contract. */
-export const PositionSizingMethodologyVersionSchema = z.literal("SIZING_V1");
+export const PositionSizingMethodologyVersionSchema = z.literal("SIZING_V2");
 export type PositionSizingMethodologyVersion = z.infer<
   typeof PositionSizingMethodologyVersionSchema
 >;
@@ -5089,6 +5185,7 @@ export const PositionSizingPrimaryReasonCodeSchema = z.enum([
   "SOURCE_SELECTED_CONTRACT_ASK_INVALID",
   "SOURCE_SELECTED_CONTRACT_MULTIPLIER_INVALID",
   "SOURCE_SELECTED_CONTRACT_EXPIRATION_INVALID",
+  "SOURCE_PLANNED_STRUCTURAL_LOSS_INVALID",
   "SOURCE_DIRECTION_MISMATCH",
   "SIZING_CALCULATION_UNAVAILABLE",
 ]);
@@ -5104,6 +5201,7 @@ export const PositionSizingWarningCodeSchema = z.enum([
   "SELECTED_CONTRACT_ASK_UNAVAILABLE",
   "SELECTED_CONTRACT_MULTIPLIER_INVALID",
   "SELECTED_CONTRACT_EXPIRATION_INVALID",
+  "SELECTED_CONTRACT_PLANNED_RISK_UNAVAILABLE",
   "INVALID_SIZING_NUMERIC_DATA",
   "SIZING_VALIDATION_FAILED",
 ]);
@@ -5252,6 +5350,9 @@ export const PositionSizingSelectedContractSchema = z
     quoteAgeMilliseconds: z.number().finite().nonnegative().nullable(),
     quoteFreshnessState: ContractQuoteFreshnessStateSchema.nullable(),
     selectionRank: z.number().int().positive().nullable(),
+    estimatedPlannedStructuralLossDollars: z.number().finite().nonnegative().nullable(),
+    hardLossBackstopDollars: z.number().finite().positive().nullable(),
+    hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable(),
   })
   .strict();
 export type PositionSizingSelectedContract = z.infer<
@@ -5272,7 +5373,14 @@ export const PositionSizingPremiumRiskReferenceSchema = z
     multiplier: z.number().finite().positive().nullable(),
     premiumDebitReferencePerContractDollars: z.number().finite().positive().nullable(),
     fullPremiumLossReferencePerContractDollars: z.number().finite().positive().nullable(),
-    disclosureCode: z.literal("CURRENT_ASK_FULL_PREMIUM_LOSS_REFERENCE_ONLY"),
+    plannedStructuralLossReferencePerContractDollars: z
+      .number()
+      .finite()
+      .nonnegative()
+      .nullable(),
+    hardLossBackstopDollars: z.number().finite().positive().nullable(),
+    hardLossBackstopExitPremium: z.number().finite().nonnegative().nullable(),
+    disclosureCode: z.literal("CURRENT_ASK_CAPITAL_AND_STRUCTURAL_RISK_REFERENCE"),
   })
   .strict();
 export type PositionSizingPremiumRiskReference = z.infer<
@@ -5308,6 +5416,7 @@ export const PositionSizingPositionReferencesSchema = z
   .object({
     totalPremiumDebitReferenceDollars: z.number().finite().nonnegative().nullable(),
     totalFullPremiumLossReferenceDollars: z.number().finite().nonnegative().nullable(),
+    totalPlannedStructuralLossReferenceDollars: z.number().finite().nonnegative().nullable(),
     riskPercentOfAccountEquity: z.number().finite().nonnegative().nullable(),
     capitalPercentOfAccountEquity: z.number().finite().nonnegative().nullable(),
   })
@@ -5330,12 +5439,14 @@ export const PositionSizingDisclosuresSchema = z
   .object({
     callerSuppliedAccountSnapshot: z.literal(true),
     currentAskIsNotGuaranteed: z.literal(true),
-    fullPremiumLossAssumption: z.literal(true),
+    plannedStructuralLossUsedForSizing: z.literal(true),
+    fullPremiumLossAcknowledged: z.literal(true),
+    hardLossBackstopReferenceOnly: z.literal(true),
     quantityIsReferenceOnly: z.literal(true),
     noOrderExecution: z.literal(true),
     noBrokerAccountAccess: z.literal(true),
     noPersistence: z.literal(true),
-    noPremiumStop: z.literal(true),
+    noAutomatedPremiumStop: z.literal(true),
     noPremiumTarget: z.literal(true),
   })
   .strict();
@@ -5346,7 +5457,9 @@ export type PositionSizingDisclosures = z.infer<
 export const PositionSizingMethodologySchema = z
   .object({
     sizingPremiumReference: z.literal("CURRENT_ASK"),
-    maximumLossMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    maximumLossMethod: z.literal("PLANNED_STRUCTURAL_LOSS_REFERENCE"),
+    catastrophicCapitalExposureMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    hardLossBackstopMethod: z.literal("FIXED_DOLLAR_LOSS_FROM_ACTUAL_ENTRY"),
     effectiveRiskBudgetMethod: z.literal("MINIMUM_OF_EXPLICIT_RISK_LIMITS"),
     effectiveCapitalBudgetMethod: z.literal(
       "MINIMUM_OF_AVAILABLE_CASH_AND_ALLOCATION_LIMIT",
@@ -5436,7 +5549,9 @@ export const SpyZeroDtePositionSizingResponseSchema = z
         contract.ask === null ||
         contract.quoteAt === null ||
         contract.quoteFreshnessState !== "FRESH" ||
-        contract.selectionRank !== 1
+        contract.selectionRank !== 1 ||
+        contract.estimatedPlannedStructuralLossDollars === null ||
+        contract.estimatedPlannedStructuralLossDollars <= 0
       ) {
         add("Applicable sizing requires a complete READY Assembly contract");
       }
@@ -5448,9 +5563,16 @@ export const SpyZeroDtePositionSizingResponseSchema = z
         premium.multiplier !== 100 ||
         premium.premiumDebitReferencePerContractDollars === null ||
         premium.fullPremiumLossReferencePerContractDollars === null ||
+        premium.plannedStructuralLossReferencePerContractDollars === null ||
+        premium.hardLossBackstopDollars === null ||
+        premium.hardLossBackstopExitPremium === null ||
         premium.premiumDebitReferencePerContractDollars !== contract.ask! * 100 ||
         premium.fullPremiumLossReferencePerContractDollars !==
-          premium.premiumDebitReferencePerContractDollars
+          premium.premiumDebitReferencePerContractDollars ||
+        premium.plannedStructuralLossReferencePerContractDollars !==
+          contract.estimatedPlannedStructuralLossDollars ||
+        premium.hardLossBackstopDollars !== contract.hardLossBackstopDollars ||
+        premium.hardLossBackstopExitPremium !== contract.hardLossBackstopExitPremium
       ) {
         add("Applicable sizing premium references are inconsistent");
       }
@@ -5492,9 +5614,11 @@ export const SpyZeroDtePositionSizingResponseSchema = z
         add("Sizing budget calculations are inconsistent");
       }
 
-      const perContract = premium.premiumDebitReferencePerContractDollars!;
-      const byRisk = Math.floor(expectedRiskBudget / perContract);
-      const byCapital = Math.floor(expectedCapitalBudget / perContract);
+      const capitalPerContract = premium.premiumDebitReferencePerContractDollars!;
+      const plannedRiskPerContract =
+        premium.plannedStructuralLossReferencePerContractDollars!;
+      const byRisk = Math.floor(expectedRiskBudget / plannedRiskPerContract);
+      const byCapital = Math.floor(expectedCapitalBudget / capitalPerContract);
       const finalQuantity = Math.min(
         byRisk,
         byCapital,
@@ -5552,14 +5676,18 @@ export const SpyZeroDtePositionSizingResponseSchema = z
         add("Sizing state does not match the calculated quantity and blockers");
       }
 
-      const expectedTotal = finalQuantity * perContract;
-      const expectedPercent =
-        (expectedTotal / value.accountSnapshot.accountEquityDollars) * 100;
+      const expectedCapitalTotal = finalQuantity * capitalPerContract;
+      const expectedRiskTotal = finalQuantity * plannedRiskPerContract;
+      const expectedRiskPercent =
+        (expectedRiskTotal / value.accountSnapshot.accountEquityDollars) * 100;
+      const expectedCapitalPercent =
+        (expectedCapitalTotal / value.accountSnapshot.accountEquityDollars) * 100;
       if (
-        value.positionReferences.totalPremiumDebitReferenceDollars !== expectedTotal ||
-        value.positionReferences.totalFullPremiumLossReferenceDollars !== expectedTotal ||
-        value.positionReferences.riskPercentOfAccountEquity !== expectedPercent ||
-        value.positionReferences.capitalPercentOfAccountEquity !== expectedPercent
+        value.positionReferences.totalPremiumDebitReferenceDollars !== expectedCapitalTotal ||
+        value.positionReferences.totalFullPremiumLossReferenceDollars !== expectedCapitalTotal ||
+        value.positionReferences.totalPlannedStructuralLossReferenceDollars !== expectedRiskTotal ||
+        value.positionReferences.riskPercentOfAccountEquity !== expectedRiskPercent ||
+        value.positionReferences.capitalPercentOfAccountEquity !== expectedCapitalPercent
       ) {
         add("Sizing position references are inconsistent");
       }
@@ -5575,6 +5703,9 @@ export const SpyZeroDtePositionSizingResponseSchema = z
         value.premiumRiskReference.multiplier !== null ||
         value.premiumRiskReference.premiumDebitReferencePerContractDollars !== null ||
         value.premiumRiskReference.fullPremiumLossReferencePerContractDollars !== null ||
+        value.premiumRiskReference.plannedStructuralLossReferencePerContractDollars !== null ||
+        value.premiumRiskReference.hardLossBackstopDollars !== null ||
+        value.premiumRiskReference.hardLossBackstopExitPremium !== null ||
         value.budgets.effectiveRiskBudgetDollars !== null ||
         value.budgets.limitingRiskControls.length !== 0 ||
         value.budgets.effectiveCapitalBudgetDollars !== null ||
@@ -5981,7 +6112,7 @@ export type AccountRiskSnapshotOriginErrorResponse = z.infer<
  * read-only Schwab account snapshot while retaining explicit caller risk limits.
  */
 export const SchwabAssistedPositionSizingMethodologyVersionSchema = z.literal(
-  "SCHWAB_ASSISTED_SIZING_V1",
+  "SCHWAB_ASSISTED_SIZING_V2",
 );
 export type SchwabAssistedPositionSizingMethodologyVersion = z.infer<
   typeof SchwabAssistedPositionSizingMethodologyVersionSchema
@@ -6111,14 +6242,16 @@ export const SchwabAssistedPositionSizingDisclosuresSchema = z
     brokerAvailableCashMayBeUsed: z.literal(true),
     readOnlyBrokerAccess: z.literal(true),
     currentAskIsNotGuaranteed: z.literal(true),
-    fullPremiumLossAssumption: z.literal(true),
+    plannedStructuralLossUsedForSizing: z.literal(true),
+    fullPremiumLossAcknowledged: z.literal(true),
+    hardLossBackstopReferenceOnly: z.literal(true),
     quantityIsReferenceOnly: z.literal(true),
     noOrderExecution: z.literal(true),
     positionsRequested: z.literal(false),
     ordersRequested: z.literal(false),
     transactionsRequested: z.literal(false),
     noPersistence: z.literal(true),
-    noPremiumStop: z.literal(true),
+    noAutomatedPremiumStop: z.literal(true),
     noPremiumTarget: z.literal(true),
   })
   .strict();
@@ -6128,7 +6261,7 @@ export type SchwabAssistedPositionSizingDisclosures = z.infer<
 
 export const SchwabAssistedPositionSizingMethodologySchema = z
   .object({
-    sourceSizingMethodology: z.literal("SIZING_V1"),
+    sourceSizingMethodology: z.literal("SIZING_V2"),
     accountEquityMethod: z.literal("CALLER_SUPPLIED"),
     availableCashMethod: z.literal(
       "SCHWAB_CURRENT_BALANCES_CASH_AVAILABLE_FOR_TRADING",
@@ -6137,7 +6270,9 @@ export const SchwabAssistedPositionSizingMethodologySchema = z
     remainingPortfolioRiskBudgetMethod: z.literal("CALLER_SUPPLIED"),
     assemblyFirstShortCircuit: z.literal(true),
     sizingPremiumReference: z.literal("CURRENT_ASK"),
-    maximumLossMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    maximumLossMethod: z.literal("PLANNED_STRUCTURAL_LOSS_REFERENCE"),
+    catastrophicCapitalExposureMethod: z.literal("FULL_PREMIUM_DEBIT_REFERENCE"),
+    hardLossBackstopMethod: z.literal("FIXED_DOLLAR_LOSS_FROM_ACTUAL_ENTRY"),
     effectiveRiskBudgetMethod: z.literal(
       "MINIMUM_OF_EXPLICIT_RISK_LIMITS",
     ),

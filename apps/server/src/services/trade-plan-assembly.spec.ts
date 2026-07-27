@@ -1,4 +1,4 @@
-/** Focused pure-logic tests for ASSEMBLY_V2 with V1.4 execution-quality inputs. */
+/** Focused pure-logic tests for ASSEMBLY_V2 with CONTRACT_V3 planned-risk inputs. */
 import assert from "node:assert/strict";
 import {
   SpyZeroDteTradePlanAssemblyResponseSchema,
@@ -51,6 +51,9 @@ test("confirmed Calls assemble into READY", () => {
   assert.equal(assembly.direction, "CALLS");
   assert.equal(assembly.entryCondition.confirmationPassed, true);
   assert.equal(assembly.selectedContract.contractDirection, "CALL");
+  assert.equal(assembly.selectedContract.candidateWindowRole, "EFFECTIVE_ATM");
+  assert.equal(assembly.sourceSummary.contract.evaluatedCandidateCount, 3);
+  assert.ok((assembly.selectedContract.estimatedPlannedStructuralLossDollars ?? 999) <= 50);
   assert.deepEqual(SpyZeroDteTradePlanAssemblyResponseSchema.parse(assembly), assembly);
 });
 
@@ -84,6 +87,12 @@ test("option-premium R:R is separate from underlying R:R", () => {
   assert.equal(assembly.optionRiskReward?.calculationUnit, "OPTION_PREMIUM_PER_SHARE_ESTIMATE");
   assert.equal(assembly.optionRiskReward?.state, "QUALIFIED");
   assert.ok((assembly.optionRiskReward?.estimatedPremiumRewardRiskRatio ?? 0) >= 1.25);
+  assert.ok((assembly.optionRiskReward?.estimatedPlannedStructuralLossDollars ?? 999) <= 50);
+  assert.equal(assembly.optionRiskReward?.maximumPlannedStructuralLossDollars, 50);
+  assert.equal(assembly.optionRiskReward?.premiumDebitDollars, 140);
+  assert.equal(assembly.optionRiskReward?.maximumContractPremiumDollars, 150);
+  assert.equal(assembly.optionRiskReward?.hardLossBackstopDollars, 50);
+  assert.equal(assembly.optionRiskReward?.hardLossBackstopExitPremium, 0.9);
   assert.notEqual(
     assembly.optionRiskReward?.estimatedPremiumRewardRiskRatio,
     assembly.underlyingRiskReward.rewardRiskRatio,
@@ -151,10 +160,10 @@ test("methodology records V3/V2 source versions", () => {
   const { assembly } = assembled("CALLS");
   assert.equal(assembly.sourceSummary.tradePlan.version, "TRADE_PLAN_V3");
   assert.equal(assembly.sourceSummary.risk.version, "RISK_V2");
-  assert.equal(assembly.sourceSummary.contract.version, "CONTRACT_V2");
+  assert.equal(assembly.sourceSummary.contract.version, "CONTRACT_V3");
   assert.equal(assembly.sourceSummary.marketState.snapshotIntegrityState, "COHERENT");
   assert.equal(assembly.sourceSummary.marketState.marketStructureSkewMilliseconds, 1000);
 });
 
-console.log(`\nAssembly V2/V1.4 tests: ${passed} passed, ${failed} failed`);
+console.log(`\nAssembly V2 / Contract V3 tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

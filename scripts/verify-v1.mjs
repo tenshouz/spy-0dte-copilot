@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 const repositoryRoot = process.cwd();
 const npmCli = process.env.npm_execpath;
 const tscCli = resolve(repositoryRoot, "node_modules", "typescript", "bin", "tsc");
-const expectedVersion = "1.9.0";
+const expectedVersion = "1.9.1";
 
 function run(command, args, label) {
   console.log(`\n=== ${label} ===`);
@@ -122,7 +122,7 @@ function getRepositoryFiles() {
   };
 }
 
-console.log("=== V1.9.0 static release audit ===");
+console.log("=== V1.9.1 static release audit ===");
 
 for (const packageFile of [
   "package.json",
@@ -166,6 +166,7 @@ for (const file of [
   "docs/V1_8_OPPORTUNITY_ALERT_EXECUTION.md",
   "docs/V1_9_COMPLETE_TRADING_FRAMEWORK.md",
   "docs/V1_9_PRODUCT_ALIGNMENT.md",
+  "docs/V1_9_1_CONTRACT_SELECTION_PLANNED_RISK.md",
   "apps/server/prisma/migrations/20260721040000_add_point_in_time_backtesting/migration.sql",
   "apps/server/prisma/migrations/20260723133000_add_complete_trading_framework/migration.sql",
   "packages/shared/src/release-metadata.ts",
@@ -215,7 +216,7 @@ for (const file of [
   "apps/web/src/lib/dashboard-guide-content.ts",
 ]) {
   if (!existsSync(file)) {
-    throw new Error(`Required V1.9.0 artifact is missing: ${file}`);
+    throw new Error(`Required V1.9.1 artifact is missing: ${file}`);
   }
 }
 
@@ -230,8 +231,8 @@ function requireText(file, fragments) {
 }
 
 const releaseMetadataSource = requireText("packages/shared/src/release-metadata.ts", [
-  'SPY_COPILOT_RELEASE_VERSION = "1.9.0"',
-  'SPY_COPILOT_RELEASE_LABEL = "V1.9.0"',
+  'SPY_COPILOT_RELEASE_VERSION = "1.9.1"',
+  'SPY_COPILOT_RELEASE_LABEL = "V1.9.1"',
   'SPY_COPILOT_RELEASE_NAME = "Complete Trading Framework"',
 ]);
 void releaseMetadataSource;
@@ -271,6 +272,7 @@ const currentReleaseSurfaces = [
   "docs/V1_PRD_COMPLIANCE_AUDIT.md",
   "docs/V1_3_DASHBOARD_GUIDE.md",
   "docs/V1_9_PRODUCT_ALIGNMENT.md",
+  "docs/V1_9_1_CONTRACT_SELECTION_PLANNED_RISK.md",
 ];
 
 const staleCurrentReleasePatterns = [
@@ -296,7 +298,9 @@ requireText("apps/web/src/lib/dashboard-guide-content.ts", [
   "Minimum underlying and option-premium R:R",
   "1.5:1",
   "2.0:1 or better",
-  "nearest effective ATM strike",
+  "bounded CONTRACT_V3",
+  "Planned structural loss",
+  "Premium-loss backstop",
   "60 seconds",
   "Shadow mode",
   "Target 2",
@@ -330,8 +334,10 @@ requireText("apps/web/src/app/alerts/page.tsx", [
 ]);
 
 requireText("apps/web/src/app/trade-plan/page.tsx", [
-  "strict effective-ATM",
-  "Trading Workspace applies the V1.9 policy",
+  "CONTRACT_V3 evaluates only the effective ATM strike",
+  "planned structural-risk sizing",
+  "manual $50 option-loss backstop",
+  "Trading Workspace applies policy",
 ]);
 
 const { files: repositoryFiles, hasGit } = getRepositoryFiles();
@@ -418,13 +424,13 @@ const constraintNames = [...migrationSource.matchAll(/ADD CONSTRAINT "([^"]+)"/g
   (match) => match[1],
 );
 if (new Set(constraintNames).size !== constraintNames.length) {
-  throw new Error("The V1.9.0 migration contains a duplicate constraint name.");
+  throw new Error("The V1.9 migration contains a duplicate constraint name.");
 }
 
 console.log("Static release audit passed.");
 
 if (process.argv.includes("--static-only")) {
-  console.log("Static-only V1.9.0 verification passed.");
+  console.log("Static-only V1.9.1 verification passed.");
   process.exit(0);
 }
 
@@ -481,4 +487,4 @@ if (hasGit) {
   console.log("\nGit metadata is not present; whitespace diff validation was skipped.");
 }
 
-console.log("\nV1.9.0 verification passed.");
+console.log("\nV1.9.1 verification passed.");

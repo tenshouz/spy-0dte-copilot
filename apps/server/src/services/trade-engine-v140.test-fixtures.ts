@@ -376,10 +376,10 @@ export function makeV140Contract(
     expirationDate: V140_MARKET_DATE,
     strikePrice,
     description: `${symbol} V1.4 test contract`,
-    bid: 2,
-    ask: 2.2,
-    last: 2.1,
-    mark: 2.1,
+    bid: 1.3,
+    ask: 1.4,
+    last: 1.35,
+    mark: 1.35,
     bidSize: 10,
     askSize: 12,
     lastSize: 1,
@@ -408,13 +408,14 @@ export function makeV140OptionsChain(
   const isCalls = direction === "CALLS";
   const underlyingPrice = isCalls ? 758.35 : 748.65;
   const calls = [
-    makeV140Contract("SPY_CALL_758", "CALL", 758, { delta: 0.58, openInterest: 1200, volume: 900 }),
-    makeV140Contract("SPY_CALL_759", "CALL", 759, { delta: 0.52, openInterest: 1500, volume: 1100 }),
+    makeV140Contract("SPY_CALL_757", "CALL", 757, { delta: 0.64, openInterest: 900, volume: 650 }),
+    makeV140Contract("SPY_CALL_758", "CALL", 758, { delta: 0.55, openInterest: 1200, volume: 900 }),
+    makeV140Contract("SPY_CALL_759", "CALL", 759, { delta: 0.48, openInterest: 1500, volume: 1100 }),
     makeV140Contract("SPY_CALL_760", "CALL", 760, { delta: 0.42, openInterest: 800, volume: 400 }),
   ];
   const puts = [
     makeV140Contract("SPY_PUT_748", "PUT", 748, { delta: -0.48, openInterest: 1200, volume: 850 }),
-    makeV140Contract("SPY_PUT_749", "PUT", 749, { delta: -0.57, openInterest: 1400, volume: 1000 }),
+    makeV140Contract("SPY_PUT_749", "PUT", 749, { delta: -0.55, openInterest: 1400, volume: 1000 }),
     makeV140Contract("SPY_PUT_750", "PUT", 750, { delta: -0.68, openInterest: 900, volume: 500 }),
   ];
   const all = [...calls, ...puts];
@@ -432,7 +433,7 @@ export function makeV140OptionsChain(
     calls,
     puts,
     requestedStrikeCount: 40,
-    returnedUniqueStrikeCount: 6,
+    returnedUniqueStrikeCount: 7,
     callContractCount: calls.length,
     putContractCount: puts.length,
     minimumReturnedStrike: 748,

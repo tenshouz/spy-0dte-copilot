@@ -16,8 +16,9 @@ import {
   type SpyZeroDteObjectiveRiskResponse,
   type SpyZeroDteOptionsChainResponse,
 } from "@spy-copilot/shared";
+import { TRADING_POLICY_V1 } from "./trading-policy.logic";
 
-export const CONTRACT_METHODOLOGY_VERSION = "CONTRACT_V2" as const;
+export const CONTRACT_METHODOLOGY_VERSION = "CONTRACT_V3" as const;
 export const MAXIMUM_SPREAD_RATIO = 0.10;
 export const MAXIMUM_SPREAD_POINTS = 0.20;
 export const MAXIMUM_SOURCE_ASSEMBLY_SKEW_MS = 30_000;
@@ -31,6 +32,11 @@ export const MAXIMUM_ABSOLUTE_DELTA = 0.75;
 export const TARGET_ABSOLUTE_DELTA = 0.55;
 export const MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO = 1.25;
 export const OPTION_SCENARIO_MINUTES = 15;
+export const MAXIMUM_CONTRACT_PREMIUM_DOLLARS =
+  TRADING_POLICY_V1.maximumContractPremiumDollars;
+export const MAXIMUM_PLANNED_STRUCTURAL_LOSS_DOLLARS =
+  TRADING_POLICY_V1.maximumPlannedStructuralLossDollars;
+export const MAXIMUM_CANDIDATE_STRIKES = 3 as const;
 
 const EMPTY_SELECTED_CONTRACT = {
   candidateId: null,
@@ -39,12 +45,14 @@ const EMPTY_SELECTED_CONTRACT = {
   strikePrice: null,
   expirationDate: null,
   moneyness: null,
+  candidateWindowRole: null,
   bid: null,
   ask: null,
   calculatedMidpoint: null,
   spreadPoints: null,
   spreadRatio: null,
   spreadPercent: null,
+  estimatedExecutionCostDollars: null,
   delta: null,
   gamma: null,
   theta: null,
@@ -58,6 +66,11 @@ const EMPTY_SELECTED_CONTRACT = {
   estimatedPremiumRiskPerShare: null,
   estimatedPremiumRewardPerShare: null,
   estimatedPremiumRewardRiskRatio: null,
+  premiumDebitDollars: null,
+  catastrophicFullPremiumLossDollars: null,
+  estimatedPlannedStructuralLossDollars: null,
+  hardLossBackstopDollars: null,
+  hardLossBackstopExitPremium: null,
   scenarioMinutes: null,
   quoteAt: null,
   quoteFreshnessState: null,
@@ -79,9 +92,12 @@ const METHODOLOGY = {
   maximumContractQuoteAgeMilliseconds: MAXIMUM_CONTRACT_QUOTE_AGE_MS,
   quoteFreshnessPolicy: "NORMALIZED_QUOTE_AT_EPOCH_MILLISECONDS" as const,
   sourceAssemblySkewPolicy: "RISK_CALCULATED_AT_VS_CHAIN_FETCHED_AT" as const,
-  rankingMethod: "STRICT_EFFECTIVE_ATM_THEN_OPTION_RR_AND_LIQUIDITY" as const,
+  rankingMethod:
+    "BOUNDED_THREE_STRIKE_EXECUTION_COST_THEN_DELTA_LIQUIDITY_RR" as const,
   atmStrikeSelectionPolicy: "NEAREST_RETURNED_STRIKE_LOWER_STRIKE_ON_EXACT_TIE" as const,
-  fartherStrikeFallbackPolicy: "PROHIBITED" as const,
+  fartherStrikeFallbackPolicy: "BOUNDED_ADJACENT_ONLY" as const,
+  candidateWindowPolicy: "EFFECTIVE_ATM_PLUS_ONE_ADJACENT_STRIKE_EACH_SIDE" as const,
+  maximumCandidateStrikes: MAXIMUM_CANDIDATE_STRIKES,
   itmExactDistanceTiePreference: true,
   openInterestHardMinimum: MINIMUM_OPEN_INTEREST,
   volumeHardMinimum: MINIMUM_VOLUME,
@@ -97,13 +113,20 @@ const METHODOLOGY = {
   thetaHardRange: null,
   impliedVolatilityHardRange: null,
   minimumEstimatedPremiumRewardRiskRatio: MINIMUM_ESTIMATED_PREMIUM_REWARD_RISK_RATIO,
+  maximumContractPremiumDollars: MAXIMUM_CONTRACT_PREMIUM_DOLLARS,
+  maximumPlannedStructuralLossDollars: MAXIMUM_PLANNED_STRUCTURAL_LOSS_DOLLARS,
+  hardLossBackstopPolicy:
+    "STRUCTURAL_INVALIDATION_OR_FIXED_DOLLAR_BACKSTOP_FIRST" as const,
+  catastrophicLossPolicy:
+    "FULL_PREMIUM_ACKNOWLEDGED_NOT_POSITION_SIZING_RISK" as const,
   optionScenarioMinutes: OPTION_SCENARIO_MINUTES,
   optionScenarioPolicy: "DELTA_GAMMA_THETA_CONSTANT_IV_CONSERVATIVE_SPREAD_EXIT" as const,
   preflightPolicy: "EVALUATE_CHAIN_WHILE_RISK_PREVIEW_WITHOUT_SELECTING" as const,
-  evaluationScope: "RETURNED_CHAIN_WINDOW_SELECTED_SIDE" as const,
+  evaluationScope: "BOUNDED_ATM_ADJACENT_SELECTED_SIDE" as const,
   calculationsUse: "OPTIONS_CHAIN_LIQUIDITY_AND_OPTION_SCENARIO_ESTIMATE" as const,
   midpointDisclosureCode: "MIDPOINT_REFERENCE_ONLY" as const,
-  thresholdPolicy: "EXPLICIT_CONTRACT_V2_CONSERVATIVE_EXECUTION_POLICY_NOT_CALIBRATED" as const,
+  thresholdPolicy:
+    "EXPLICIT_CONTRACT_V3_BOUNDED_SELECTION_AND_PLANNED_RISK_POLICY_NOT_CALIBRATED" as const,
 };
 
 function finite(value: unknown): value is number {
@@ -112,6 +135,18 @@ function finite(value: unknown): value is number {
 
 function finitePositive(value: unknown): value is number {
   return finite(value) && value > 0;
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function roundOptionPrice(value: number): number {
+  return Math.round((value + Number.EPSILON) * 10_000) / 10_000;
+}
+
+function roundConservativeLossCurrency(value: number): number {
+  return Math.ceil(value * 100 - 1e-9) / 100;
 }
 
 function selectedDirection(risk: SpyZeroDteObjectiveRiskResponse): SelectedContractDirection {
@@ -166,6 +201,59 @@ export function calculateContractMoneyness(
   if (strikePrice === chainUnderlyingPrice) return "ATM";
   if (direction === "CALL") return strikePrice < chainUnderlyingPrice ? "ITM" : "OTM";
   return strikePrice > chainUnderlyingPrice ? "ITM" : "OTM";
+}
+
+export type ContractCandidateWindowRole =
+  | "LOWER_ADJACENT"
+  | "EFFECTIVE_ATM"
+  | "UPPER_ADJACENT";
+
+export interface BoundedContractStrikeWindow {
+  effectiveAtmStrike: number | null;
+  lowerAdjacentStrike: number | null;
+  upperAdjacentStrike: number | null;
+  strikes: number[];
+  roleByStrike: Map<number, ContractCandidateWindowRole>;
+}
+
+/**
+ * CONTRACT_V3 evaluates only the nearest returned strike and the immediately
+ * adjacent returned strike on each side. This prevents an unbounded search for
+ * a cheaper farther-OTM contract while allowing a nearby ITM/OTM alternative
+ * when the exact nearest strike is not the best executable expression.
+ */
+export function selectBoundedContractStrikeWindow(
+  strikes: number[],
+  underlyingPrice: number | null,
+): BoundedContractStrikeWindow {
+  const sorted = [...new Set(strikes.filter(finitePositive))].sort((a, b) => a - b);
+  const effectiveAtmStrike = finitePositive(underlyingPrice)
+    ? selectAtmStrike(sorted, underlyingPrice)
+    : null;
+  if (effectiveAtmStrike === null) {
+    return {
+      effectiveAtmStrike: null,
+      lowerAdjacentStrike: null,
+      upperAdjacentStrike: null,
+      strikes: [],
+      roleByStrike: new Map(),
+    };
+  }
+  const atmIndex = sorted.indexOf(effectiveAtmStrike);
+  const lowerAdjacentStrike = atmIndex > 0 ? sorted[atmIndex - 1] ?? null : null;
+  const upperAdjacentStrike =
+    atmIndex >= 0 && atmIndex < sorted.length - 1 ? sorted[atmIndex + 1] ?? null : null;
+  const roleByStrike = new Map<number, ContractCandidateWindowRole>();
+  if (lowerAdjacentStrike !== null) roleByStrike.set(lowerAdjacentStrike, "LOWER_ADJACENT");
+  roleByStrike.set(effectiveAtmStrike, "EFFECTIVE_ATM");
+  if (upperAdjacentStrike !== null) roleByStrike.set(upperAdjacentStrike, "UPPER_ADJACENT");
+  return {
+    effectiveAtmStrike,
+    lowerAdjacentStrike,
+    upperAdjacentStrike,
+    strikes: [...roleByStrike.keys()].sort((a, b) => a - b),
+    roleByStrike,
+  };
 }
 
 export interface ContractLiquidityCalculation {
@@ -409,7 +497,7 @@ function buildCandidate(
   direction: "CALL" | "PUT",
   currentMarketDate: string,
   chainUnderlyingPrice: number | null,
-  effectiveAtmStrike: number | null,
+  candidateWindowRole: ContractCandidateWindowRole,
   compatibilityState: ContractSourceCompatibilityState,
   evaluationTimeMs: number,
   risk: SpyZeroDteObjectiveRiskResponse,
@@ -442,14 +530,6 @@ function buildCandidate(
   if (!finite(contract.strikePrice)) pushReason(reasons, "STRIKE_NOT_FINITE");
   else if (contract.strikePrice <= 0) pushReason(reasons, "STRIKE_NOT_POSITIVE");
 
-  if (
-    !finitePositive(effectiveAtmStrike) ||
-    !finite(contract.strikePrice) ||
-    contract.strikePrice !== effectiveAtmStrike
-  ) {
-    pushReason(reasons, "NOT_EFFECTIVE_ATM_STRIKE");
-  }
-
   if (!finite(contract.bid)) pushReason(reasons, "BID_NOT_FINITE");
   else if (contract.bid <= 0) pushReason(reasons, "BID_NOT_POSITIVE");
 
@@ -480,6 +560,21 @@ function buildCandidate(
   }
   if (liquidity.spreadPoints !== null && liquidity.spreadPoints > MAXIMUM_SPREAD_POINTS + 1e-9) {
     pushReason(reasons, "SPREAD_POINTS_EXCEEDS_MAXIMUM");
+  }
+
+  const validMultiplier = contract.multiplier === 100;
+  const premiumDebitDollars =
+    finitePositive(contract.ask) && validMultiplier ? roundCurrency(contract.ask * 100) : null;
+  const catastrophicFullPremiumLossDollars = premiumDebitDollars;
+  const estimatedExecutionCostDollars =
+    finite(liquidity.spreadPoints) && validMultiplier
+      ? roundCurrency(liquidity.spreadPoints * 100)
+      : null;
+  if (
+    premiumDebitDollars !== null &&
+    premiumDebitDollars > MAXIMUM_CONTRACT_PREMIUM_DOLLARS + 1e-9
+  ) {
+    pushReason(reasons, "PREMIUM_EXCEEDS_MAXIMUM");
   }
 
   if (contract.bidSize === null || contract.bidSize < MINIMUM_BID_SIZE) {
@@ -525,6 +620,26 @@ function buildCandidate(
   } else if (scenario.state === "NOT_QUALIFIED") {
     pushReason(reasons, "OPTION_REWARD_RISK_BELOW_MINIMUM");
   }
+  const estimatedPlannedStructuralLossDollars =
+    finite(scenario.premiumRiskPerShare) && validMultiplier
+      ? roundConservativeLossCurrency(scenario.premiumRiskPerShare * 100)
+      : null;
+  if (
+    estimatedPlannedStructuralLossDollars !== null &&
+    estimatedPlannedStructuralLossDollars >
+      MAXIMUM_PLANNED_STRUCTURAL_LOSS_DOLLARS + 1e-9
+  ) {
+    pushReason(reasons, "PLANNED_STRUCTURAL_LOSS_EXCEEDS_MAXIMUM");
+  }
+  const hardLossBackstopExitPremium =
+    finitePositive(contract.ask) && validMultiplier
+      ? roundOptionPrice(
+          Math.max(
+            0,
+            contract.ask - MAXIMUM_PLANNED_STRUCTURAL_LOSS_DOLLARS / 100,
+          ),
+        )
+      : null;
 
   const freshness = classifyContractQuoteFreshness(contract.quoteAt, evaluationTimeMs);
   if (freshness.state === "UNKNOWN" || freshness.state === "UNAVAILABLE") {
@@ -555,6 +670,7 @@ function buildCandidate(
     eligibilityStatus: selectable ? "SELECTABLE" : "REJECTED",
     selectable,
     moneyness,
+    candidateWindowRole,
     providerInTheMoney: contract.inTheMoney,
     chainUnderlyingPrice: underlyingValid ? chainUnderlyingPrice : null,
     strikeDistancePoints:
@@ -568,6 +684,7 @@ function buildCandidate(
     spreadPoints: liquidity.spreadPoints,
     spreadRatio: liquidity.spreadRatio,
     spreadPercent: liquidity.spreadPercent,
+    estimatedExecutionCostDollars,
     bidSize: contract.bidSize,
     askSize: contract.askSize,
     openInterest: contract.openInterest,
@@ -592,6 +709,13 @@ function buildCandidate(
     estimatedPremiumRiskPerShare: scenario.premiumRiskPerShare,
     estimatedPremiumRewardPerShare: scenario.premiumRewardPerShare,
     estimatedPremiumRewardRiskRatio: scenario.rewardRiskRatio,
+    premiumDebitDollars,
+    catastrophicFullPremiumLossDollars,
+    estimatedPlannedStructuralLossDollars,
+    hardLossBackstopDollars: validMultiplier
+      ? MAXIMUM_PLANNED_STRUCTURAL_LOSS_DOLLARS
+      : null,
+    hardLossBackstopExitPremium,
     scenarioMinutes: OPTION_SCENARIO_MINUTES,
     selectionRank: null,
     rejectionReasonCodes: reasons,
@@ -620,18 +744,14 @@ export function rankContractCandidates(
     .filter((candidate) => candidate.selectable)
     .slice()
     .sort((a, b) => {
+      const executionCost =
+        (a.estimatedExecutionCostDollars ?? Number.POSITIVE_INFINITY) -
+        (b.estimatedExecutionCostDollars ?? Number.POSITIVE_INFINITY);
+      if (executionCost !== 0) return executionCost;
+
       const deltaDistance = (a.deltaDistanceFromTarget ?? Number.POSITIVE_INFINITY) -
         (b.deltaDistanceFromTarget ?? Number.POSITIVE_INFINITY);
       if (deltaDistance !== 0) return deltaDistance;
-
-      const optionRewardRisk =
-        (b.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY) -
-        (a.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY);
-      if (optionRewardRisk !== 0) return optionRewardRisk;
-
-      const spread = (a.spreadRatio ?? Number.POSITIVE_INFINITY) -
-        (b.spreadRatio ?? Number.POSITIVE_INFINITY);
-      if (spread !== 0) return spread;
 
       const displayedDepthA = Math.min(a.bidSize ?? 0, a.askSize ?? 0);
       const displayedDepthB = Math.min(b.bidSize ?? 0, b.askSize ?? 0);
@@ -642,6 +762,16 @@ export function rankContractCandidates(
 
       const oi = descendingNullable(a.openInterest, b.openInterest);
       if (oi !== 0) return oi;
+
+      const optionRewardRisk =
+        (b.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY) -
+        (a.estimatedPremiumRewardRiskRatio ?? Number.NEGATIVE_INFINITY);
+      if (optionRewardRisk !== 0) return optionRewardRisk;
+
+      const premiumDebit =
+        (a.premiumDebitDollars ?? Number.POSITIVE_INFINITY) -
+        (b.premiumDebitDollars ?? Number.POSITIVE_INFINITY);
+      if (premiumDebit !== 0) return premiumDebit;
 
       const distance = (a.strikeDistancePoints ?? Number.POSITIVE_INFINITY) -
         (b.strikeDistancePoints ?? Number.POSITIVE_INFINITY);
@@ -676,12 +806,14 @@ function selectedContractFromCandidate(
     strikePrice: selected.strikePrice,
     expirationDate: selected.expirationDate,
     moneyness: selected.moneyness,
+    candidateWindowRole: selected.candidateWindowRole,
     bid: selected.bid,
     ask: selected.ask,
     calculatedMidpoint: selected.calculatedMidpoint,
     spreadPoints: selected.spreadPoints,
     spreadRatio: selected.spreadRatio,
     spreadPercent: selected.spreadPercent,
+    estimatedExecutionCostDollars: selected.estimatedExecutionCostDollars ?? null,
     delta: selected.delta,
     gamma: selected.gamma,
     theta: selected.theta,
@@ -695,6 +827,13 @@ function selectedContractFromCandidate(
     estimatedPremiumRiskPerShare: selected.estimatedPremiumRiskPerShare ?? null,
     estimatedPremiumRewardPerShare: selected.estimatedPremiumRewardPerShare ?? null,
     estimatedPremiumRewardRiskRatio: selected.estimatedPremiumRewardRiskRatio ?? null,
+    premiumDebitDollars: selected.premiumDebitDollars ?? null,
+    catastrophicFullPremiumLossDollars:
+      selected.catastrophicFullPremiumLossDollars ?? null,
+    estimatedPlannedStructuralLossDollars:
+      selected.estimatedPlannedStructuralLossDollars ?? null,
+    hardLossBackstopDollars: selected.hardLossBackstopDollars ?? null,
+    hardLossBackstopExitPremium: selected.hardLossBackstopExitPremium ?? null,
     scenarioMinutes: selected.scenarioMinutes ?? null,
     quoteAt: selected.quoteAt,
     quoteFreshnessState: selected.quoteFreshnessState,
@@ -779,7 +918,7 @@ function baseResponse(
     sourceRiskDirection: risk.direction,
     sourceRiskIsCurrentlyTradeEligible: risk.isCurrentlyTradeEligible,
     riskCurrentPrice: risk.currentPrice,
-    evaluationScope: "RETURNED_CHAIN_WINDOW_SELECTED_SIDE",
+    evaluationScope: "BOUNDED_ATM_ADJACENT_SELECTED_SIDE",
     methodology: METHODOLOGY,
   };
 }
@@ -916,22 +1055,24 @@ export function buildSpyZeroDteContractSelection(
   }
 
   const selectedSide = direction === "CALL" ? chain.calls : chain.puts;
-  const effectiveAtmStrike = selectAtmStrike(
-    [...chain.calls, ...chain.puts].map((contract) => contract.strikePrice),
+  const strikeWindow = selectBoundedContractStrikeWindow(
+    selectedSide.map((contract) => contract.strikePrice),
     chain.underlyingPrice,
   );
-  const rawCandidates = selectedSide.map((contract) =>
-    buildCandidate(
-      contract,
-      direction as "CALL" | "PUT",
-      risk.currentMarketDate,
-      chain.underlyingPrice,
-      effectiveAtmStrike,
-      compatibility.state,
-      calculatedAtMs,
-      risk,
-    ),
-  );
+  const rawCandidates = selectedSide
+    .filter((contract) => strikeWindow.roleByStrike.has(contract.strikePrice))
+    .map((contract) =>
+      buildCandidate(
+        contract,
+        direction as "CALL" | "PUT",
+        risk.currentMarketDate,
+        chain.underlyingPrice,
+        strikeWindow.roleByStrike.get(contract.strikePrice)!,
+        compatibility.state,
+        calculatedAtMs,
+        risk,
+      ),
+    );
   const candidates = rankContractCandidates(rawCandidates, direction as "CALL" | "PUT");
   const selected = candidates.find((candidate) => candidate.selectionRank === 1) ?? null;
 
@@ -1050,19 +1191,15 @@ export function buildSpyZeroDteContractSelection(
     });
   }
 
-  const effectiveAtmCandidates = candidates.filter(
-    (candidate) =>
-      effectiveAtmStrike !== null && candidate.strikePrice === effectiveAtmStrike,
-  );
-  const anyUnknownFreshness = effectiveAtmCandidates.some(
+  const anyUnknownFreshness = candidates.some(
     (candidate) =>
       candidate.quoteFreshnessState === "UNKNOWN" ||
       candidate.quoteFreshnessState === "UNAVAILABLE",
   );
-  const anyStaleFreshness = effectiveAtmCandidates.some(
+  const anyStaleFreshness = candidates.some(
     (candidate) => candidate.quoteFreshnessState === "STALE",
   );
-  const anyPartial = effectiveAtmCandidates.some(
+  const anyPartial = candidates.some(
     (candidate) => candidate.sourceStatus === "PARTIAL",
   );
   const engineState = anyUnknownFreshness || anyStaleFreshness || anyPartial ? "PARTIAL" : "AVAILABLE";

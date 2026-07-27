@@ -51,7 +51,7 @@ export const GUIDE_DAILY_WORKFLOW = [
   {
     title: "Check System Readiness",
     detail:
-      "Open System Readiness first. Confirm release V1.9.0, the 13 configuration/runtime checks, and the Trading Workspace monitor. Run the complete probe when you need live end-to-end confirmation.",
+      "Open System Readiness first. Confirm release V1.9.1, the 13 configuration/runtime checks, and the Trading Workspace monitor. Run the complete probe when you need live end-to-end confirmation.",
   },
   {
     title: "Confirm connections and automation",
@@ -66,7 +66,7 @@ export const GUIDE_DAILY_WORKFLOW = [
   {
     title: "Use Trade Plan for the source thesis",
     detail:
-      "Review the structural direction, trigger, invalidation, objective, strict effective-ATM contract result, execution quality, and confidence inputs.",
+      "Review the structural direction, trigger, invalidation, objective, bounded ATM-plus-adjacent contract result, execution quality, and confidence inputs.",
   },
   {
     title: "Use Trading Workspace for policy and lifecycle",
@@ -104,12 +104,12 @@ export const GUIDE_TRADING_POLICY_FACTS: readonly GuidePolicyFact[] = [
   {
     title: "Contract and reward-to-risk",
     detail:
-      "The nearest effective ATM strike must qualify or the result is NO QUALIFIED CONTRACT—no farther-strike substitution. Minimum underlying and option-premium R:R is 1.5:1; 2.0:1 or better is preferred.",
+      "CONTRACT_V3 evaluates only the effective ATM strike and the immediately adjacent returned strike on each side. It ranks passing candidates by execution cost, delta alignment, liquidity, option R:R, and premium; it never searches farther. The debit must be at most $150 and modeled structural loss at most $50. Minimum underlying and option-premium R:R is 1.5:1; 2.0:1 or better is preferred.",
   },
   {
     title: "Execution and confirmation",
     detail:
-      "Modeled entries use the ask and modeled exits use the bid. Every paper-equivalent entry and exit requires manual confirmation; the dashboard never submits a broker order.",
+      "Modeled entries use the ask and modeled exits use the bid. The primary stop is SPY structural invalidation, with a hard $50 bid-side loss backstop based on the actual entry price; whichever occurs first prompts a manual exit. Every entry and exit requires manual confirmation, and the dashboard never submits a broker order.",
   },
   {
     title: "Events, conflicts, and shadow setups",
@@ -178,10 +178,10 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
       "Call GEX, Put GEX, Net GEX, Call DEX, Put DEX, and Net DEX proxies",
       "Ranked Call Wall and Put Wall proxies",
       "Gamma-balance proxy, Gamma cliffs, and DEX anchor",
-      "Soft confirmation used to adjust Trade Plan confidence",
+      "Research-only exposure context with zero direct confidence points under EXPOSURE_CONFIRMATION_V2",
     ],
     remember:
-      "These are returned-chain-window analytical proxies, not direct knowledge of dealer inventory. They cannot create a trade direction or block eligibility.",
+      "These are returned-chain-window analytical proxies, not direct knowledge of dealer inventory. They contribute zero direct confidence points and cannot create, strengthen, or block a live direction by themselves.",
     searchTerms: ["gamma", "delta", "walls", "cliffs", "dealer", "exposure", "confirmation"],
   },
   {
@@ -198,7 +198,7 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
       "Duplicate consolidation and fail-closed directional conflicts",
       "Full-day and windowed event restrictions plus 3:00/3:55/4:00 ET controls",
       "Sixty-second READY alert, manual entry/exit confirmation, and audited overrides",
-      "Ask-entry/bid-exit modeling, Target 1/2/3 marks, time review, and pure-engine versus user-executed research",
+      "Ask-entry/bid-exit modeling, structural stop plus $50 bid-side loss backstop, Target 1/2/3 marks, time review, and pure-engine versus user-executed research",
     ],
     remember:
       "The Workspace records decisions and paper-equivalent positions only. It cannot create, modify, or close a Schwab order.",
@@ -219,15 +219,15 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
     title: "Trade Plan",
     shortTitle: "Trade Plan",
     purpose:
-      "Builds the deterministic structural Calls or Puts thesis and contract result that feeds the V1.9 Trading Workspace.",
+      "Builds the deterministic structural Calls or Puts thesis and contract result that feeds the V1.9.1 Trading Workspace.",
     useWhen: "Use it to inspect the source structure before any manual paper-equivalent decision.",
     features: [
       "Plan state, direction, entry trigger, and source reason codes",
       "Structural invalidation, objectives, and minimum 1.5:1 underlying R:R with 2.0:1 preferred",
-      "Strict effective-ATM same-day contract selection with no farther-strike fallback",
-      "Execution-quality confirmation and option-premium economics",
-      "Structural confidence plus research-only GEX/DEX soft confirmation",
-      "Read-only sizing reference; V1.9 hard policy eligibility is shown in Trading Workspace",
+      "Bounded same-day contract selection: effective ATM plus one adjacent strike on each side, with no farther-strike search",
+      "Execution-quality confirmation, $150 debit cap, modeled structural loss no greater than $50, and separate full-premium exposure",
+      "Structural confidence with GEX/DEX displayed as zero-weight research context",
+      "Read-only sizing reference; V1.9.1 hard policy eligibility is shown in Trading Workspace",
     ],
     remember:
       "A source Trade Plan can be structurally READY while the Workspace still blocks entry for daily risk, attempts, event restrictions, time limits, conflicts, or an expired READY alert.",
@@ -239,7 +239,7 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
       "target",
       "risk reward",
       "contract",
-      "strict atm",
+      "bounded contract",
       "sizing",
     ],
   },
@@ -317,10 +317,10 @@ export const GUIDE_PAGES: readonly GuidePageDefinition[] = [
     href: "/system",
     title: "System Readiness",
     shortTitle: "System",
-    purpose: "Reports whether the current V1.9.0 local system is operational and safe to use.",
+    purpose: "Reports whether the current V1.9.1 local system is operational and safe to use.",
     useWhen: "Use it before the session and whenever data, the Workspace, or alerts behave unexpectedly.",
     features: [
-      "Release V1.9.0 and 13 configuration, security, persistence, policy, registry, and runtime checks",
+      "Release V1.9.1 and 13 configuration, security, persistence, policy, registry, and runtime checks",
       "Trading-framework migration/table verification",
       "Trading Workspace monitor heartbeat state",
       "READY, DEGRADED, or BLOCKED overall state with remediation",
@@ -409,9 +409,9 @@ export const GUIDE_TRADE_PLAN_STEPS = [
       "Both underlying and option-premium reward-to-risk must be at least 1.5:1. A 2.0:1 or better relationship is preferred, but it is not the minimum gate.",
   },
   {
-    title: "7. The strict effective-ATM contract must qualify",
+    title: "7. One bounded CONTRACT_V3 candidate must qualify",
     detail:
-      "Only the nearest effective ATM strike is eligible. If that strike fails premium, spread, freshness, liquidity, or scenario checks—or is missing on the required side—the result is NO QUALIFIED CONTRACT. A farther strike is never substituted automatically.",
+      "The selector evaluates at most three returned strikes on the required side: effective ATM, one immediately lower, and one immediately higher. Every candidate must pass freshness, spread, displayed size, activity, delta, $150 premium, option-scenario R:R, and $50 modeled structural-loss gates. Passing candidates are ranked transparently, and no fourth or farther strike is searched.",
   },
   {
     title: "8. The V1.9 risk ledger, time, event, and attempt gates must pass",
@@ -426,7 +426,7 @@ export const GUIDE_TRADE_PLAN_STEPS = [
   {
     title: "10. Manual confirmation records the paper-equivalent lifecycle",
     detail:
-      "You enter the actual paper price to record one contract. Target 2 is the primary exit, Target 1 is management, Target 3 is research-only, and the dashboard never sends a broker order.",
+      "You enter the actual paper price to record one contract. Exit when SPY reaches structural invalidation or the executable option bid reaches the $50 loss backstop, whichever occurs first. Target 2 is the primary exit, Target 1 is management, Target 3 is research-only, and the dashboard never sends a broker order.",
   },
 ] as const;
 
@@ -458,8 +458,8 @@ export const GUIDE_PLAN_STATES: readonly GuideStatusDefinition[] = [
   {
     label: "NO QUALIFIED CONTRACT",
     tone: "wait",
-    simpleMeaning: "The underlying setup qualifies, but no returned same-day option passed the contract-quality rules.",
-    action: "Wait for quotes or spreads to improve; do not substitute a rejected contract blindly.",
+    simpleMeaning: "The underlying setup qualifies, but none of the three bounded same-day candidates passed every execution, premium, planned-risk, and option-economics rule.",
+    action: "Read the per-candidate rejection reasons. Wait for conditions to improve; do not reach to a farther strike or override blindly.",
   },
   {
     label: "READY",
@@ -510,11 +510,11 @@ export const GUIDE_SOURCE_STATES: readonly GuideStatusDefinition[] = [
 
 export const GUIDE_ALERT_CHECKLIST = [
   "The backend terminal and PostgreSQL are running.",
-  "System Readiness shows the V1.9 trading tables and Workspace monitor are available.",
+  "System Readiness shows the V1.9.1 trading tables and Workspace monitor are available.",
   "Schwab is connected and the required source products are usable.",
   "Discord is configured when you want notifications.",
   "Persistent backend automation and Trade Plan Alerts are enabled in Settings.",
-  "A new live setup episode survives consolidation, conflict, policy, event, time, risk, and strict-ATM checks.",
+  "A new live setup episode survives consolidation, conflict, policy, event, time, structural risk, and the bounded CONTRACT_V3 candidate checks.",
   "The READY alert is still active inside its 60-second window.",
   "Discord receives actionable-only READY and position-management events; expiration, revocation, and Target 3 research records remain in the audit trail without notification noise.",
 ] as const;
@@ -585,12 +585,12 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   },
   {
     term: "GEX",
-    meaning: "A returned-option-window Gamma Exposure proxy used for context and confidence adjustment, not as observed dealer inventory.",
+    meaning: "A returned-option-window Gamma Exposure proxy used as zero-weight context and research evidence, not as observed dealer inventory.",
     searchTerms: ["gamma exposure"],
   },
   {
     term: "DEX",
-    meaning: "A returned-option-window Delta Exposure proxy used for context and confidence adjustment, not as observed dealer inventory.",
+    meaning: "A returned-option-window Delta Exposure proxy used as zero-weight context and research evidence, not as observed dealer inventory.",
     searchTerms: ["delta exposure"],
   },
   {
@@ -610,7 +610,7 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   },
   {
     term: "Adjusted confidence",
-    meaning: "Structural confidence after the fixed GEX/DEX soft-confirmation points are added or subtracted.",
+    meaning: "The current execution-quality alignment score. Under EXPOSURE_CONFIRMATION_V2, GEX/DEX add or subtract zero direct points; this score is not a win probability.",
     searchTerms: ["exposure confirmation", "supportive", "conflicting"],
   },
   {
@@ -630,7 +630,7 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   },
   {
     term: "Reward-to-risk",
-    meaning: "Potential reward divided by planned risk. V1.9 requires at least 1.5:1 for both the underlying structure and option-premium scenario; 2.0:1 or better is preferred.",
+    meaning: "Potential reward divided by planned risk. V1.9.1 requires at least 1.5:1 for both the underlying structure and option-premium scenario; 2.0:1 or better is preferred.",
     searchTerms: ["rr", "1.5:1", "2:1", "preferred"],
   },
   {
@@ -675,8 +675,32 @@ export const GUIDE_GLOSSARY: readonly GuideGlossaryDefinition[] = [
   {
     term: "Effective ATM",
     meaning:
-      "The returned strike nearest the current SPY price, with the lower strike used on an exact distance tie. V1.9 never substitutes a farther strike when the effective-ATM contract fails.",
-    searchTerms: ["strict atm", "strike", "no fallback"],
+      "The returned strike nearest the current SPY price, with the lower strike used on an exact distance tie. It anchors the bounded CONTRACT_V3 candidate window.",
+    searchTerms: ["atm", "strike", "contract window"],
+  },
+  {
+    term: "Bounded contract window",
+    meaning:
+      "At most three same-day contracts on the required side: effective ATM plus the immediately adjacent returned strike below and above. The selector never searches a fourth or farther strike to force a trade.",
+    searchTerms: ["contract v3", "adjacent strike", "three strikes"],
+  },
+  {
+    term: "Planned structural loss",
+    meaning:
+      "The conservative estimated option loss if SPY reaches the selected structural invalidation. This—not the full debit—is used for risk capacity, and it must be no more than $50 per trade.",
+    searchTerms: ["planned risk", "structural stop", "50"],
+  },
+  {
+    term: "Full-premium exposure",
+    meaning:
+      "The option debit paid, up to $150. It is the catastrophic maximum-loss and capital-exposure reference, but it is kept separate from the normal planned structural loss used for sizing.",
+    searchTerms: ["debit", "catastrophic loss", "150"],
+  },
+  {
+    term: "Premium-loss backstop",
+    meaning:
+      "A manual exit prompt when the executable option bid implies a $50 loss from the actual entry price. It complements—rather than replaces—the primary SPY structural invalidation and never submits an order automatically.",
+    searchTerms: ["bid stop", "50 loss", "hard backstop"],
   },
   {
     term: "READY alert",

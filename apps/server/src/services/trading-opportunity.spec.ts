@@ -106,7 +106,7 @@ test("risk-ledger block propagates the exact controlling reason", () => {
   assert.equal(result.primaryReasonCode, "TRADE_COUNT_LIMIT_REACHED");
 });
 
-test("READY setup without a qualified strict-ATM contract remains WAITING", () => {
+test("READY setup without a qualified bounded CONTRACT_V3 contract remains WAITING", () => {
   const result = build([candidate({ liveEligible: false, selectedContractSymbol: null, selectedContractAsk: null, selectedContractBid: null, selectedContractStrike: null, selectedContractExpiration: null, selectedContractQuoteAt: null })]);
   assert.equal(result.state, "WAITING");
   assert.equal(result.primaryReasonCode, "READY_SETUP_FAILED_LIVE_CONTRACT_OR_QUALITY_GATE");

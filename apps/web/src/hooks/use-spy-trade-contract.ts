@@ -15,7 +15,7 @@ export const TRADE_CONTRACT_TRANSPORT_WARNING =
 
 export function useSpyZeroDteContractSelection() {
   return useQuery({
-    queryKey: ["spy-zero-dte-contract-selection", "CONTRACT_V2"],
+    queryKey: ["spy-zero-dte-contract-selection", "CONTRACT_V3"],
     queryFn: apiClient.getSpyZeroDteContractSelection,
     refetchInterval: () => getSpyDerivedPollIntervalMs(),
     ...LIVE_QUERY_RESPONSIVENESS_OPTIONS,

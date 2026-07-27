@@ -1,17 +1,17 @@
-# Dashboard Guide — Introduced in V1.3.0, aligned through V1.9.0
+# Dashboard Guide — Introduced in V1.3.0, aligned through V1.9.1
 
 ## Purpose
 
 The in-application Dashboard Guide at `/guide` was introduced in V1.3.0 and is maintained as current product documentation. It must describe the installed release rather than freeze the original V1.3 behavior.
 
-## Current V1.9.0 coverage
+## Current V1.9.1 coverage
 
 The Guide now includes:
 
-- the V1.9.0 release label and current local decision-support boundary;
+- the V1.9.1 release label and current local decision-support boundary;
 - the complete daily workflow from System Readiness through Trading Workspace and result review;
 - plain-English descriptions of every user-facing page, including Trading Workspace and Point-in-Time Backtesting;
-- the locked `TRADING_POLICY_V1` account, premium, planned-loss, daily-loss, trade-count, loss-streak, attempt, position, timing, event, R:R, strict-ATM, alert, and manual-confirmation controls;
+- the locked `TRADING_POLICY_V1` account, premium, planned-loss, daily-loss, trade-count, loss-streak, attempt, position, timing, event, R:R, bounded-contract, planned-risk, loss-backstop, alert, and manual-confirmation controls;
 - the 14-family setup registry, including the live-versus-shadow boundary;
 - duplicate consolidation and fail-closed Calls/Puts conflicts;
 - the distinction between the source Trade Plan and Workspace policy eligibility;
@@ -24,11 +24,11 @@ The Guide now includes:
 
 - Provider-aligned premarket remains 07:00–09:30 ET.
 - Minimum underlying and option-premium R:R is 1.5:1; 2.0:1 or better is preferred.
-- The nearest effective-ATM strike must qualify; a farther strike is never substituted automatically.
+- `CONTRACT_V3` evaluates effective ATM plus the immediately adjacent returned strike below and above; it never searches a fourth or farther strike. The $150 full-premium exposure and $50 modeled planned structural loss remain separate.
 - GEX/DEX remains context/research and cannot override policy eligibility.
 - New setup families default to shadow mode.
 - READY alerts expire after 60 seconds.
-- Manual confirmation is required; no order creation or execution capability is added.
+- SPY structural invalidation remains primary, with a manual executable-Bid $50 loss backstop. Manual confirmation is required; no order creation or execution capability is added.
 
 ## Public deployment warning
 

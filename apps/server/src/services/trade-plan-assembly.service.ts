@@ -60,7 +60,7 @@ const defaultDependencies: TradePlanAssemblyServiceDependencies = {
 /**
  * Retrieves Market State once, derives every same-snapshot deterministic
  * upstream product from that exact object, and requests the Options Chain at
- * most once when CONTRACT_V2 needs a current-chain preflight or selection.
+ * most once when CONTRACT_V3 needs a current-chain preflight or selection.
  * The exact source bundle is then persisted best-effort for forward replay.
  */
 export async function getSpyZeroDteTradePlanAssemblyBundleWithDependencies(

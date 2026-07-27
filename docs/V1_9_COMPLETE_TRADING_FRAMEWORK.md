@@ -1,8 +1,8 @@
-# V1.9.0 — Complete Trading Framework and Workspace
+# V1.9.1 — Complete Trading Framework, Contract Selection, and Planned Risk
 
 ## Scope
 
-V1.9.0 consolidates V1.6 through V1.9 into one release built on the V1.5.4 repository. It adds policy enforcement, durable risk and position state, the modular setup registry, opportunity consolidation, scheduled-event controls, persistent alert/monitor ownership, manual lifecycle actions, conservative execution telemetry, exit-policy research, and a Trading Workspace page.
+V1.9.1 preserves the V1.6–V1.9 complete trading framework and adds the contract-selection/planned-risk correction. `CONTRACT_V3` evaluates a bounded ATM-adjacent candidate set, `SIZING_V2` uses modeled structural loss for risk capacity while retaining full debit as capital/catastrophic exposure, and the Workspace adds a manual $50 Bid-side loss backstop.
 
 ## Trading Workspace
 
@@ -29,7 +29,7 @@ CPI, Employment Situation/NFP, and FOMC are full-day blocks. Other major events 
 - Target 1 is a management level.
 - Target 3 is research-only.
 - The 15-minute rule creates a review event, not an automatic exit.
-- Structural stop, Target 2, time review, 3:55 exit, and absolute deadline use deterministic priority.
+- Structural stop, the $50 executable-Bid premium-loss backstop, Target 2, time review, 3:55 exit, and absolute deadline use deterministic priority.
 - The application never submits an exit order.
 
 ## Research separation
@@ -50,4 +50,4 @@ The persistent backend owns READY reconciliation, open-position monitoring, even
 
 ## Product alignment
 
-The current Guide and System Readiness surfaces are release-aware and describe V1.9.0 rather than the earlier V1.5 UI baseline. System Readiness verifies the locked trading policy, V1.9 persistence tables, setup registry, and Workspace heartbeat; its explicit probe includes the Trading Workspace. Current documentation uses the 1.5:1 minimum / 2.0:1 preferred R:R policy and the strict effective-ATM no-fallback rule.
+The current Guide and System Readiness surfaces are release-aware and describe V1.9.1 rather than the earlier V1.5 UI baseline. System Readiness verifies the locked trading policy, V1.9 persistence tables, setup registry, and Workspace heartbeat; its explicit probe includes the Trading Workspace. Current documentation uses the 1.5:1 minimum / 2.0:1 preferred R:R policy, bounded `CONTRACT_V3`, and explicit $150 full-exposure / $50 planned-risk separation.

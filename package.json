@@ -1,8 +1,8 @@
 {
   "name": "spy-0dte-copilot",
   "private": true,
-  "version": "1.9.0",
-  "description": "Local SPY 0DTE deterministic decision-support platform \u2014 V1.9.0 Complete Trading Framework",
+  "version": "1.9.1",
+  "description": "Local SPY 0DTE deterministic decision-support platform — V1.9.1 Contract Selection and Planned Risk Correction",
   "workspaces": [
     "apps/*",
     "packages/*"

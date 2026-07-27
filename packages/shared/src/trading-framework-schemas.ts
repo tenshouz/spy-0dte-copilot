@@ -340,6 +340,7 @@ export type TradingPositionStatus = z.infer<
 export const TradingPositionExitReasonSchema = z.enum([
   "TARGET_2",
   "STRUCTURAL_STOP",
+  "PREMIUM_LOSS_BACKSTOP",
   "TIME_STOP",
   "MANDATORY_1555",
   "ABSOLUTE_1600",

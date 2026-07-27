@@ -105,10 +105,13 @@ test("Discord delivery is persistent, deduplicated, and actionable-only", () => 
   assert.match(automation, /No order was created or executed/);
 });
 
-test("strict effective ATM prohibits farther-strike fallback", () => {
-  assert.match(contract, /NOT_EFFECTIVE_ATM_STRIKE/);
-  assert.match(contract, /fartherStrikeFallbackPolicy: "PROHIBITED"/);
-  assert.match(contract, /selectAtmStrike/);
+test("CONTRACT_V3 bounds selection to ATM plus one adjacent strike per side", () => {
+  assert.match(contract, /CONTRACT_METHODOLOGY_VERSION = "CONTRACT_V3"/);
+  assert.match(contract, /MAXIMUM_CANDIDATE_STRIKES = 3/);
+  assert.match(contract, /fartherStrikeFallbackPolicy: "BOUNDED_ADJACENT_ONLY"/);
+  assert.match(contract, /selectBoundedContractStrikeWindow/);
+  assert.match(contract, /PREMIUM_EXCEEDS_MAXIMUM/);
+  assert.match(contract, /PLANNED_STRUCTURAL_LOSS_EXCEEDS_MAXIMUM/);
 });
 
 test("no automatic broker order path exists in the framework", () => {

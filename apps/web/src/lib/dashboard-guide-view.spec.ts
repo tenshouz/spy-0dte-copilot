@@ -70,6 +70,9 @@ test("glossary search covers definitions and aliases", () => {
   assert.ok(gex);
   assert.equal(guideGlossaryMatchesSearch(gex, "gamma exposure"), true);
   assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "1.5:1").some((item) => item.term === "Reward-to-risk"));
+  assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "three strikes").some((item) => item.term === "Bounded contract window"));
+  assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "catastrophic loss").some((item) => item.term === "Full-premium exposure"));
+  assert.ok(filterGuideGlossary(GUIDE_GLOSSARY, "bid stop").some((item) => item.term === "Premium-loss backstop"));
 });
 
 test("guide defines complete plan and source state dictionaries", () => {
@@ -92,14 +95,14 @@ test("trade plan guide preserves fixed safety boundaries", () => {
   const copy = GUIDE_TRADE_PLAN_STEPS.map((item) => `${item.title} ${item.detail}`).join(" ");
   assert.match(copy, /7:00–9:30 AM/);
   assert.match(copy, /at least 1\.5:1/);
-  assert.match(copy, /strict effective-ATM/);
+  assert.match(copy, /bounded CONTRACT_V3 candidate|effective ATM.*adjacent/i);
   assert.match(copy, /60 seconds/);
   assert.match(copy, /GEX\/DEX remains research-only|GEX\/DEX/i);
   assert.match(copy, /cannot override policy|fail closed/i);
   assert.match(copy, /never sends a broker order|manual confirmation/i);
 });
 
-test("guide policy facts mirror the locked V1.9 controls", () => {
+test("guide policy facts mirror the locked V1.9.1 controls", () => {
   const copy = GUIDE_TRADING_POLICY_FACTS.map((item) => `${item.title} ${item.detail}`).join(" ");
   assert.match(copy, /\$1,000/);
   assert.match(copy, /\$150 contract premium/);
@@ -109,7 +112,8 @@ test("guide policy facts mirror the locked V1.9 controls", () => {
   assert.match(copy, /3:00 p\.m\./);
   assert.match(copy, /3:55 p\.m\./);
   assert.match(copy, /Target 2/);
-  assert.match(copy, /no farther-strike substitution/i);
+  assert.match(copy, /never searches farther|no fourth|no farther/i);
+  assert.match(copy, /hard \$50 bid-side loss backstop/i);
 });
 
 test("guide has all major onboarding sections", () => {
